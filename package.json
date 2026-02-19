@@ -1,0 +1,14 @@
+{
+  "name": "lordz-io-replica",
+  "version": "1.0.0",
+  "description": "A pixel-art multiplayer .io game inspired by Lordz.io",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  }
+}

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lordz.io - Pixel Conquest</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- ─── Title / Join Screen ─── -->
+  <div id="menu-screen">
+    <div id="menu-container">
+      <div id="game-logo">
+        <div class="logo-crown">&#9813;</div>
+        <h1>LORDZ<span class="logo-dot">.</span>IO</h1>
+        <p class="subtitle">PIXEL CONQUEST</p>
+      </div>
+      <div id="join-form">
+        <input type="text" id="player-name" placeholder="Enter your name..." maxlength="16" autocomplete="off" />
+        <button id="play-btn">&#9876; PLAY &#9876;</button>
+      </div>
+      <div id="how-to-play">
+        <h3>HOW TO PLAY</h3>
+        <div class="controls-grid">
+          <div class="control-item"><span class="key">WASD</span> Move</div>
+          <div class="control-item"><span class="key">1</span> Buy Soldier (10g)</div>
+          <div class="control-item"><span class="key">2</span> Buy Horse (30g)</div>
+          <div class="control-item"><span class="key">3</span> Buy Wizard (50g)</div>
+          <div class="control-item"><span class="key">4</span> Buy Dragon (100g)</div>
+          <div class="control-item"><span class="key">Q</span> Build House (50g)</div>
+          <div class="control-item"><span class="key">E</span> Build Gold Mine (100g)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Death Screen ─── -->
+  <div id="death-screen" class="hidden">
+    <div id="death-container">
+      <h2>&#9760; YOU WERE SLAIN &#9760;</h2>
+      <p id="death-score">Score: 0</p>
+      <p class="respawn-text">Respawning...</p>
+    </div>
+  </div>
+
+  <!-- ─── Level Up Notification ─── -->
+  <div id="level-up-notification" class="hidden">
+    <div id="level-up-content">
+      <h2>&#9733; LEVEL UP &#9733;</h2>
+      <p id="level-up-name"></p>
+      <p id="level-up-bonus"></p>
+    </div>
+  </div>
+
+  <!-- ─── Game HUD ─── -->
+  <div id="game-hud" class="hidden">
+    <!-- Top bar -->
+    <div id="top-bar">
+      <div id="player-info">
+        <span id="hud-name"></span>
+        <span id="hud-level" class="badge"></span>
+      </div>
+      <div id="resource-bar">
+        <div class="resource" id="hud-gold-container">
+          <span class="resource-icon">&#9733;</span>
+          <span id="hud-gold">0</span>
+        </div>
+        <div class="resource" id="hud-pop-container">
+          <span class="resource-icon">&#9819;</span>
+          <span id="hud-pop">0/5</span>
+        </div>
+        <div class="resource" id="hud-xp-container">
+          <span class="resource-icon">&#9734;</span>
+          <span id="hud-xp">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- XP Bar -->
+    <div id="xp-bar-container">
+      <div id="xp-bar-fill"></div>
+      <span id="xp-bar-text"></span>
+    </div>
+
+    <!-- Bottom bar - Shop -->
+    <div id="bottom-bar">
+      <div class="shop-section">
+        <h4>UNITS</h4>
+        <div class="shop-items">
+          <div class="shop-item" data-action="buyUnit" data-type="soldier" data-key="1">
+            <span class="shop-key">1</span>
+            <span class="shop-name">Soldier</span>
+            <span class="shop-cost">10&#9733;</span>
+          </div>
+          <div class="shop-item" data-action="buyUnit" data-type="horse" data-key="2">
+            <span class="shop-key">2</span>
+            <span class="shop-name">Horse</span>
+            <span class="shop-cost">30&#9733;</span>
+          </div>
+          <div class="shop-item" data-action="buyUnit" data-type="wizard" data-key="3">
+            <span class="shop-key">3</span>
+            <span class="shop-name">Wizard</span>
+            <span class="shop-cost">50&#9733;</span>
+          </div>
+          <div class="shop-item" data-action="buyUnit" data-type="dragon" data-key="4">
+            <span class="shop-key">4</span>
+            <span class="shop-name">Dragon</span>
+            <span class="shop-cost">100&#9733;</span>
+          </div>
+        </div>
+      </div>
+      <div class="shop-section">
+        <h4>BUILDINGS</h4>
+        <div class="shop-items">
+          <div class="shop-item" data-action="build" data-type="house" data-key="Q">
+            <span class="shop-key">Q</span>
+            <span class="shop-name">House</span>
+            <span class="shop-cost">50&#9733; +5 pop</span>
+          </div>
+          <div class="shop-item" data-action="build" data-type="goldmine" data-key="E">
+            <span class="shop-key">E</span>
+            <span class="shop-name">Gold Mine</span>
+            <span class="shop-cost">100&#9733;</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div id="leaderboard">
+      <h4>&#9876; LEADERBOARD</h4>
+      <div id="leaderboard-list"></div>
+    </div>
+
+    <!-- Minimap -->
+    <canvas id="minimap" width="180" height="180"></canvas>
+
+    <!-- HP Bar -->
+    <div id="hp-bar-container">
+      <div id="hp-bar-fill"></div>
+    </div>
+  </div>
+
+  <!-- ─── Game Canvas ─── -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- ─── Scripts ─── -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
