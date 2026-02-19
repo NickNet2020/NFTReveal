@@ -826,6 +826,6 @@ for (let i = 0; i < MAX_BOTS; i++) {
 setInterval(gameTick, TICK_MS);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`\n  ⚔️  Lordz.io Replica running on http://localhost:${PORT}\n`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n  ⚔️  Lordz.io Replica running on http://0.0.0.0:${PORT}\n`);
 });
