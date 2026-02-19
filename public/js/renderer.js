@@ -45,12 +45,23 @@ const Renderer = (() => {
     decorations = decs;
   }
 
+  // Track if camera has been initialized
+  let camInitialized = false;
+
   // ─── Camera ──────────────────────────────────────────────────
   function updateCamera(targetX, targetY, dt) {
     camTargetX = targetX - width / 2;
     camTargetY = targetY - height / 2;
-    camX += (camTargetX - camX) * 0.08;
-    camY += (camTargetY - camY) * 0.08;
+
+    // Snap camera instantly on first frame so player is visible immediately
+    if (!camInitialized) {
+      camX = camTargetX;
+      camY = camTargetY;
+      camInitialized = true;
+    } else {
+      camX += (camTargetX - camX) * 0.08;
+      camY += (camTargetY - camY) * 0.08;
+    }
 
     // Screen shake
     if (screenShake > 0) {
@@ -666,6 +677,6 @@ const Renderer = (() => {
   return {
     init, render, setDecorations,
     shake, spawnGoldParticles, spawnParticle,
-    worldToScreen, isOnScreen
+    worldToScreen, isOnScreen, drawMinimap
   };
 })();
