@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════
-//  SPRITES.JS - 8-Bit Pixel Art Sprite Definitions
-//  Each sprite is defined as an array of strings where each char
-//  maps to a color in the palette. '.' = transparent.
+//  SPRITES.JS - Detailed Character Sprites (Clash of Clans Style)
+//  Larger, more detailed sprites with rich shading and outlines
+//  Each char maps to a color in the palette. '.' = transparent.
 // ═══════════════════════════════════════════════════════════════════
 
 const Sprites = (() => {
@@ -43,474 +43,668 @@ const Sprites = (() => {
     return renderSprite(data, modPalette, scale);
   }
 
-  // ─── PLAYER SPRITE (16x18) ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  PLAYER CHARACTER (20x26) - Armored Lord
+  // ═══════════════════════════════════════════════════════════════
   const PLAYER_PALETTE = {
-    'h': '#d4a574', // skin
-    'H': '#c49464', // skin shadow
+    'o': '#1a1a2e', // outline
+    'h': '#f0c8a0', // skin
+    'H': '#d4a574', // skin shadow
+    'j': '#b8956a', // skin dark
     'e': '#2c1810', // eyes
-    'b': '#4a3728', // hair
-    'B': '#3a2718', // hair dark
+    'w': '#ffffff', // eye whites
+    'b': '#5a4030', // hair
+    'B': '#3a2718', // hair shadow
     'T': '#e74c3c', // team color (replaced)
     't': '#c0392b', // team dark
-    'p': '#6b4423', // pants
-    'P': '#5a3413', // pants dark
-    's': '#8b8b8b', // sword
-    'S': '#aaaaaa', // sword bright
-    'g': '#f1c40f', // gold trim
-    'c': '#d4a017', // cape
+    'u': '#a93226', // team darkest
+    'a': '#c0c0c0', // armor light
+    'A': '#9a9a9a', // armor
+    'n': '#747474', // armor dark
+    'N': '#555555', // armor darkest
+    'g': '#f1c40f', // gold
+    'G': '#d4a017', // gold dark
+    'p': '#7a5230', // leather
+    'P': '#5a3420', // leather dark
+    's': '#d8d8d8', // sword blade
+    'S': '#f0f0f0', // sword shine
+    'c': '#e08040', // cape
+    'C': '#c06030', // cape dark
   };
 
   const PLAYER_DATA = [
-    '......bbbb......',
-    '.....bBBBBb.....',
-    '....bBBBBBBb....',
-    '....bhhhhhhb....',
-    '....hheehheH....',
-    '....hhhhhhHH....',
-    '....hHhhhHH.....',
-    '.....hhhhhH.....',
-    '....gTTTTTg.....',
-    '...TTTTTTTTT....',
-    '...TTTTTTTTTc...',
-    '...tTThhtTTtc...',
-    '....thhhht.cc...',
-    '....thhhhht.....',
-    '....thhhht......',
-    '.....pppp.......',
-    '....pP..pP......',
-    '....pp..pp......',
+    '.......oBBBBo.........',
+    '......oBBBBBBo........',
+    '.....oBBBBBBBBo.......',
+    '.....obbbbbbbbo.......',
+    '.....ohhhhhhHHo.......',
+    '.....ohweehwHHo.......',
+    '.....ohhHhhjjo........',
+    '......oHhhhjo.........',
+    '.....ogGTTTGgo........',
+    '....oTTTTTTTTTo.......',
+    '...oTTTaAAaTTToc......',
+    '...oTTAAnNAATTocc.....',
+    '...otTAAnNAATtocc.....',
+    '...otTaAAaaTttoCc.....',
+    '....otTTTTTtto.Cc.....',
+    '....otTgGgTto.........',
+    '.....opPpPpo..........',
+    '....opP..Ppo..........',
+    '....opP..Ppo..........',
+    '....opP..Ppo..........',
+    '....opp..ppo..........',
+    '....oNp..pNo..........',
   ];
 
   // ─── PLAYER WITH CROWN (for high level) ─────────────────────
   const PLAYER_CROWN_DATA = [
-    '....g.gg.g......',
-    '....gggggg......',
-    '....gfggfg......',
-    '......bbbb......',
-    '.....bBBBBb.....',
-    '....bBBBBBBb....',
-    '....bhhhhhhb....',
-    '....hheehheH....',
-    '....hhhhhhHH....',
-    '....hHhhhHH.....',
-    '.....hhhhhH.....',
-    '....gTTTTTg.....',
-    '...TTTTTTTTT....',
-    '...TTTTTTTTTc...',
-    '...tTThhtTTtc...',
-    '....thhhht.cc...',
-    '....thhhhht.....',
-    '....thhhht......',
-    '.....pppp.......',
-    '....pP..pP......',
-    '....pp..pp......',
+    '....og.gg.go..........',
+    '....oggggggo..........',
+    '....ogfggfgo..........',
+    '.......oBBBBo.........',
+    '......oBBBBBBo........',
+    '.....oBBBBBBBBo.......',
+    '.....obbbbbbbbo.......',
+    '.....ohhhhhhHHo.......',
+    '.....ohweehwHHo.......',
+    '.....ohhHhhjjo........',
+    '......oHhhhjo.........',
+    '.....ogGTTTGgo........',
+    '....oTTTTTTTTTo.......',
+    '...oTTTaAAaTTToc......',
+    '...oTTAAnNAATTocc.....',
+    '...otTAAnNAATtocc.....',
+    '...otTaAAaaTttoCc.....',
+    '....otTTTTTtto.Cc.....',
+    '....otTgGgTto.........',
+    '.....opPpPpo..........',
+    '....opP..Ppo..........',
+    '....opP..Ppo..........',
+    '....opp..ppo..........',
+    '....oNp..pNo..........',
   ];
 
   const PLAYER_CROWN_PALETTE = { ...PLAYER_PALETTE, 'f': '#e74c3c' };
 
-  // ─── FOOT SOLDIER (12x14) ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  FOOT SOLDIER (16x20) - Armored Infantry
+  // ═══════════════════════════════════════════════════════════════
   const SOLDIER_PALETTE = {
-    'h': '#d4a574', // skin
-    'H': '#c49464', // skin shadow
+    'o': '#1a1a2e', // outline
+    'h': '#f0c8a0', // skin
+    'H': '#d4a574', // skin shadow
     'e': '#2c1810', // eyes
-    'a': '#8b8b8b', // armor
-    'A': '#6b6b6b', // armor dark
+    'w': '#ffffff', // eye whites
+    'a': '#b0b0b0', // armor light
+    'A': '#8b8b8b', // armor
+    'n': '#6b6b6b', // armor dark
+    'N': '#505050', // armor darkest
     'T': '#e74c3c', // team (replaced)
-    's': '#aaaaaa', // sword
-    'S': '#cccccc', // sword bright
-    'p': '#6b4423', // pants
+    't': '#c0392b', // team dark
+    's': '#c0c0c0', // sword
+    'S': '#e0e0e0', // sword bright
     'g': '#f1c40f', // gold accent
-    'l': '#555555', // helmet
-    'L': '#444444', // helmet dark
+    'G': '#d4a017', // gold dark
+    'p': '#6b4423', // boots
+    'P': '#4a2f13', // boots dark
+    'l': '#606060', // helmet
+    'L': '#484848', // helmet dark
+    'v': '#7a7a7a', // helmet visor
   };
 
   const SOLDIER_DATA = [
-    '....llll....',
-    '...lLLLLl...',
-    '...lhhhhl...',
-    '...hheehh...',
-    '...hhhhhH...',
-    '....hhhh....',
-    '...gaaag.S..',
-    '..TaaaaaTS..',
-    '..TaTTaTT...',
-    '..TaTTaTT...',
-    '...ahha....',
-    '...phhp....',
-    '...p..p....',
-    '...pp.pp...',
+    '......ollo..........',
+    '.....olLLLlo........',
+    '.....olvvvlo........',
+    '.....olLLLlo........',
+    '.....ohhhhho........',
+    '.....ohweho.........',
+    '......ohhho.........',
+    '.....ogaaago.S......',
+    '....oTaAAAATo.S.....',
+    '....oTAnNnATo.s.....',
+    '....oTAnNnATTo......',
+    '....otAAnAAto.......',
+    '.....otTTTto........',
+    '.....ogGgGo.........',
+    '.....ophPpo.........',
+    '.....opP.Ppo........',
+    '.....opP.Ppo........',
+    '.....opp.ppo........',
   ];
 
-  // ─── HORSE KNIGHT (16x16) ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  HORSE KNIGHT (22x20) - Mounted Warrior
+  // ═══════════════════════════════════════════════════════════════
   const HORSE_PALETTE = {
-    'h': '#d4a574', // rider skin
+    'o': '#1a1a2e', // outline
+    'h': '#f0c8a0', // rider skin
     'e': '#2c1810', // eyes
-    'a': '#8b8b8b', // armor
-    'A': '#6b6b6b', // armor shadow
+    'a': '#b0b0b0', // armor
+    'A': '#8b8b8b', // armor shadow
+    'n': '#6b6b6b', // armor dark
     'T': '#e74c3c', // team
+    't': '#c0392b', // team dark
     'g': '#f1c40f', // gold
-    'l': '#555555', // helmet
-    'H': '#8b6914', // horse body
-    'D': '#6b4914', // horse dark
+    'l': '#606060', // helmet
+    'L': '#484848', // helmet dark
+    'R': '#9b6930', // horse body
+    'r': '#7a5020', // horse shadow
+    'D': '#5a3810', // horse dark
     'M': '#3a2a0a', // mane
+    'm': '#2a1a00', // mane dark
     'w': '#ffffff', // eye white
     'b': '#2c1810', // horse eye
-    's': '#aaaaaa', // spear
-    'S': '#cccccc', // spear tip
+    's': '#c0c0c0', // lance
+    'S': '#e0e0e0', // lance tip
+    'i': '#d8b070', // horse light
+    'p': '#6b4423', // leather
   };
 
   const HORSE_DATA = [
-    '.....ll.........',
-    '....laal..S.....',
-    '....hahh..S.....',
-    '....hehh..s.....',
-    '....hhh..ss.....',
-    '...gTTTgs.......',
-    '...TTTaTT.......',
-    '..MMDD..........',
-    '.MDDHHHDb.......',
-    '.MHHHHHHHw......',
-    '.MHHHHHHHHHD....',
-    '..DHHHHHHHHD....',
-    '..DHHHHHHHD.....',
-    '..DH.DH.HD.....',
-    '..DD.DD.DD.....',
-    '..D..D..DD.....',
+    '.......ollo...........S.......',
+    '......olAAlo..........S.......',
+    '......ohAhho..........s.......',
+    '......ohehho.........s........',
+    '.......ohhho........s.........',
+    '......ogTTTgo......s..........',
+    '.....oTTTaATTo....s...........',
+    '....oTTTTTTTTo...s............',
+    '...omMDD..........s...........',
+    '..oMmDRRRRrbo.....................',
+    '..oMRRRRRRRRwo...................',
+    '..oMRRiRRiRRRRro................',
+    '...oDRRRRRRRRRro................',
+    '...oDRrRRRRrRDo.................',
+    '...oDR.oDR.oRDo.................',
+    '...oDD.oDD.oDDo.................',
+    '...oD..oD...oDo.................',
   ];
 
-  // ─── WIZARD (14x16) ────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  WIZARD (18x24) - Mystical Spellcaster
+  // ═══════════════════════════════════════════════════════════════
   const WIZARD_PALETTE = {
-    'h': '#d4a574', // skin
+    'o': '#1a1a2e', // outline
+    'h': '#f0c8a0', // skin
+    'H': '#d4a574', // skin shadow
     'e': '#2c1810', // eyes
     'T': '#e74c3c', // team robe
     't': '#c0392b', // robe dark
-    'r': '#9b59b6', // robe accent
-    'R': '#8e44ad', // robe dark accent
+    'u': '#a93226', // robe darkest
+    'r': '#9b59b6', // purple accent
+    'R': '#8e44ad', // purple dark
+    'q': '#7d3c98', // purple darkest
     'g': '#f1c40f', // gold
-    'w': '#ffffff', // beard/hat
+    'G': '#d4a017', // gold dark
+    'w': '#ffffff', // beard
     'W': '#dddddd', // beard shadow
-    's': '#8b4513', // staff
-    'o': '#3498db', // orb
-    'O': '#2980b9', // orb dark
+    'v': '#bbbbbb', // beard dark
+    's': '#8b5e3c', // staff
+    'S': '#6b4423', // staff dark
+    'O': '#3498db', // orb glow
+    'Q': '#2980b9', // orb dark
     'p': '#6b4423', // boots
-    '*': '#00bcd4', // magic sparkle
+    'P': '#4a2f13', // boots dark
+    '*': '#00e5ff', // magic sparkle
+    '+': '#76ff03', // sparkle 2
   };
 
   const WIZARD_DATA = [
-    '....*rr.........',
-    '....rRr.........',
-    '...rRRRr........',
-    '..rRRRRRr.......',
-    '..rwwhhwr.......',
-    '..whheehw.......',
-    '...wwwww........',
-    '..wwwwwww.......',
-    '..gTTTTTg..s....',
-    '.TTTTTTTTTss....',
-    '.tTTTTTTTtso....',
-    '.tTTTTTTTtsoO...',
-    '..tTTTTTt.so....',
-    '...ttttt..s.....',
-    '...pp.pp........',
-    '...pp.pp........',
+    '......o*rro...........',
+    '.......orro...........',
+    '......orRRro..........',
+    '.....orRRRRro.........',
+    '....orRRRRRRo.........',
+    '....orwwhhwRo.........',
+    '....owhheehwo.........',
+    '.....owwwwwo..........',
+    '....owWvvWwwo.........',
+    '....ogGTTTGgo..os.....',
+    '...oTTTTTTTTTo.oso....',
+    '...oTTTrRrTTTo.osO....',
+    '...otTTrRrTTto.oOQo...',
+    '...otTTTTTTtto.osO....',
+    '....ouTTTTuto..oso....',
+    '.....ouTTTuo...os.....',
+    '......ouTuo...........',
+    '......opPpo...........',
+    '.....opP.Ppo..........',
+    '......opp.po..........',
   ];
 
-  // ─── DRAGON (20x16) ────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  DRAGON (28x22) - Fearsome Flying Beast
+  // ═══════════════════════════════════════════════════════════════
   const DRAGON_PALETTE = {
-    'T': '#e74c3c', // team main
-    't': '#c0392b', // team dark
-    'd': '#922b21', // darkest
-    'w': '#e8d44d', // wing membrane
-    'W': '#d4c030', // wing dark
+    'o': '#1a1a2e', // outline
+    'T': '#e74c3c', // team main body
+    't': '#c0392b', // body shadow
+    'd': '#922b21', // body darkest
+    'x': '#7b241c', // underbelly dark
+    'b': '#e8b84d', // belly/underbody
+    'B': '#d4a030', // belly shadow
+    'w': '#f5d76e', // wing membrane
+    'W': '#e8c840', // wing dark
+    'v': '#d4b030', // wing darkest
     'e': '#f1c40f', // eye
     'E': '#ff6600', // eye pupil
+    'h': '#c0c0c0', // horn
+    'H': '#909090', // horn dark
+    'c': '#444444', // claws
     'f': '#ff4400', // fire
     'F': '#ff8800', // fire bright
-    'c': '#333333', // claws
-    'h': '#bbb', // horn
-    'n': '#fff', // nostril smoke
-    '*': '#ff0', // sparkle
+    'n': '#ffcc00', // nostril fire
+    's': '#e86060', // scales highlight
+    'S': '#d04040', // scales
   };
 
   const DRAGON_DATA = [
-    '..h.............h......',
-    '..hT...........Th......',
-    '..TTT.........TTT......',
-    '.TTTT...wWw...TTTT.....',
-    '.TTTTeEwWWWw.eTTTT.....',
-    '..TTTTTwWWWwTTTTT......',
-    '...TTTTTwwwTTTTT.......',
-    '....TTTTTTTTTTT........',
-    '...tTTTTTTTTTTTt.......',
-    '...tTTTTTTTTTTt........',
-    '....tTTTTTTTTt.........',
-    '.....tTTTTTTt..........',
-    '....c.tTTTt.c..........',
-    '....c..ttt..c..........',
-    '....c.......c..........',
-    '.....c.....c...........',
+    '..oho...................oho...............',
+    '..oHToo...............ooTHo..............',
+    '...oTTTo....owWwo....oTTTo...............',
+    '...oTTTTo..owWWWwo..oTTTTo...............',
+    '..oTTsTeEoowWWWWWooeTsTTTo...............',
+    '..oTTTTTTowWWWWWWwoTTTTTTo...............',
+    '...oTTTTTTowWvWwoTTTTTTTo................',
+    '....oTTsTTTTowwoTTTTsTTTo................',
+    '....otTTTTTTTTTTTTTTTTto.................',
+    '.....otTTbBBBBBBBbTTto...................',
+    '.....odTTbBBBBBBBbTTdo...................',
+    '......odTTbBBBBbTTdo.....................',
+    '.......odTTbBBbTTdo......................',
+    '........odTTbbTTdo.......................',
+    '.......oc.odTTdo.co......................',
+    '.......oc..oddo..co......................',
+    '.......oc........co......................',
+    '........oc......co.......................',
   ];
 
-  // ─── GOLD COIN (8x8) ──────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  DOOM CASTLE (30x30) - Gothic Dark Fortress
+  // ═══════════════════════════════════════════════════════════════
+  const CASTLE_PALETTE = {
+    'o': '#1a1a2e', // outline
+    'w': '#6b6b7b', // wall stone
+    'W': '#555565', // wall dark
+    'D': '#404050', // wall darkest
+    'd': '#333340', // interior dark
+    'r': '#aa3030', // red banner
+    'R': '#882020', // banner dark
+    'g': '#f1c40f', // gold trim
+    'G': '#d4a017', // gold dark
+    'T': '#e74c3c', // team (flag)
+    't': '#c0392b', // team dark
+    'n': '#222230', // window dark
+    'b': '#2a2a38', // base dark
+    'f': '#ff4400', // fire/torch
+    'F': '#ff8800', // fire bright
+    's': '#ff3333', // skull red
+    'S': '#cc2222', // skull dark red
+    'k': '#dddddd', // skull bone
+    'K': '#bbbbbb', // skull shadow
+    'p': '#8888aa', // portcullis
+    'P': '#666688', // portcullis dark
+    'h': '#7b7b8b', // highlight stone
+    'c': '#444455', // crenellation
+  };
+
+  const CASTLE_DATA = [
+    '..oTo.........ofo.........oTo..',
+    '..oTo........oFfo.........oTo..',
+    '..oco.........oo..........oco..',
+    '.ocwco.......owwo.......ocwco..',
+    '.owwwo......owwwwo......owwwo..',
+    '.owwwo......owwwwo......owwwo..',
+    '.owwwo..ocococococo...owwwo....',
+    '.owwwo.ohwwwwwwwwwho..owwwo....',
+    '.owwwo.owwwwwwwwwwwo..owwwo....',
+    '.owwwo.owwnwwwwnwwo..owwwo....',
+    '.owwwo.owwnwwwwnwwo..owwwo....',
+    '.owwwo.owwwwwwwwwwwo..owwwo....',
+    '.owwwo.owwwwwwwwwwwo..owwwo....',
+    '.owwwo.owwokKKkoowwo..owwwo....',
+    '.owwwo.owwokKKkoowwo..owwwo....',
+    '.owwwo.owwwwwwwwwwwo..owwwo....',
+    '.owwwo.owwnwwwwnwwo..owwwo....',
+    '.owwwo.owwnwwwwnwwo..owwwo....',
+    '.owwwo.owwwwwwwwwwwo..owwwo....',
+    '.owwwo.owwwwppwwwwwo..owwwo....',
+    '.owwwo.owwwpPPpwwwwo..owwwo....',
+    '.owwwo.owwwpPPpwwwwo..owwwo....',
+    '.owwwo.owwwpPPpwwwwo..owwwo....',
+    '.obbbboobbbbbbbbbbboo.obbbb....',
+  ];
+
+  // ═══════════════════════════════════════════════════════════════
+  //  DOOM SKULL (16x16) - Map marker for doom castle
+  // ═══════════════════════════════════════════════════════════════
+  const DOOM_SKULL_PALETTE = {
+    'o': '#1a0000', // outline
+    'w': '#ffffff', // bone
+    'W': '#dddddd', // bone shadow
+    'b': '#110000', // eye socket
+    'r': '#ff0000', // red glow
+    'R': '#cc0000', // dark red
+    'g': '#888888', // teeth shadow
+    'n': '#ffaaaa', // nose
+  };
+
+  const DOOM_SKULL_DATA = [
+    '....ooooooo.....',
+    '..oowwwwwwwoo...',
+    '.oowWWWWWWWwoo..',
+    '.owWWWWWWWWWwo..',
+    'owWWbWWWWbWWwo..',
+    'owWWbbWWbbWWwo..',
+    'owWWWWWWWWWWwo..',
+    '.owWWnWWnWWwo...',
+    '.oowWWWWWWwoo...',
+    '..oowgwgwgoo....',
+    '...oowwwwoo.....',
+    '....oogbgoo.....',
+    '.....ooooo......',
+  ];
+
+  // ═══════════════════════════════════════════════════════════════
+  //  GOLD COIN (10x10) - Detailed with depth
+  // ═══════════════════════════════════════════════════════════════
   const COIN_PALETTE = {
+    'o': '#8b6914', // outline
     'g': '#f1c40f', // gold
     'G': '#d4a017', // gold dark
     'b': '#b8860b', // gold darkest
-    's': '#ffe066', // shine
+    's': '#ffe566', // shine
+    'S': '#fff4a0', // bright shine
   };
 
   const COIN_FRAMES = [
-    [ // Frame 0
-      '..gGGg..',
-      '.gssGGg.',
-      'gssgGGGg',
-      'gsgGGGGg',
-      'ggGGGGGg',
-      'gGGGGGbg',
-      '.gGGGgb.',
-      '..gggb..',
+    [ // Frame 0 (full)
+      '...ogggo...',
+      '..ogssgGo..',
+      '.ogsssgGGo.',
+      '.ogssgGGGo.',
+      '.oggGGGGGo.',
+      '.ogGGGGGbo.',
+      '..ogGGGbo..',
+      '...obbbo...',
     ],
     [ // Frame 1 (narrower)
-      '...gg...',
-      '..gsGg..',
-      '.gssGGg.',
-      '.gsGGGg.',
-      '.gGGGGg.',
-      '.gGGGbg.',
-      '..gGgb..',
-      '...gg...',
+      '....oggo...',
+      '...ogsGo...',
+      '..ogssgGo..',
+      '..ogsgGGo..',
+      '..ogGGGGo..',
+      '..ogGGGbo..',
+      '...ogGbo...',
+      '....obbo...',
     ],
     [ // Frame 2 (thin)
-      '...gg...',
-      '...sg...',
-      '...sg...',
-      '...Gg...',
-      '...Gg...',
-      '...Gg...',
-      '...gb...',
-      '...gb...',
+      '....ogo....',
+      '....oso....',
+      '....oso....',
+      '....oGo....',
+      '....oGo....',
+      '....oGo....',
+      '....obo....',
+      '....obo....',
     ],
   ];
 
-  // ─── HOUSE (14x14) ─────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  HOUSE (18x16) - Detailed Thatched Cottage
+  // ═══════════════════════════════════════════════════════════════
   const HOUSE_PALETTE = {
+    'o': '#1a1a2e', // outline
     'r': '#c0392b', // roof
     'R': '#962d22', // roof dark
+    'q': '#7a2018', // roof darkest
     'w': '#d2b48c', // wall
     'W': '#b8956a', // wall dark
+    'x': '#9a7a55', // wall darkest
     'd': '#6b4423', // door
     'D': '#4a2f13', // door dark
-    'n': '#2c1810', // window
+    'n': '#2c1810', // window dark
+    'N': '#1a0f0a', // window darkest
     'g': '#f1c40f', // chimney glow
     'c': '#8b8b8b', // chimney
     'C': '#6b6b6b', // chimney dark
-    'b': '#555', // base
-    's': '#aaa', // smoke
+    'b': '#555555', // base
+    's': '#aaaaaa', // smoke
     'T': '#e74c3c', // team flag
+    'l': '#ffcc44', // window light
   };
 
   const HOUSE_DATA = [
-    '...s..cc........',
-    '......cC...T....',
-    '...rrrcCrrrrr...',
-    '..rrRrrrrRrrrr..',
-    '.rrRRrrrrrRRrrr.',
-    'rrRRRrrrrrRRRrrr',
-    '.wWwwwnwwnwwWw..',
-    '.wWwwwnwwnwwWw..',
-    '.wWwwwwwwwwwWw..',
-    '.wWwwwnwwnwwWw..',
-    '.wWwwwnwwnwwWw..',
-    '.wWwwdddddwwWw..',
-    '.wWwwdDDDdwwWw..',
-    '.bbbbbbbbbbbbb..',
+    '....s..occ..............',
+    '.......oCCo.....oTo.....',
+    '....orroCCoorrrrro......',
+    '...orRRrrrrrRRrrrro.....',
+    '..orRRRrrrrrRRRrrrro....',
+    '.orRRRRrrrrrRRRRrrrro...',
+    'oqqRRRRrrrrrRRRRRqqro...',
+    '.owWwwwwnlwnlwwwWwo.....',
+    '.owWwwwwnlwnlwwwWwo.....',
+    '.owWwwwwwwwwwwwwwWwo.....',
+    '.owWwwwwnlwnlwwwWwo.....',
+    '.owWwwwwnlwnlwwwWwo.....',
+    '.owWwwwdddddddwwWwo.....',
+    '.owWwwwdDDDDDdwwWwo.....',
+    '.obbbbbbbbbbbbbbbbbo....',
   ];
 
-  // ─── GOLD MINE (14x12) ─────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  GOLD MINE (18x14) - Detailed Mine Entrance
+  // ═══════════════════════════════════════════════════════════════
   const GOLDMINE_PALETTE = {
+    'o': '#1a1a2e', // outline
     'w': '#8b7355', // wood
     'W': '#6b5335', // wood dark
-    'd': '#555', // dark
-    'g': '#f1c40f', // gold
+    'x': '#4a3820', // wood darkest
+    'd': '#333333', // mine dark
+    'D': '#1a1a1a', // mine darkest
+    'g': '#f1c40f', // gold ore
     'G': '#d4a017', // gold dark
-    'r': '#6b4423', // rock
-    'R': '#4a2f13', // rock dark
-    'b': '#333', // base
+    'r': '#7a6050', // rock
+    'R': '#5a4838', // rock dark
+    'b': '#444444', // base
     'T': '#e74c3c', // team
-    's': '#aaaaaa', // support
-    'o': '#ffe066', // ore sparkle
-    'c': '#8b8b8b', // chain
+    's': '#aaaaaa', // support beam
+    'O': '#ffe566', // ore sparkle
+    'c': '#8b8b8b', // chain/rail
+    'q': '#6b4423', // dirt
   };
 
   const GOLDMINE_DATA = [
-    '......ss........',
-    '.....sWWs.......',
-    '....sWddWs......',
-    '...sWddddWs.....',
-    '..wwwwwwwwww....',
-    '..wrrgGogrRw....',
-    '..wRrgGggrRw....',
-    '..wRrrrrrrRw....',
-    '..wrrgGogrRw....',
-    '..wRrgGggrRw....',
-    '..WWWWWWWWWW....',
-    '..bbbbbbbbbb....',
+    '........osso............',
+    '.......osWWso...........',
+    '......osWddWso..........',
+    '.....osWddddWso.........',
+    '....owwwwwwwwwwwo.......',
+    '....owrrqgOqgrRwo.......',
+    '....owRrqgGqgrRwo.......',
+    '....owRrrrrrrrRwo.......',
+    '....owrrqgOqgrRwo.......',
+    '....owRrqgGqgrRwo.......',
+    '....oWWWWWWWWWWWWo......',
+    '....obbbbbbbbbbbbbo.....',
   ];
 
-  // ─── TREE SPRITES (3 variants) ─────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  TREE SPRITES (3 variants) - Lush and detailed
+  // ═══════════════════════════════════════════════════════════════
   const TREE_PALETTE = {
-    'l': '#27ae60', // leaves
-    'L': '#1e8449', // leaves dark
-    'D': '#145a32', // leaves darkest
+    'o': '#0a3a0a', // outline
+    'l': '#2ecc71', // leaves bright
+    'L': '#27ae60', // leaves
+    'M': '#1e8449', // leaves mid
+    'D': '#145a32', // leaves dark
+    'E': '#0e4025', // leaves darkest
     't': '#8b6914', // trunk
     'T': '#6b4914', // trunk dark
-    's': '#2ecc71', // leaves bright
+    'U': '#4a3010', // trunk darkest
+    's': '#45d98c', // leaf highlight
   };
 
   const TREE_VARIANTS = [
     [ // Pine tree
-      '......l......',
-      '.....lsl.....',
-      '....llsll....',
-      '...lllslll...',
-      '..LlllsllLl..',
-      '.LLllllllLL..',
-      'LLLllllllLLL.',
-      '.DLLlllllLD..',
-      '..DLLlllLD...',
-      '...DLLLLLD...',
-      '....DttD.....',
-      '.....tT......',
-      '.....tT......',
+      '.......ol.........',
+      '......olsl........',
+      '.....ollsll.......',
+      '....olllslll......',
+      '...oLlllsllLl.....',
+      '..oMLlllllLLMo....',
+      '.oMMLlllllLMMo....',
+      'oEMLllllllLMMEo...',
+      '.oEMLllllLMEo.....',
+      '..oEMlllMEo.......',
+      '...oEMLMEo........',
+      '.....otTo.........',
+      '.....oTUo.........',
+      '.....oTUo.........',
     ],
-    [ // Round tree
-      '....lllll....',
-      '..llslslll...',
-      '.llslllslll..',
-      'lllllllllll..',
-      'llLlllllLll..',
-      '.LLlllllLL...',
-      '..LLlllLL....',
-      '...DLLLD.....',
-      '.....tT......',
-      '.....tT......',
-      '.....tT......',
+    [ // Round tree - lush canopy
+      '.....olllllo......',
+      '...ollslslllo.....',
+      '..ollslllslllo....',
+      '.olllllllllllo....',
+      'ollLlllllllLlo....',
+      'oLLLllllllLLlo....',
+      '.oMLlllllLMo......',
+      '..oMLlllMo........',
+      '...oEMEo..........',
+      '.....otTo.........',
+      '.....oTUo.........',
+      '.....oTUo.........',
     ],
-    [ // Bushy tree
-      '...llllll....',
-      '..lsllslll...',
-      '.lsllllslll..',
-      'llllllllllll.',
-      'lllLllllLlll.',
-      'llLLlllllLll.',
-      '.LLLlllllLL..',
-      '..DLLLLLLLD..',
-      '....DttD.....',
-      '.....tT......',
-      '.....tT......',
-      '.....tT......',
+    [ // Bushy tree - wide canopy
+      '....ollllllo......',
+      '...olsllslllo.....',
+      '..olsllllslllo....',
+      '.ollllllllllllo...',
+      'olllLllllLlllo....',
+      'ollLLlllllLllo....',
+      '.oMLLllllLLMo.....',
+      '..oEMLLLLMEo......',
+      '.....otTo.........',
+      '.....oTUo.........',
+      '.....oTUo.........',
+      '.....oTUo.........',
     ],
   ];
 
-  // ─── ROCK SPRITES (3 variants) ─────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  ROCK SPRITES (3 variants) - Mossy boulders
+  // ═══════════════════════════════════════════════════════════════
   const ROCK_PALETTE = {
-    'r': '#95a5a6', // rock
-    'R': '#7f8c8d', // rock mid
-    'd': '#6b7b7c', // rock dark
-    'D': '#566666', // rock darkest
-    's': '#bdc3c7', // rock highlight
+    'o': '#3a4040', // outline
+    'r': '#a0aab0', // rock light
+    'R': '#8090a0', // rock
+    'M': '#6b7b8b', // rock mid
+    'd': '#566670', // rock dark
+    'D': '#444e55', // rock darkest
+    's': '#c0ccd4', // highlight
+    'm': '#5a8050', // moss
   };
 
   const ROCK_VARIANTS = [
     [
-      '...rrr...',
-      '..rsRRr..',
-      '.rssRRRr.',
-      '.rRRRRDr.',
-      '.rRRRDDr.',
-      '..dDDDd..',
+      '....orrro....',
+      '...orsRRro...',
+      '..orssRRRro..',
+      '..orRRRRMro..',
+      '..omRRMMDro..',
+      '...odDDDdo...',
     ],
     [
-      '..rr.....',
-      '.rsRr.rr.',
-      'rsRRrrRRr',
-      'rRRRRRRDr',
-      '.rRDDDDr.',
-      '..dddd...',
+      '...orr.......',
+      '..orsRr.orro.',
+      '.orsRRrrRRro.',
+      '.orRRRRRRMro.',
+      '..orMDDDMro..',
+      '...odddddo...',
     ],
     [
-      '....rrr..',
-      '...rsRRr.',
-      '..rsRRRr.',
-      '.rRRRDDr.',
-      '.rDDDDd..',
-      '..ddd....',
+      '.....orrro...',
+      '....orsRRro..',
+      '...orsRRRro..',
+      '..orRRRMDro..',
+      '..omMDDDdo...',
+      '...odddo.....',
     ],
   ];
 
-  // ─── FIRE EFFECT (for dragons) ─────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  FIRE EFFECT (for dragons)
+  // ═══════════════════════════════════════════════════════════════
   const FIRE_PALETTE = {
     'f': '#ff4400',
     'F': '#ff8800',
     'y': '#ffcc00',
     'Y': '#ffee44',
     'r': '#cc2200',
+    'w': '#ffffff',
   };
 
   const FIRE_FRAMES = [
     [
-      '..y..',
-      '.yFy.',
+      '..Yy.',
+      '.yFYy',
       '.FfF.',
       'FffFr',
       'rffrr',
     ],
     [
-      '.y...',
-      'yFy..',
+      '.Y...',
+      'yFY..',
       '.Ffy.',
       'rFfF.',
       'rrffr',
     ],
   ];
 
-  // ─── MAGIC ORB (for wizard projectile) ─────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  MAGIC ORB (wizard projectile) - Glowing orb
+  // ═══════════════════════════════════════════════════════════════
   const MAGIC_PALETTE = {
-    'o': '#9b59b6',
-    'O': '#8e44ad',
-    'b': '#3498db',
-    'B': '#2980b9',
-    's': '#e8d8f8',
-    '*': '#fff',
+    'o': '#6b3fa0', // outline
+    'p': '#9b59b6', // purple
+    'P': '#8e44ad', // purple dark
+    'b': '#3498db', // blue
+    'B': '#2980b9', // blue dark
+    's': '#e8d8f8', // shine
+    '*': '#ffffff', // sparkle
   };
 
   const MAGIC_DATA = [
-    '.oOo.',
-    'osBOo',
-    'OsbBO',
+    '.oPo.',
+    'osBPo',
+    'osbBo',
     'oBBBo',
-    '.oOo.',
+    '.oPo.',
   ];
 
-  // ─── AURA EFFECT ───────────────────────────────────────────
-  // Auras are drawn procedurally, not as sprites
-
-  // ─── Skull (death marker) ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  //  SKULL (death marker) - More detailed
+  // ═══════════════════════════════════════════════════════════════
   const SKULL_PALETTE = {
+    'o': '#333333',
     'w': '#ffffff',
     'W': '#dddddd',
     'b': '#222222',
     'g': '#888888',
+    'n': '#aaaaaa',
   };
 
   const SKULL_DATA = [
-    '..wwww..',
-    '.wWWWWw.',
-    'wWbWWbWw',
-    'wWWWWWWw',
-    '.wWgWgw.',
-    '..wWWw..',
-    '..gbgb..',
+    '..owwwwo..',
+    '.owWWWWwo.',
+    'owWbWWbWwo',
+    'owWWWWWWwo',
+    '.owWgWgwo.',
+    '..owWWwo..',
+    '..ogbgbo..',
   ];
 
   // ─── Pre-render and return API ──────────────────────────────
@@ -523,6 +717,8 @@ const Sprites = (() => {
     HORSE_PALETTE, HORSE_DATA,
     WIZARD_PALETTE, WIZARD_DATA,
     DRAGON_PALETTE, DRAGON_DATA,
+    CASTLE_PALETTE, CASTLE_DATA,
+    DOOM_SKULL_PALETTE, DOOM_SKULL_DATA,
     COIN_PALETTE, COIN_FRAMES,
     HOUSE_PALETTE, HOUSE_DATA,
     GOLDMINE_PALETTE, GOLDMINE_DATA,

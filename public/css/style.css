@@ -348,6 +348,95 @@ body {
   100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 }
 
+/* ─── Doom Castle Shop Item ────────────────────────────────────── */
+.doom-castle-item {
+  border-color: #ff3333 !important;
+  background: rgba(255, 0, 0, 0.1) !important;
+  animation: doomPulse 2s infinite;
+}
+.doom-castle-item .shop-name { color: #ff4444; }
+.doom-castle-item .shop-cost { color: #ff6666; }
+@keyframes doomPulse {
+  0%, 100% { box-shadow: 0 0 5px rgba(255, 0, 0, 0.3); }
+  50% { box-shadow: 0 0 15px rgba(255, 0, 0, 0.6); }
+}
+
+/* ─── Doom Toast ──────────────────────────────────────────────── */
+.doom-toast {
+  position: fixed;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(80, 0, 0, 0.9);
+  border: 3px solid #ff3333;
+  padding: 25px 50px;
+  text-align: center;
+  z-index: 950;
+  animation: doomToastAnim 5s ease forwards;
+}
+.doom-toast-title {
+  font-size: 20px;
+  color: #ff3333;
+  text-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+  margin-bottom: 10px;
+}
+.doom-toast-sub {
+  font-size: 11px;
+  color: #ffaaaa;
+}
+@keyframes doomToastAnim {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  10% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+  20% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) translateY(-30px); }
+}
+
+/* ─── Game End Overlay (Win/Lose) ─────────────────────────────── */
+#game-end-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.8);
+}
+.game-end-content {
+  text-align: center;
+  padding: 40px 60px;
+  animation: fadeIn 1s ease;
+}
+.game-end-content.victory {
+  border: 4px solid #f1c40f;
+  background: linear-gradient(135deg, rgba(241,196,15,0.1), rgba(0,0,0,0.9));
+}
+.game-end-content.victory h1 {
+  font-size: 36px;
+  color: #f1c40f;
+  text-shadow: 0 0 30px rgba(241,196,15,0.5), 3px 3px 0 #000;
+  margin-bottom: 15px;
+}
+.game-end-content.defeat {
+  border: 4px solid #e74c3c;
+  background: linear-gradient(135deg, rgba(231,76,60,0.1), rgba(0,0,0,0.9));
+}
+.game-end-content.defeat h1 {
+  font-size: 36px;
+  color: #e74c3c;
+  text-shadow: 0 0 30px rgba(231,76,60,0.5), 3px 3px 0 #000;
+  margin-bottom: 15px;
+}
+.game-end-text {
+  font-size: 13px;
+  color: #fff;
+  margin-bottom: 15px;
+  max-width: 500px;
+}
+.game-end-sub {
+  font-size: 10px;
+  color: #888;
+  animation: blink 1s infinite;
+}
+
 /* ─── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 768px) {
   #game-logo h1 { font-size: 28px; }

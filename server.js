@@ -17,11 +17,13 @@ const GOLD_COIN_VALUE_MIN = 3;
 const GOLD_COIN_VALUE_MAX = 10;
 const VIEW_DISTANCE = 900;
 const PLAYER_SPEED = 130;
-const PLAYER_HP = 100;
+const PLAYER_HP = 200;
+const PLAYER_HP_PER_LEVEL = 15;
 const PLAYER_COLLECT_RADIUS = 36;
 const BUILDING_PLACE_DIST = 80;
 const MAX_BOTS = 6;
 const BOT_THINK_INTERVAL = 1500;
+const DOOM_DURATION = 300000; // 300 seconds
 
 // ─── Unit Type Definitions ──────────────────────────────────────────
 const UNIT_TYPES = {
@@ -50,21 +52,22 @@ const UNIT_TYPES = {
 // ─── Building Type Definitions ──────────────────────────────────────
 const BUILDING_TYPES = {
   house: { hp: 250, cost: 50, popBonus: 5, size: 48, xpValue: 20, name: 'House' },
-  goldmine: { hp: 180, cost: 100, goldPerTick: 0.15, size: 48, xpValue: 30, name: 'Gold Mine' }
+  goldmine: { hp: 180, cost: 100, goldPerTick: 0.15, size: 48, xpValue: 30, name: 'Gold Mine' },
+  castle: { hp: 5000, cost: 5000, size: 90, xpValue: 500, name: 'Doom Castle' }
 };
 
 // ─── Level / XP Definitions ────────────────────────────────────────
 const LEVELS = [
   { xp: 0, name: 'Peasant', bonus: null, desc: 'Starting rank' },
-  { xp: 100, name: 'Squire', bonus: 'battleCry', desc: 'Battle Cry: +15% troop damage' },
-  { xp: 300, name: 'Knight', bonus: 'swiftBoots', desc: 'Swift Boots: +20% troop speed' },
-  { xp: 600, name: 'Baron', bonus: 'fortify', desc: 'Fortify: +30% building HP' },
-  { xp: 1000, name: 'Earl', bonus: 'warDrums', desc: 'War Drums: +25% damage aura' },
-  { xp: 1800, name: 'Duke', bonus: 'goldRush', desc: 'Gold Rush: +50% gold income' },
-  { xp: 2800, name: 'Archduke', bonus: 'dragonMight', desc: "Dragon's Might: +35% dragon power" },
-  { xp: 4200, name: 'King', bonus: 'ironWill', desc: 'Iron Will: +25% troop HP' },
+  { xp: 100, name: 'Squire', bonus: 'battleCry', desc: 'Battle Cry: +8% troop damage' },
+  { xp: 300, name: 'Knight', bonus: 'swiftBoots', desc: 'Swift Boots: +10% troop speed' },
+  { xp: 600, name: 'Baron', bonus: 'fortify', desc: 'Fortify: +15% building HP' },
+  { xp: 1000, name: 'Earl', bonus: 'warDrums', desc: 'War Drums: +12% damage aura' },
+  { xp: 1800, name: 'Duke', bonus: 'goldRush', desc: 'Gold Rush: +25% gold income' },
+  { xp: 2800, name: 'Archduke', bonus: 'dragonMight', desc: "Dragon's Might: +18% dragon power" },
+  { xp: 4200, name: 'King', bonus: 'ironWill', desc: 'Iron Will: +12% troop HP' },
   { xp: 6500, name: 'Emperor', bonus: 'regen', desc: 'Regeneration: troops heal 2 HP/s' },
-  { xp: 10000, name: 'Legend', bonus: 'legendary', desc: 'All bonuses greatly enhanced' }
+  { xp: 10000, name: 'Legend', bonus: 'legendary', desc: 'All bonuses enhanced + Doom Castle unlocked!' }
 ];
 
 // ─── Decoration Definitions ─────────────────────────────────────────
@@ -101,6 +104,20 @@ let goldCoins = [];
 const projectiles = [];
 const damageNumbers = [];
 
+// ─── Doom Phase State ──────────────────────────────────────────────
+let doomPhase = {
+  active: false,
+  playerId: null,
+  playerName: null,
+  castleId: null,
+  castleX: 0,
+  castleY: 0,
+  startTime: null,
+  duration: DOOM_DURATION,
+  winner: null,
+  winTimer: null
+};
+
 // ─── Utility Functions ──────────────────────────────────────────────
 function genId() { return nextId++; }
 function dist(a, b) { return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2); }
@@ -122,15 +139,15 @@ function getLevelBonuses(player) {
   for (let i = 1; i <= player.level; i++) {
     const lvl = LEVELS[i];
     if (!lvl || !lvl.bonus) continue;
-    const legendary = player.level >= 9 ? 1.5 : 1;
+    const legendary = player.level >= 9 ? 1.25 : 1;
     switch (lvl.bonus) {
-      case 'battleCry': b.damageMult += 0.15 * legendary; break;
-      case 'swiftBoots': b.speedMult += 0.20 * legendary; break;
-      case 'fortify': b.buildingHpMult += 0.30 * legendary; break;
-      case 'warDrums': b.damageMult += 0.25 * legendary; break;
-      case 'goldRush': b.goldMult += 0.50 * legendary; break;
-      case 'dragonMight': b.dragonDamageMult += 0.35 * legendary; break;
-      case 'ironWill': b.hpMult += 0.25 * legendary; break;
+      case 'battleCry': b.damageMult += 0.08 * legendary; break;
+      case 'swiftBoots': b.speedMult += 0.10 * legendary; break;
+      case 'fortify': b.buildingHpMult += 0.15 * legendary; break;
+      case 'warDrums': b.damageMult += 0.12 * legendary; break;
+      case 'goldRush': b.goldMult += 0.25 * legendary; break;
+      case 'dragonMight': b.dragonDamageMult += 0.18 * legendary; break;
+      case 'ironWill': b.hpMult += 0.12 * legendary; break;
       case 'regen': b.regen = 2 * legendary; break;
     }
   }
@@ -145,7 +162,13 @@ function updateLevel(player) {
   }
   const prev = player.level;
   player.level = newLevel;
-  if (newLevel > prev) return LEVELS[newLevel];
+  if (newLevel > prev) {
+    // Gain HP on level up
+    const hpGain = (newLevel - prev) * PLAYER_HP_PER_LEVEL;
+    player.maxHp += hpGain;
+    player.hp = Math.min(player.hp + hpGain, player.maxHp);
+    return LEVELS[newLevel];
+  }
   return null;
 }
 
@@ -223,8 +246,14 @@ function createBuilding(ownerId, type, x, y) {
     if (dist({ x, y }, b) < 60) return null;
   }
 
+  // Castle-specific checks
+  if (type === 'castle') {
+    if (player.level < 9) return null; // Must be Legend (level index 9)
+    if (doomPhase.active) return null; // Only one doom castle at a time
+  }
+
   const bonuses = getLevelBonuses(player);
-  const maxHp = Math.floor(def.hp * bonuses.buildingHpMult);
+  const maxHp = type === 'castle' ? def.hp : Math.floor(def.hp * bonuses.buildingHpMult);
 
   const building = {
     id: genId(), ownerId, type,
@@ -235,6 +264,18 @@ function createBuilding(ownerId, type, x, y) {
   player.gold -= def.cost;
   if (type === 'house') {
     player.maxPop += def.popBonus;
+  } else if (type === 'castle') {
+    // Activate DOOM PHASE
+    doomPhase.active = true;
+    doomPhase.playerId = ownerId;
+    doomPhase.playerName = player.name;
+    doomPhase.castleId = building.id;
+    doomPhase.castleX = x;
+    doomPhase.castleY = y;
+    doomPhase.startTime = Date.now();
+    doomPhase.winner = null;
+    doomPhase.winTimer = null;
+    console.log(`DOOM IMPENDING! ${player.name} placed a Doom Castle!`);
   }
   buildings.set(building.id, building);
   return building;
@@ -247,12 +288,30 @@ function findNearestEnemy(unit, searchRange) {
   const owner = players.get(unit.ownerId);
   if (!owner) return null;
 
+  // During doom phase, non-castle-owner units prioritize the castle
+  const isDoomTarget = doomPhase.active && unit.ownerId !== doomPhase.playerId;
+  if (isDoomTarget) {
+    const castle = buildings.get(doomPhase.castleId);
+    if (castle && castle.hp > 0) {
+      const d = dist(unit, castle);
+      // Greatly increased range to seek castle (double normal range)
+      if (d < searchRange * 2) {
+        // 60% chance to prioritize castle over closer targets
+        if (Math.random() < 0.6 || d < searchRange) {
+          return { id: castle.id, type: 'building', x: castle.x, y: castle.y };
+        }
+      }
+    }
+  }
+
   // Check enemy units
   for (const [, other] of units) {
     if (other.ownerId === unit.ownerId) continue;
     if (other.hp <= 0) continue;
     const d = dist(unit, other);
-    if (d < nearestDist) {
+    // During doom, enemies of the castle owner are found at longer range
+    const effectiveRange = (isDoomTarget && other.ownerId === doomPhase.playerId) ? nearestDist * 1.5 : nearestDist;
+    if (d < effectiveRange) {
       nearestDist = d;
       nearest = { id: other.id, type: 'unit', x: other.x, y: other.y };
     }
@@ -346,6 +405,14 @@ function dealDamage(attacker, targetInfo, player) {
             units.delete(removeUnit.id);
           }
         }
+        // Check if doom castle was destroyed
+        if (deadBuilding.type === 'castle' && doomPhase.active && doomPhase.castleId === targetInfo.id) {
+          doomPhase.active = false;
+          doomPhase.winner = null;
+          console.log(`Doom Castle destroyed by ${player.name}! Doom phase ended.`);
+          // Broadcast castle destroyed event
+          io.emit('doomCastleDestroyed', { destroyerName: player.name });
+        }
         player.xp += deadBuilding.xpValue;
         player.score += deadBuilding.xpValue;
         buildings.delete(targetInfo.id);
@@ -429,7 +496,20 @@ function botThink(bot) {
     }
   }
 
-  // Priority 5: Roam / attack nearby enemies
+  // Priority 5: During doom phase, move toward castle if not the castle owner
+  if (doomPhase.active && bot.id !== doomPhase.playerId && myUnits.length >= 2) {
+    const castle = buildings.get(doomPhase.castleId);
+    if (castle && castle.hp > 0) {
+      const d = dist(bot, castle);
+      if (d > 100) {
+        const a = angleTo(bot, castle);
+        bot.input = { x: Math.cos(a), y: Math.sin(a) };
+        return;
+      }
+    }
+  }
+
+  // Priority 6: Roam / attack nearby enemies
   const nearestEnemy = findNearestPlayerOrUnit(bot);
   if (nearestEnemy && myUnits.length >= 3) {
     // Move toward enemy with army
@@ -629,6 +709,49 @@ function gameTick() {
     }
   }
 
+  // ─── Doom Phase Timer Check ──────────────────────────────────
+  if (doomPhase.active && !doomPhase.winner) {
+    const elapsed = now - doomPhase.startTime;
+    const castle = buildings.get(doomPhase.castleId);
+    if (!castle || castle.hp <= 0) {
+      // Castle was destroyed somehow
+      doomPhase.active = false;
+    } else if (elapsed >= doomPhase.duration) {
+      // Timer expired - castle owner WINS!
+      doomPhase.winner = doomPhase.playerId;
+      doomPhase.winTimer = now;
+      const winner = players.get(doomPhase.playerId);
+      const winnerName = winner ? winner.name : doomPhase.playerName;
+      console.log(`${winnerName} WINS! Doom Castle survived for ${DOOM_DURATION / 1000} seconds!`);
+      io.emit('gameWon', { winnerId: doomPhase.playerId, winnerName });
+    }
+  }
+
+  // Reset game after win (10 seconds after win)
+  if (doomPhase.winner && doomPhase.winTimer && now - doomPhase.winTimer >= 10000) {
+    console.log('Game resetting after win...');
+    // Reset doom phase
+    doomPhase.active = false;
+    doomPhase.winner = null;
+    doomPhase.winTimer = null;
+    // Respawn all players, reset scores
+    for (const [, player] of players) {
+      player.xp = 0;
+      player.level = 0;
+      player.score = 0;
+      player.gold = player.isBot ? 50 : 25;
+      player.maxHp = PLAYER_HP;
+      player.hp = PLAYER_HP;
+      player.maxPop = 5;
+      player.currentPop = 0;
+      respawnPlayer(player);
+    }
+    // Clear all units and buildings
+    units.clear();
+    buildings.clear();
+    io.emit('gameReset');
+  }
+
   // Respawn gold
   spawnGoldCoins();
 
@@ -706,7 +829,8 @@ function gameTick() {
       if (p.alive) minimapData.push({ x: p.x, y: p.y, color: p.color, type: 'player' });
     }
     for (const [, b] of buildings) {
-      minimapData.push({ x: b.x, y: b.y, color: players.get(b.ownerId)?.color || '#888', type: 'building' });
+      const bType = b.type === 'castle' ? 'castle' : 'building';
+      minimapData.push({ x: b.x, y: b.y, color: players.get(b.ownerId)?.color || '#888', type: bType });
     }
 
     // Leaderboard
@@ -718,6 +842,17 @@ function gameTick() {
 
     const socket = io.sockets.sockets.get(socketId);
     if (socket) {
+      // Doom phase state for clients
+      const doomState = doomPhase.active ? {
+        active: true,
+        playerId: doomPhase.playerId,
+        playerName: doomPhase.playerName,
+        castleX: doomPhase.castleX,
+        castleY: doomPhase.castleY,
+        timeRemaining: Math.max(0, doomPhase.duration - (now - doomPhase.startTime)),
+        winner: doomPhase.winner
+      } : { active: false };
+
       socket.emit('state', {
         self: {
           id: player.id, x: Math.round(player.x), y: Math.round(player.y),
@@ -735,7 +870,8 @@ function gameTick() {
         damageNumbers: nearbyDmgNums,
         minimap: minimapData,
         leaderboard,
-        mapSize: MAP_SIZE
+        mapSize: MAP_SIZE,
+        doom: doomState
       });
     }
   }

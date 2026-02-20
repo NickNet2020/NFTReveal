@@ -238,10 +238,37 @@ const Renderer = (() => {
           ctx.fillRect(pos.x - 5 + Math.sin(time * 4) * 8, pos.y - 12, 3, 3);
           ctx.fillRect(pos.x + 3 + Math.cos(time * 5) * 6, pos.y - 8, 2, 2);
         }
+      } else if (b.type === 'castle') {
+        // Doom Castle - large with ominous glow
+        const castleSprite = getSprite('castle', Sprites.CASTLE_DATA, Sprites.CASTLE_PALETTE, null, 3);
+
+        // Pulsing red aura
+        const auraAlpha = 0.1 + Math.sin(time * 2) * 0.06;
+        ctx.fillStyle = `rgba(255, 0, 0, ${auraAlpha})`;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y - 20, 80 + Math.sin(time * 1.5) * 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dark ground shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y + 25, 55, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.drawImage(castleSprite, pos.x - castleSprite.width / 2, pos.y - castleSprite.height + 25);
+
+        // Floating skull above castle
+        const skullBob = Math.sin(time * 2) * 6;
+        const skullSprite = getSprite('doomskull', Sprites.DOOM_SKULL_DATA, Sprites.DOOM_SKULL_PALETTE, null, 3);
+        ctx.globalAlpha = 0.7 + Math.sin(time * 3) * 0.3;
+        ctx.drawImage(skullSprite, pos.x - skullSprite.width / 2, pos.y - castleSprite.height - 30 + skullBob);
+        ctx.globalAlpha = 1;
       }
 
       // Health bar
-      drawHealthBar(pos.x, pos.y - 48, 40, b.hp, b.maxHp, isMine);
+      const hpBarY = b.type === 'castle' ? pos.y - 80 : pos.y - 48;
+      const hpBarW = b.type === 'castle' ? 60 : 40;
+      drawHealthBar(pos.x, hpBarY, hpBarW, b.hp, b.maxHp, isMine);
 
       // Owner indicator
       if (isMine) {
@@ -582,7 +609,24 @@ const Renderer = (() => {
       const mx = (entity.x / mapSize) * mW;
       const my = (entity.y / mapSize) * mH;
 
-      if (entity.type === 'building') {
+      if (entity.type === 'castle') {
+        // Large pulsing red skull marker for doom castle
+        const pulseSize = 5 + Math.sin(time * 4) * 2;
+        mCtx.fillStyle = '#ff0000';
+        mCtx.fillRect(mx - pulseSize, my - pulseSize, pulseSize * 2, pulseSize * 2);
+        mCtx.strokeStyle = '#ff4444';
+        mCtx.lineWidth = 2;
+        mCtx.strokeRect(mx - pulseSize - 1, my - pulseSize - 1, pulseSize * 2 + 2, pulseSize * 2 + 2);
+        // Skull "X" marker
+        mCtx.strokeStyle = '#ffffff';
+        mCtx.lineWidth = 1;
+        mCtx.beginPath();
+        mCtx.moveTo(mx - 3, my - 3);
+        mCtx.lineTo(mx + 3, my + 3);
+        mCtx.moveTo(mx + 3, my - 3);
+        mCtx.lineTo(mx - 3, my + 3);
+        mCtx.stroke();
+      } else if (entity.type === 'building') {
         mCtx.fillStyle = entity.color;
         mCtx.fillRect(mx - 1, my - 1, 3, 3);
       } else {
@@ -659,19 +703,93 @@ const Renderer = (() => {
     // Particles
     updateAndDrawParticles(dt);
 
-    // Vignette effect
-    drawVignette();
+    // Vignette effect (red during doom phase)
+    drawVignette(state.doom);
+
+    // Doom phase HUD overlay
+    if (state.doom && state.doom.active) {
+      drawDoomOverlay(state.doom, self.id);
+    }
   }
 
-  function drawVignette() {
+  function drawVignette(doom) {
+    const isDoom = doom && doom.active;
     const gradient = ctx.createRadialGradient(
       width / 2, height / 2, height * 0.3,
       width / 2, height / 2, height * 0.8
     );
-    gradient.addColorStop(0, 'rgba(0,0,0,0)');
-    gradient.addColorStop(1, 'rgba(0,0,0,0.3)');
+    if (isDoom) {
+      const pulse = 0.15 + Math.sin(time * 2) * 0.05;
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(0.7, `rgba(80,0,0,${pulse})`);
+      gradient.addColorStop(1, `rgba(120,0,0,${pulse + 0.15})`);
+    } else {
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.3)');
+    }
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
+  }
+
+  function drawDoomOverlay(doom, myId) {
+    // "DOOM IMPENDING" text at top of screen
+    const seconds = Math.ceil(doom.timeRemaining / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    const timeStr = `${minutes}:${secs.toString().padStart(2, '0')}`;
+
+    // Flashing warning header
+    const flash = Math.sin(time * 4) > 0 ? 1 : 0.6;
+    ctx.globalAlpha = flash;
+    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+
+    // Background bar
+    ctx.fillStyle = 'rgba(120, 0, 0, 0.7)';
+    ctx.fillRect(width / 2 - 250, 50, 500, 60);
+    ctx.strokeStyle = '#ff4444';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(width / 2 - 250, 50, 500, 60);
+
+    // Skull icon (text)
+    ctx.fillStyle = '#ff3333';
+    ctx.fillText('\u2620 DOOM IMPENDING \u2620', width / 2, 72);
+
+    ctx.globalAlpha = 1;
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(doom.playerName + "'s Castle - " + timeStr, width / 2, 96);
+
+    // Progress bar showing time remaining
+    const pct = doom.timeRemaining / 300000;
+    const barW = 400;
+    const barX = width / 2 - barW / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(barX, 114, barW, 8);
+    const barColor = pct > 0.5 ? '#e74c3c' : pct > 0.2 ? '#ff6600' : '#ff0000';
+    ctx.fillStyle = barColor;
+    ctx.fillRect(barX, 114, barW * pct, 8);
+
+    // Castle direction indicator if off-screen
+    if (!isOnScreen(doom.castleX, doom.castleY, -50)) {
+      const angle = Math.atan2(doom.castleY - (camY + height / 2), doom.castleX - (camX + width / 2));
+      const indicatorDist = 120;
+      const ix = width / 2 + Math.cos(angle) * indicatorDist;
+      const iy = height / 2 + Math.sin(angle) * indicatorDist;
+
+      // Arrow pointing toward castle
+      const arrowPulse = 0.5 + Math.sin(time * 5) * 0.3;
+      ctx.globalAlpha = arrowPulse;
+      ctx.fillStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.arc(ix, iy, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u2620', ix, iy + 4);
+      ctx.globalAlpha = 1;
+    }
   }
 
   return {

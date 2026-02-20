@@ -93,11 +93,28 @@
       }
     });
 
+    // ─── Doom Phase Events ──────────────────────────────────────
+    socket.on('doomCastleDestroyed', (data) => {
+      showDoomToast('\u2620 DOOM CASTLE DESTROYED! \u2620', data.destroyerName + ' saved the realm!');
+    });
+
+    socket.on('gameWon', (data) => {
+      showGameEndScreen(data.winnerId, data.winnerName);
+    });
+
+    socket.on('gameReset', () => {
+      hideGameEndScreen();
+      lastLevel = 0;
+      lastGold = 0;
+      showToast('New round starting!');
+    });
+
     socket.on('disconnect', () => {
       running = false;
       menuScreen.classList.remove('hidden');
       gameHud.classList.add('hidden');
       deathScreen.classList.add('hidden');
+      hideGameEndScreen();
       showToast('Disconnected from server');
     });
   }
@@ -128,6 +145,14 @@
         case '2': socket.emit('buyUnit', { type: 'horse' }); break;
         case '3': socket.emit('buyUnit', { type: 'wizard' }); break;
         case '4': socket.emit('buyUnit', { type: 'dragon' }); break;
+        case '5':
+          // Doom Castle (only available at level 9+)
+          if (gameState.self && gameState.self.level >= 9) {
+            socket.emit('build', { type: 'castle', x: gameState.self.x, y: gameState.self.y });
+          } else if (gameState.self) {
+            showToast('Must be Legend rank (Lv.9) to build Doom Castle!');
+          }
+          break;
         case 'q': case 'Q':
           if (gameState.self) {
             socket.emit('build', { type: 'house', x: gameState.self.x, y: gameState.self.y });
@@ -221,7 +246,13 @@
     wasAlive = self.alive;
 
     // Update shop affordability
-    updateShopAffordability(self.gold, self.currentPop, self.maxPop);
+    updateShopAffordability(self.gold, self.currentPop, self.maxPop, self.level);
+
+    // Show/hide castle button based on level
+    const castleItem = document.getElementById('castle-shop-item');
+    if (castleItem) {
+      castleItem.style.display = self.level >= 9 ? 'flex' : 'none';
+    }
 
     // Leaderboard
     updateLeaderboard(gameState.leaderboard || []);
@@ -232,14 +263,15 @@
     }
   }
 
-  function updateShopAffordability(gold, pop, maxPop) {
+  function updateShopAffordability(gold, pop, maxPop, level) {
     const costs = {
       soldier: { gold: 10, pop: 1 },
       horse: { gold: 30, pop: 2 },
       wizard: { gold: 50, pop: 2 },
       dragon: { gold: 100, pop: 5 },
       house: { gold: 50, pop: 0 },
-      goldmine: { gold: 100, pop: 0 }
+      goldmine: { gold: 100, pop: 0 },
+      castle: { gold: 5000, pop: 0, levelReq: 9 }
     };
 
     document.querySelectorAll('.shop-item').forEach(item => {
@@ -247,7 +279,8 @@
       const cost = costs[type];
       if (!cost) return;
 
-      const canAfford = gold >= cost.gold && (cost.pop === 0 || pop + cost.pop <= maxPop);
+      const meetsLevel = !cost.levelReq || (level || 0) >= cost.levelReq;
+      const canAfford = gold >= cost.gold && (cost.pop === 0 || pop + cost.pop <= maxPop) && meetsLevel;
       item.classList.toggle('cant-afford', !canAfford);
     });
   }
@@ -279,15 +312,15 @@
     levelUpName.textContent = name;
 
     const descs = [
-      '', 'Battle Cry: +15% troop damage!',
-      'Swift Boots: +20% troop speed!',
-      'Fortify: +30% building HP!',
-      'War Drums: +25% damage aura!',
-      'Gold Rush: +50% gold income!',
-      "Dragon's Might: +35% dragon power!",
-      'Iron Will: +25% troop HP!',
+      '', 'Battle Cry: +8% troop damage!',
+      'Swift Boots: +10% troop speed!',
+      'Fortify: +15% building HP!',
+      'War Drums: +12% damage aura!',
+      'Gold Rush: +25% gold income!',
+      "Dragon's Might: +18% dragon power!",
+      'Iron Will: +12% troop HP!',
       'Regeneration: troops heal over time!',
-      'LEGENDARY: All bonuses enhanced!'
+      'LEGENDARY: Doom Castle unlocked!'
     ];
     levelUpBonus.textContent = descs[level] || '';
 
@@ -316,6 +349,38 @@
     toast.textContent = msg;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2500);
+  }
+
+  // ─── Doom Phase UI ─────────────────────────────────────────
+  function showDoomToast(title, subtitle) {
+    const toast = document.createElement('div');
+    toast.className = 'doom-toast';
+    toast.innerHTML = `<div class="doom-toast-title">${title}</div><div class="doom-toast-sub">${subtitle}</div>`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+  }
+
+  function showGameEndScreen(winnerId, winnerName) {
+    let overlay = document.getElementById('game-end-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'game-end-overlay';
+      document.body.appendChild(overlay);
+    }
+    const isWinner = winnerId === myId;
+    overlay.innerHTML = `
+      <div class="game-end-content ${isWinner ? 'victory' : 'defeat'}">
+        <h1>${isWinner ? '\u2655 VICTORY \u2655' : '\u2620 DEFEAT \u2620'}</h1>
+        <p class="game-end-text">${isWinner ? 'Your Doom Castle stood the test of time!' : winnerName + "'s Doom Castle survived! The realm has fallen."}</p>
+        <p class="game-end-sub">Game resetting in 10 seconds...</p>
+      </div>
+    `;
+    overlay.style.display = 'flex';
+  }
+
+  function hideGameEndScreen() {
+    const overlay = document.getElementById('game-end-overlay');
+    if (overlay) overlay.style.display = 'none';
   }
 
   // ─── Gold Collection Detection ──────────────────────────────
