@@ -1,7 +1,7 @@
 {
-  "name": "lordz-io-replica",
+  "name": "castle-fight",
   "version": "1.0.0",
-  "description": "A pixel-art multiplayer .io game inspired by Lordz.io",
+  "description": "Castle Fight - A multiplayer lane-based strategy game with Game of Thrones aesthetics",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

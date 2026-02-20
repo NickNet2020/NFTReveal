@@ -3,158 +3,158 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lordz.io - Pixel Conquest</title>
+  <title>Castle Fight — War of the Realms</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700;900&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </head>
 <body>
-  <!-- ─── Title / Join Screen ─── -->
-  <div id="menu-screen">
-    <div id="menu-container">
-      <div id="game-logo">
-        <div class="logo-crown">&#9813;</div>
-        <h1>LORDZ<span class="logo-dot">.</span>IO</h1>
-        <p class="subtitle">PIXEL CONQUEST</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- TITLE / CHARACTER SELECT SCREEN                                -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div id="titleScreen">
+    <div class="title-bg"></div>
+    <div class="title-particles" id="titleParticles"></div>
+
+    <div class="title-content">
+      <div class="title-crest">&#9876;</div>
+      <h1 class="title-main">Castle Fight</h1>
+      <p class="title-sub">War of the Realms</p>
+
+      <div class="name-input-section">
+        <label for="playerName">Your Title</label>
+        <input type="text" id="playerName" placeholder="Enter your name, my Lord..." maxlength="20">
       </div>
-      <div id="join-form">
-        <input type="text" id="player-name" placeholder="Enter your name..." maxlength="16" autocomplete="off" />
-        <button id="play-btn">&#9876; PLAY &#9876;</button>
+
+      <h2 class="select-header">Choose Your Lord</h2>
+
+      <div class="character-grid" id="characterGrid">
+        <!-- Characters populated by JS -->
       </div>
-      <div id="how-to-play">
-        <h3>HOW TO PLAY</h3>
-        <div class="controls-grid">
-          <div class="control-item"><span class="key">WASD</span> Move</div>
-          <div class="control-item"><span class="key">1</span> Buy Soldier (10g)</div>
-          <div class="control-item"><span class="key">2</span> Buy Horse (30g)</div>
-          <div class="control-item"><span class="key">3</span> Buy Wizard (50g)</div>
-          <div class="control-item"><span class="key">4</span> Buy Dragon (100g)</div>
-          <div class="control-item"><span class="key">Q</span> Build House (50g)</div>
-          <div class="control-item"><span class="key">E</span> Build Gold Mine (100g)</div>
-          <div class="control-item"><span class="key">5</span> Doom Castle (Lv.9)</div>
-        </div>
+
+      <button id="findMatchBtn" class="btn-find-match" disabled>
+        <span class="btn-icon">&#9876;</span>
+        <span class="btn-text">March to War</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- MATCHMAKING SCREEN                                             -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div id="matchmakingScreen" class="hidden">
+    <div class="title-bg"></div>
+    <div class="matchmaking-content">
+      <div class="loading-swords">&#9876;</div>
+      <h2>Seeking an Opponent...</h2>
+      <p class="matchmaking-sub">Preparing the battlefield</p>
+      <div class="loading-bar">
+        <div class="loading-bar-fill"></div>
       </div>
     </div>
   </div>
 
-  <!-- ─── Death Screen ─── -->
-  <div id="death-screen" class="hidden">
-    <div id="death-container">
-      <h2>&#9760; YOU WERE SLAIN &#9760;</h2>
-      <p id="death-score">Score: 0</p>
-      <p class="respawn-text">Respawning...</p>
-    </div>
-  </div>
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- GAME SCREEN                                                    -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div id="gameScreen" class="hidden">
+    <canvas id="gameCanvas"></canvas>
 
-  <!-- ─── Level Up Notification ─── -->
-  <div id="level-up-notification" class="hidden">
-    <div id="level-up-content">
-      <h2>&#9733; LEVEL UP &#9733;</h2>
-      <p id="level-up-name"></p>
-      <p id="level-up-bonus"></p>
-    </div>
-  </div>
-
-  <!-- ─── Game HUD ─── -->
-  <div id="game-hud" class="hidden">
-    <!-- Top bar -->
-    <div id="top-bar">
-      <div id="player-info">
-        <span id="hud-name"></span>
-        <span id="hud-level" class="badge"></span>
-      </div>
-      <div id="resource-bar">
-        <div class="resource" id="hud-gold-container">
-          <span class="resource-icon">&#9733;</span>
-          <span id="hud-gold">0</span>
-        </div>
-        <div class="resource" id="hud-pop-container">
-          <span class="resource-icon">&#9819;</span>
-          <span id="hud-pop">0/5</span>
-        </div>
-        <div class="resource" id="hud-xp-container">
-          <span class="resource-icon">&#9734;</span>
-          <span id="hud-xp">0</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- XP Bar -->
-    <div id="xp-bar-container">
-      <div id="xp-bar-fill"></div>
-      <span id="xp-bar-text"></span>
-    </div>
-
-    <!-- Bottom bar - Shop -->
-    <div id="bottom-bar">
-      <div class="shop-section">
-        <h4>UNITS</h4>
-        <div class="shop-items">
-          <div class="shop-item" data-action="buyUnit" data-type="soldier" data-key="1">
-            <span class="shop-key">1</span>
-            <span class="shop-name">Soldier</span>
-            <span class="shop-cost">10&#9733;</span>
-          </div>
-          <div class="shop-item" data-action="buyUnit" data-type="horse" data-key="2">
-            <span class="shop-key">2</span>
-            <span class="shop-name">Horse</span>
-            <span class="shop-cost">30&#9733;</span>
-          </div>
-          <div class="shop-item" data-action="buyUnit" data-type="wizard" data-key="3">
-            <span class="shop-key">3</span>
-            <span class="shop-name">Wizard</span>
-            <span class="shop-cost">50&#9733;</span>
-          </div>
-          <div class="shop-item" data-action="buyUnit" data-type="dragon" data-key="4">
-            <span class="shop-key">4</span>
-            <span class="shop-name">Dragon</span>
-            <span class="shop-cost">100&#9733;</span>
+    <!-- Top HUD Bar -->
+    <div id="topHud">
+      <div class="hud-left">
+        <div class="castle-hp-display" id="myCastleHp">
+          <div class="castle-label" id="myCastleLabel">Your Castle</div>
+          <div class="hp-bar-container">
+            <div class="hp-bar-fill" id="myCastleHpBar"></div>
+            <span class="hp-text" id="myCastleHpText">8000 / 8000</span>
           </div>
         </div>
       </div>
-      <div class="shop-section">
-        <h4>BUILDINGS</h4>
-        <div class="shop-items">
-          <div class="shop-item" data-action="build" data-type="house" data-key="Q">
-            <span class="shop-key">Q</span>
-            <span class="shop-name">House</span>
-            <span class="shop-cost">50&#9733; +5 pop</span>
-          </div>
-          <div class="shop-item" data-action="build" data-type="goldmine" data-key="E">
-            <span class="shop-key">E</span>
-            <span class="shop-name">Gold Mine</span>
-            <span class="shop-cost">100&#9733;</span>
-          </div>
-          <div class="shop-item doom-castle-item" id="castle-shop-item" data-action="build" data-type="castle" data-key="5" style="display:none">
-            <span class="shop-key">5</span>
-            <span class="shop-name">&#9760; Doom Castle</span>
-            <span class="shop-cost">5000&#9733;</span>
+
+      <div class="hud-center">
+        <div class="game-timer" id="gameTimer">00:00</div>
+      </div>
+
+      <div class="hud-right">
+        <div class="castle-hp-display enemy" id="enemyCastleHp">
+          <div class="castle-label" id="enemyCastleLabel">Enemy Castle</div>
+          <div class="hp-bar-container">
+            <div class="hp-bar-fill enemy" id="enemyCastleHpBar"></div>
+            <span class="hp-text" id="enemyCastleHpText">8000 / 8000</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Leaderboard -->
-    <div id="leaderboard">
-      <h4>&#9876; LEADERBOARD</h4>
-      <div id="leaderboard-list"></div>
+    <!-- Resource Bar -->
+    <div id="resourceBar">
+      <div class="resource-item gold-item">
+        <span class="resource-icon gold-icon">&#9733;</span>
+        <span class="resource-value" id="goldDisplay">200</span>
+      </div>
+      <div class="resource-item income-item">
+        <span class="resource-label">Income:</span>
+        <span class="resource-value" id="incomeDisplay">+8</span>
+        <span class="resource-unit">/ 5s</span>
+      </div>
+    </div>
+
+    <!-- Building Panel (Right Side) -->
+    <div id="buildingPanel">
+      <h3 class="panel-title">Forge &amp; Build</h3>
+      <div id="buildingList">
+        <!-- Populated by JS -->
+      </div>
+      <div class="panel-help">Click a building, then click in your base area to place it.</div>
+    </div>
+
+    <!-- Rescue Strike Button -->
+    <div id="rescueStrikeContainer">
+      <button id="rescueStrikeBtn" class="rescue-btn">
+        <div class="rescue-icon">&#9889;</div>
+        <div class="rescue-text">Rescue Strike</div>
+        <div class="rescue-sub">Destroy all enemies near your castle</div>
+      </button>
     </div>
 
     <!-- Minimap -->
-    <canvas id="minimap" width="180" height="180"></canvas>
+    <canvas id="minimapCanvas" width="280" height="140"></canvas>
 
-    <!-- HP Bar -->
-    <div id="hp-bar-container">
-      <div id="hp-bar-fill"></div>
+    <!-- Character Passive Display -->
+    <div id="passiveDisplay">
+      <span class="passive-icon">&#9733;</span>
+      <span class="passive-text" id="passiveText"></span>
     </div>
   </div>
 
-  <!-- ─── Game Canvas ─── -->
-  <canvas id="game-canvas"></canvas>
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- GAME OVER SCREEN                                               -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div id="gameOverScreen" class="hidden">
+    <div class="title-bg"></div>
+    <div class="gameover-content">
+      <h1 id="gameOverTitle">Victory!</h1>
+      <p id="gameOverSub">The enemy castle has fallen</p>
+      <div class="gameover-stats">
+        <div class="stat-item">
+          <span class="stat-label">Duration</span>
+          <span class="stat-value" id="gameOverDuration">--:--</span>
+        </div>
+      </div>
+      <button id="playAgainBtn" class="btn-find-match">
+        <span class="btn-icon">&#9876;</span>
+        <span class="btn-text">Fight Again</span>
+      </button>
+    </div>
+  </div>
 
-  <!-- ─── Scripts ─── -->
+  <!-- Scripts -->
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/sprites.js"></script>
-  <script src="js/audio.js"></script>
+  <script src="js/characters.js"></script>
+  <script src="js/particles.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/main.js"></script>
 </body>

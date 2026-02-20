@@ -1,698 +1,1380 @@
-// ═══════════════════════════════════════════════════════════════════
-//  RENDERER.JS - Canvas Rendering Engine
-//  Handles camera, terrain, entity rendering, particles, and effects
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// Castle Fight - Canvas Renderer
+// Hyper-realistic Game of Thrones aesthetic with detailed terrain,
+// castles, buildings, units, effects, and atmospheric rendering
+// ═══════════════════════════════════════════════════════════════════════
 
 const Renderer = (() => {
   let canvas, ctx;
-  let width, height;
-
-  // Camera
-  let camX = 0, camY = 0;
-  let camTargetX = 0, camTargetY = 0;
-  let screenShake = 0;
-
-  // Particles
-  const particles = [];
-
-  // Pre-rendered sprites cache
-  const spriteCache = {};
-
-  // Decorations from server
+  let screenW, screenH;
+  let camera = { x: 0, y: 0, zoom: 1, screenW: 0, screenH: 0 };
+  let terrainCanvas, terrainCtx;
+  let terrainDirty = true;
   let decorations = [];
-
-  // Time tracking
   let time = 0;
+  let mySide = 'left';
 
-  // ─── Initialize ──────────────────────────────────────────────
+  // Color palettes per character
+  const CHAR_PALETTES = {
+    northern_lord: { primary: '#4a6fa5', secondary: '#8fb8de', dark: '#2a3f65', banner: '#c0d8ef' },
+    dragon_empress: { primary: '#c0392b', secondary: '#e74c3c', dark: '#7b241c', banner: '#f5a6a0' },
+    iron_admiral:   { primary: '#1a8a7a', secondary: '#2ecc71', dark: '#0e524a', banner: '#7ddfb8' },
+    golden_lord:    { primary: '#d4a017', secondary: '#f1c40f', dark: '#7d6010', banner: '#fae68c' },
+    shadow_priest:  { primary: '#8e44ad', secondary: '#bb6bd9', dark: '#5b2c6f', banner: '#d4a5e8' },
+    forest_warden:  { primary: '#27ae60', secondary: '#58d68d', dark: '#1a7a42', banner: '#a3e4be' }
+  };
+
+  // Unit type visual configs
+  const UNIT_VISUALS = {
+    infantry: { size: 10, shape: 'soldier', yOff: 0 },
+    ranged:   { size: 9,  shape: 'archer', yOff: 0 },
+    cavalry:  { size: 14, shape: 'horse', yOff: -2 },
+    siege:    { size: 18, shape: 'siege', yOff: 0 },
+    flying:   { size: 12, shape: 'flying', yOff: -20 }
+  };
+
+  // ─── Initialize ─────────────────────────────────────────────────
   function init(canvasEl) {
     canvas = canvasEl;
     ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
     resize();
     window.addEventListener('resize', resize);
+
+    // Pre-render terrain
+    terrainCanvas = document.createElement('canvas');
+    terrainCtx = terrainCanvas.getContext('2d');
+    terrainDirty = true;
   }
 
   function resize() {
-    width = window.innerWidth;
-    height = window.innerHeight;
-    canvas.width = width;
-    canvas.height = height;
-    ctx.imageSmoothingEnabled = false;
+    screenW = window.innerWidth;
+    screenH = window.innerHeight;
+    canvas.width = screenW;
+    canvas.height = screenH;
+    camera.screenW = screenW;
+    camera.screenH = screenH;
+    terrainDirty = true;
   }
 
-  function setDecorations(decs) {
-    decorations = decs;
-  }
+  function setDecorations(decs) { decorations = decs || []; terrainDirty = true; }
+  function setSide(side) { mySide = side; }
 
-  // Track if camera has been initialized
-  let camInitialized = false;
-
-  // ─── Camera ──────────────────────────────────────────────────
-  function updateCamera(targetX, targetY, dt) {
-    camTargetX = targetX - width / 2;
-    camTargetY = targetY - height / 2;
-
-    // Snap camera instantly on first frame so player is visible immediately
-    if (!camInitialized) {
-      camX = camTargetX;
-      camY = camTargetY;
-      camInitialized = true;
-    } else {
-      camX += (camTargetX - camX) * 0.08;
-      camY += (camTargetY - camY) * 0.08;
-    }
-
-    // Screen shake
-    if (screenShake > 0) {
-      screenShake *= 0.9;
-      if (screenShake < 0.5) screenShake = 0;
-    }
-  }
-
-  function shake(amount) {
-    screenShake = Math.min(screenShake + amount, 12);
-  }
-
+  // ─── Camera helpers ─────────────────────────────────────────────
   function worldToScreen(wx, wy) {
-    const shakeX = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
-    const shakeY = screenShake > 0 ? (Math.random() - 0.5) * screenShake : 0;
     return {
-      x: wx - camX + shakeX,
-      y: wy - camY + shakeY
+      x: (wx - camera.x) * camera.zoom + screenW / 2,
+      y: (wy - camera.y) * camera.zoom + screenH / 2
     };
   }
 
-  function isOnScreen(wx, wy, margin = 100) {
-    const sx = wx - camX;
-    const sy = wy - camY;
-    return sx > -margin && sx < width + margin && sy > -margin && sy < height + margin;
+  function screenToWorld(sx, sy) {
+    return {
+      x: (sx - screenW / 2) / camera.zoom + camera.x,
+      y: (sy - screenH / 2) / camera.zoom + camera.y
+    };
   }
 
-  // ─── Sprite Rendering ───────────────────────────────────────
-  function getSprite(name, data, palette, teamColor, scale) {
-    const key = name + '_' + teamColor + '_' + scale;
-    if (spriteCache[key]) return spriteCache[key];
-    const modPalette = { ...palette, 'T': teamColor || '#e74c3c' };
-    const sprite = Sprites.renderSprite(data, modPalette, scale);
-    spriteCache[key] = sprite;
-    return sprite;
+  function isVisible(wx, wy, margin) {
+    margin = margin || 80;
+    const s = worldToScreen(wx, wy);
+    return s.x > -margin && s.x < screenW + margin && s.y > -margin && s.y < screenH + margin;
   }
 
-  // ─── Draw Terrain ────────────────────────────────────────────
-  function drawTerrain(mapSize) {
-    // Background
-    ctx.fillStyle = '#3a7d44';
-    ctx.fillRect(0, 0, width, height);
+  // ─── Pre-render terrain ─────────────────────────────────────────
+  function renderTerrain(mapW, mapH) {
+    const scale = 0.25; // Render at quarter res for performance
+    const tw = Math.ceil(mapW * scale);
+    const th = Math.ceil(mapH * scale);
+    terrainCanvas.width = tw;
+    terrainCanvas.height = th;
+    const tc = terrainCtx;
 
-    // Grid pattern for grass
-    const gridSize = 64;
-    const startX = Math.floor(camX / gridSize) * gridSize;
-    const startY = Math.floor(camY / gridSize) * gridSize;
+    // Base ground - dark earth
+    const groundGrad = tc.createLinearGradient(0, 0, 0, th);
+    groundGrad.addColorStop(0, '#2a3a1e');
+    groundGrad.addColorStop(0.3, '#334422');
+    groundGrad.addColorStop(0.5, '#2e3d20');
+    groundGrad.addColorStop(0.7, '#334422');
+    groundGrad.addColorStop(1, '#2a3a1e');
+    tc.fillStyle = groundGrad;
+    tc.fillRect(0, 0, tw, th);
 
-    ctx.strokeStyle = 'rgba(46, 125, 50, 0.3)';
-    ctx.lineWidth = 1;
-
-    for (let x = startX; x < camX + width + gridSize; x += gridSize) {
-      const sx = x - camX;
-      ctx.beginPath();
-      ctx.moveTo(sx, 0);
-      ctx.lineTo(sx, height);
-      ctx.stroke();
+    // Add noise-like ground variation
+    for (let i = 0; i < 3000; i++) {
+      const x = Math.random() * tw;
+      const y = Math.random() * th;
+      const brightness = Math.random() * 20 - 10;
+      const r = 46 + brightness;
+      const g = 60 + brightness + Math.random() * 10;
+      const b = 30 + brightness;
+      tc.fillStyle = `rgb(${r},${g},${b})`;
+      tc.fillRect(x, y, 2 + Math.random() * 3, 2 + Math.random() * 3);
     }
-    for (let y = startY; y < camY + height + gridSize; y += gridSize) {
-      const sy = y - camY;
-      ctx.beginPath();
-      ctx.moveTo(0, sy);
-      ctx.lineTo(width, sy);
-      ctx.stroke();
-    }
 
-    // Grass detail dots
-    const detailSize = 128;
-    const dStartX = Math.floor(camX / detailSize) * detailSize;
-    const dStartY = Math.floor(camY / detailSize) * detailSize;
+    // Lane paths (cobblestone roads)
+    const GC = GAME_CONSTANTS;
+    const laneTopY = GC.LANE_TOP_Y * scale;
+    const laneBotY = GC.LANE_BOT_Y * scale;
+    const laneW = GC.LANE_WIDTH * scale;
 
-    for (let x = dStartX; x < camX + width + detailSize; x += detailSize) {
-      for (let y = dStartY; y < camY + height + detailSize; y += detailSize) {
-        // Deterministic "random" based on position
-        const hash = ((x * 73856093) ^ (y * 19349663)) & 0xFFFF;
-        if (hash % 3 === 0) {
-          const sx = x - camX + (hash % 40);
-          const sy = y - camY + ((hash >> 4) % 40);
-          ctx.fillStyle = hash % 5 === 0 ? '#4a9d54' : '#2d6d34';
-          ctx.fillRect(sx, sy, 3, 3);
-          if (hash % 7 === 0) {
-            ctx.fillRect(sx + 6, sy + 3, 2, 2);
-          }
+    function drawLane(cy) {
+      // Road base
+      tc.fillStyle = '#4a4035';
+      tc.fillRect(0, cy - laneW / 2, tw, laneW);
+      // Road edges
+      tc.fillStyle = '#3a3028';
+      tc.fillRect(0, cy - laneW / 2, tw, 3);
+      tc.fillRect(0, cy + laneW / 2 - 3, tw, 3);
+      // Stone texture
+      for (let x = 0; x < tw; x += 6) {
+        for (let row = -2; row <= 2; row++) {
+          const py = cy + row * (laneW / 5);
+          const offset = (row % 2) * 3;
+          const brightness = Math.random() * 15 - 5;
+          tc.fillStyle = `rgb(${74 + brightness},${64 + brightness},${53 + brightness})`;
+          tc.fillRect(x + offset, py - 2, 5, 4);
+          tc.strokeStyle = `rgba(0,0,0,0.2)`;
+          tc.lineWidth = 0.5;
+          tc.strokeRect(x + offset, py - 2, 5, 4);
         }
       }
     }
 
-    // Map borders
-    const border = worldToScreen(0, 0);
-    const borderEnd = worldToScreen(mapSize, mapSize);
-    ctx.strokeStyle = '#f1c40f';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(border.x, border.y, borderEnd.x - border.x, borderEnd.y - border.y);
+    drawLane(laneTopY);
+    drawLane(laneBotY);
 
-    // Dark outside border
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    if (border.x > 0) ctx.fillRect(0, 0, border.x, height);
-    if (borderEnd.x < width) ctx.fillRect(borderEnd.x, 0, width - borderEnd.x, height);
-    if (border.y > 0) ctx.fillRect(0, 0, width, border.y);
-    if (borderEnd.y < height) ctx.fillRect(0, borderEnd.y, width, height - borderEnd.y);
-  }
+    // Base areas (slightly different color)
+    const p1BaseMaxX = GC.P1_BASE_MAX_X * scale;
+    const p2BaseMinX = GC.P2_BASE_MIN_X * scale;
 
-  // ─── Draw Decorations ───────────────────────────────────────
-  function drawDecorations() {
+    tc.fillStyle = 'rgba(30, 50, 80, 0.15)';
+    tc.fillRect(0, 0, p1BaseMaxX, th);
+    tc.fillStyle = 'rgba(80, 30, 30, 0.15)';
+    tc.fillRect(p2BaseMinX, 0, tw - p2BaseMinX, th);
+
+    // Base area borders (subtle dashed)
+    tc.setLineDash([4, 4]);
+    tc.strokeStyle = 'rgba(201, 168, 76, 0.2)';
+    tc.lineWidth = 1;
+    tc.beginPath();
+    tc.moveTo(p1BaseMaxX, 0);
+    tc.lineTo(p1BaseMaxX, th);
+    tc.stroke();
+    tc.beginPath();
+    tc.moveTo(p2BaseMinX, 0);
+    tc.lineTo(p2BaseMinX, th);
+    tc.stroke();
+    tc.setLineDash([]);
+
+    // Draw trees on terrain
     for (const dec of decorations) {
-      if (!isOnScreen(dec.x, dec.y, 80)) continue;
-      const pos = worldToScreen(dec.x, dec.y);
-
       if (dec.type === 'tree') {
-        const variant = dec.variant % Sprites.TREE_VARIANTS.length;
-        const sprite = getSprite('tree' + variant, Sprites.TREE_VARIANTS[variant], Sprites.TREE_PALETTE, null, 3);
-        ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height + 10);
-      } else if (dec.type === 'rock') {
-        const variant = dec.variant % Sprites.ROCK_VARIANTS.length;
-        const sprite = getSprite('rock' + variant, Sprites.ROCK_VARIANTS[variant], Sprites.ROCK_PALETTE, null, 3);
-        ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height / 2);
-      }
-    }
-  }
-
-  // ─── Draw Gold Coins ────────────────────────────────────────
-  function drawGoldCoins(coins) {
-    const frameIdx = Math.floor(time * 3) % Sprites.COIN_FRAMES.length;
-
-    for (const coin of coins) {
-      if (!isOnScreen(coin.x, coin.y)) continue;
-      const pos = worldToScreen(coin.x, coin.y);
-
-      // Coin glow
-      const glowAlpha = 0.15 + Math.sin(time * 4 + coin.id) * 0.08;
-      ctx.fillStyle = `rgba(241, 196, 15, ${glowAlpha})`;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 16, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Coin sprite
-      const sprite = getSprite('coin' + frameIdx, Sprites.COIN_FRAMES[frameIdx], Sprites.COIN_PALETTE, null, 3);
-      ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height / 2);
-
-      // Sparkle effect
-      if (Math.sin(time * 5 + coin.id * 7) > 0.8) {
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(pos.x - 8 + Math.sin(time * 3) * 4, pos.y - 10, 2, 2);
-      }
-    }
-  }
-
-  // ─── Draw Buildings ─────────────────────────────────────────
-  function drawBuildings(buildingsList, myId) {
-    // Sort by Y for proper overlap
-    const sorted = [...buildingsList].sort((a, b) => a.y - b.y);
-
-    for (const b of sorted) {
-      if (!isOnScreen(b.x, b.y, 60)) continue;
-      const pos = worldToScreen(b.x, b.y);
-      const isMine = b.ownerId === myId;
-
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      ctx.beginPath();
-      ctx.ellipse(pos.x, pos.y + 20, 28, 8, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      if (b.type === 'house') {
-        const sprite = getSprite('house', Sprites.HOUSE_DATA, Sprites.HOUSE_PALETTE, null, 3);
-        ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height + 20);
-      } else if (b.type === 'goldmine') {
-        const sprite = getSprite('goldmine', Sprites.GOLDMINE_DATA, Sprites.GOLDMINE_PALETTE, null, 3);
-        ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height + 15);
-
-        // Gold sparkle animation
-        if (Math.sin(time * 3 + b.id) > 0.5) {
-          ctx.fillStyle = '#f1c40f';
-          ctx.fillRect(pos.x - 5 + Math.sin(time * 4) * 8, pos.y - 12, 3, 3);
-          ctx.fillRect(pos.x + 3 + Math.cos(time * 5) * 6, pos.y - 8, 2, 2);
+        const dx = dec.x * scale;
+        const dy = dec.y * scale;
+        const s = dec.scale * 0.8;
+        // Tree shadow
+        tc.fillStyle = 'rgba(0,0,0,0.15)';
+        tc.beginPath();
+        tc.ellipse(dx, dy + 4 * s, 8 * s, 3 * s, 0, 0, Math.PI * 2);
+        tc.fill();
+        // Trunk
+        tc.fillStyle = '#3d2b1f';
+        tc.fillRect(dx - 1.5 * s, dy - 8 * s, 3 * s, 12 * s);
+        // Canopy layers
+        const greens = ['#1a4d1a', '#266326', '#1f5420', '#2d7a2d'];
+        for (let l = 0; l < 3; l++) {
+          tc.fillStyle = greens[dec.variant % greens.length];
+          tc.beginPath();
+          tc.arc(dx, dy - 10 * s - l * 5 * s, (7 - l * 1.5) * s, 0, Math.PI * 2);
+          tc.fill();
         }
-      } else if (b.type === 'castle') {
-        // Doom Castle - large with ominous glow
-        const castleSprite = getSprite('castle', Sprites.CASTLE_DATA, Sprites.CASTLE_PALETTE, null, 3);
-
-        // Pulsing red aura
-        const auraAlpha = 0.1 + Math.sin(time * 2) * 0.06;
-        ctx.fillStyle = `rgba(255, 0, 0, ${auraAlpha})`;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y - 20, 80 + Math.sin(time * 1.5) * 10, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Dark ground shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.beginPath();
-        ctx.ellipse(pos.x, pos.y + 25, 55, 15, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.drawImage(castleSprite, pos.x - castleSprite.width / 2, pos.y - castleSprite.height + 25);
-
-        // Floating skull above castle
-        const skullBob = Math.sin(time * 2) * 6;
-        const skullSprite = getSprite('doomskull', Sprites.DOOM_SKULL_DATA, Sprites.DOOM_SKULL_PALETTE, null, 3);
-        ctx.globalAlpha = 0.7 + Math.sin(time * 3) * 0.3;
-        ctx.drawImage(skullSprite, pos.x - skullSprite.width / 2, pos.y - castleSprite.height - 30 + skullBob);
-        ctx.globalAlpha = 1;
-      }
-
-      // Health bar
-      const hpBarY = b.type === 'castle' ? pos.y - 80 : pos.y - 48;
-      const hpBarW = b.type === 'castle' ? 60 : 40;
-      drawHealthBar(pos.x, hpBarY, hpBarW, b.hp, b.maxHp, isMine);
-
-      // Owner indicator
-      if (isMine) {
-        ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 30, 0, Math.PI * 2);
-        ctx.fill();
+      } else if (dec.type === 'rock') {
+        const dx = dec.x * scale;
+        const dy = dec.y * scale;
+        const s = dec.scale;
+        tc.fillStyle = '#555';
+        tc.beginPath();
+        tc.ellipse(dx, dy, 4 * s, 3 * s, 0, 0, Math.PI * 2);
+        tc.fill();
+        tc.fillStyle = '#666';
+        tc.beginPath();
+        tc.ellipse(dx - 1, dy - 1, 3 * s, 2 * s, 0, 0, Math.PI * 2);
+        tc.fill();
       }
     }
+
+    terrainDirty = false;
   }
 
-  // ─── Draw Units ─────────────────────────────────────────────
-  function drawUnits(unitsList, playerMap, myId) {
-    const sorted = [...unitsList].sort((a, b) => a.y - b.y);
+  // ─── Draw Castle ────────────────────────────────────────────────
+  function drawCastle(castleData, side, charId) {
+    if (!isVisible(castleData.x, castleData.y, 200)) return;
+    const pos = worldToScreen(castleData.x, castleData.y);
+    const z = camera.zoom;
+    const palette = CHAR_PALETTES[charId] || CHAR_PALETTES.northern_lord;
 
-    for (const u of sorted) {
-      if (!isOnScreen(u.x, u.y)) continue;
-      const pos = worldToScreen(u.x, u.y);
-      const owner = playerMap[u.ownerId];
-      const teamColor = owner ? owner.color : '#888';
-      const isMine = u.ownerId === myId;
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
 
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      const shadowSize = u.type === 'dragon' ? 20 : u.type === 'horse' ? 14 : 10;
-      ctx.beginPath();
-      ctx.ellipse(pos.x, pos.y + 6, shadowSize, shadowSize / 3, 0, 0, Math.PI * 2);
-      ctx.fill();
+    // Large shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, 50 * z, 70 * z, 18 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-      // Unit sprite
-      let sprite;
-      const scale = 2;
-      switch (u.type) {
-        case 'soldier':
-          sprite = getSprite('soldier', Sprites.SOLDIER_DATA, Sprites.SOLDIER_PALETTE, teamColor, scale);
-          ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height + 6);
-          break;
-        case 'horse':
-          sprite = getSprite('horse', Sprites.HORSE_DATA, Sprites.HORSE_PALETTE, teamColor, scale);
-          ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height + 6);
-          break;
-        case 'wizard':
-          sprite = getSprite('wizard', Sprites.WIZARD_DATA, Sprites.WIZARD_PALETTE, teamColor, scale);
-          ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height + 6);
-          // Magic particles
-          if (u.state === 'attack') {
-            spawnParticle(pos.x + (Math.random() - 0.5) * 20, pos.y - 10, '#9b59b6', 0.5, 3);
-          }
-          break;
-        case 'dragon':
-          sprite = getSprite('dragon', Sprites.DRAGON_DATA, Sprites.DRAGON_PALETTE, teamColor, 3);
-          // Hover effect
-          const hover = Math.sin(time * 3 + u.id) * 4;
-          ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height + 6 + hover);
-          // Fire particles when attacking
-          if (u.state === 'attack') {
-            for (let i = 0; i < 2; i++) {
-              spawnParticle(
-                pos.x + (Math.random() - 0.5) * 15,
-                pos.y - 15 + hover,
-                Math.random() > 0.5 ? '#ff4400' : '#ff8800',
-                0.6, 4
-              );
-            }
-          }
-          break;
-      }
+    // Castle base/foundation
+    const grad1 = ctx.createLinearGradient(-50 * z, 20 * z, 50 * z, 50 * z);
+    grad1.addColorStop(0, '#3a3a3a');
+    grad1.addColorStop(1, '#2a2a2a');
+    ctx.fillStyle = grad1;
+    roundRect(ctx, -55 * z, 10 * z, 110 * z, 40 * z, 3 * z);
+    ctx.fill();
 
-      // Health bar
-      const barY = u.type === 'dragon' ? pos.y - 55 : pos.y - 35;
-      const barW = u.type === 'dragon' ? 40 : 24;
-      drawHealthBar(pos.x, barY, barW, u.hp, u.maxHp, isMine);
+    // Main wall
+    const wallGrad = ctx.createLinearGradient(0, -60 * z, 0, 20 * z);
+    wallGrad.addColorStop(0, '#606060');
+    wallGrad.addColorStop(0.5, '#505050');
+    wallGrad.addColorStop(1, '#3a3a3a');
+    ctx.fillStyle = wallGrad;
+    roundRect(ctx, -45 * z, -40 * z, 90 * z, 60 * z, 2 * z);
+    ctx.fill();
 
-      // Attack indicator
-      if (u.state === 'attack') {
-        const attackPulse = Math.sin(time * 8) * 0.3 + 0.3;
-        ctx.strokeStyle = `rgba(255, 0, 0, ${attackPulse})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y - 10, 18, 0, Math.PI * 2);
-        ctx.stroke();
+    // Stone texture on wall
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 0.5 * z;
+    for (let row = 0; row < 6; row++) {
+      const ry = (-38 + row * 10) * z;
+      const offset = (row % 2) * 15 * z;
+      for (let col = 0; col < 4; col++) {
+        const rx = (-42 + col * 22 + offset) * z;
+        ctx.strokeRect(rx, ry, 20 * z, 9 * z);
       }
     }
-  }
 
-  // ─── Draw Players ───────────────────────────────────────────
-  function drawPlayers(playersList, myId, myLevel) {
-    const sorted = [...playersList].sort((a, b) => a.y - b.y);
+    // Gate
+    const gateGrad = ctx.createLinearGradient(0, -10 * z, 0, 20 * z);
+    gateGrad.addColorStop(0, '#1a1a1a');
+    gateGrad.addColorStop(1, '#0a0a0a');
+    ctx.fillStyle = gateGrad;
+    ctx.beginPath();
+    ctx.moveTo(-12 * z, 20 * z);
+    ctx.lineTo(-12 * z, -5 * z);
+    ctx.arc(0, -5 * z, 12 * z, Math.PI, 0);
+    ctx.lineTo(12 * z, 20 * z);
+    ctx.fill();
 
-    for (const p of sorted) {
-      if (!p.alive) continue;
-      if (!isOnScreen(p.x, p.y)) continue;
-      const pos = worldToScreen(p.x, p.y);
-      const isMe = p.id === myId;
-
-      // Aura for leveled players
-      if (p.level >= 1) {
-        drawAura(pos.x, pos.y - 10, p.level, p.color);
-      }
-
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    // Gate portcullis lines
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1.5 * z;
+    for (let i = -8; i <= 8; i += 4) {
       ctx.beginPath();
-      ctx.ellipse(pos.x, pos.y + 8, 14, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Player sprite
-      const scale = 3;
-      let sprite;
-      if (p.level >= 4) {
-        sprite = getSprite('playerCrown', Sprites.PLAYER_CROWN_DATA, Sprites.PLAYER_CROWN_PALETTE, p.color, scale);
-      } else {
-        sprite = getSprite('player', Sprites.PLAYER_DATA, Sprites.PLAYER_PALETTE, p.color, scale);
-      }
-      ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height + 8);
-
-      // Selection ring for self
-      if (isMe) {
-        ctx.strokeStyle = '#f1c40f';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.ellipse(pos.x, pos.y + 6, 20, 8, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      // Name tag
-      ctx.font = '10px "Press Start 2P", monospace';
-      ctx.textAlign = 'center';
-      const nameY = p.level >= 4 ? pos.y - 70 : pos.y - 58;
-
-      // Name background
-      const nameWidth = ctx.measureText(p.name).width + 10;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(pos.x - nameWidth / 2, nameY - 8, nameWidth, 14);
-
-      // Name text
-      ctx.fillStyle = isMe ? '#f1c40f' : '#fff';
-      ctx.fillText(p.name, pos.x, nameY + 3);
-
-      // Level badge
-      if (p.level > 0) {
-        ctx.font = '7px "Press Start 2P", monospace';
-        const lvlText = 'Lv' + p.level;
-        ctx.fillStyle = '#2ecc71';
-        ctx.fillText(lvlText, pos.x, nameY + 14);
-      }
-
-      // Health bar
-      drawHealthBar(pos.x, nameY + 18, 36, p.hp, p.maxHp, isMe);
-    }
-  }
-
-  // ─── Draw Aura Effect ───────────────────────────────────────
-  function drawAura(x, y, level, color) {
-    const radius = 30 + level * 5;
-    const alpha = 0.08 + Math.sin(time * 2) * 0.04;
-    const rings = Math.min(level, 5);
-
-    for (let i = 0; i < rings; i++) {
-      const r = radius - i * 6;
-      const a = alpha - i * 0.015;
-      if (a <= 0) continue;
-
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = a;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x, y, r + Math.sin(time * 3 + i) * 3, 0, Math.PI * 2);
+      ctx.moveTo(i * z, -5 * z);
+      ctx.lineTo(i * z, 18 * z);
       ctx.stroke();
     }
 
-    // Floating particles for high levels
-    if (level >= 3) {
-      const particleCount = Math.min(level, 8);
-      for (let i = 0; i < particleCount; i++) {
-        const angle = (time * 1.5 + (i / particleCount) * Math.PI * 2) % (Math.PI * 2);
-        const px = x + Math.cos(angle) * radius;
-        const py = y + Math.sin(angle) * (radius * 0.4);
-        ctx.fillStyle = color;
-        ctx.globalAlpha = 0.4 + Math.sin(time * 4 + i) * 0.2;
-        ctx.fillRect(px - 2, py - 2, 4, 4);
-      }
+    // Left tower
+    drawTower(ctx, -50 * z, -30 * z, 20 * z, 70 * z, z, palette);
+    // Right tower
+    drawTower(ctx, 30 * z, -30 * z, 20 * z, 70 * z, z, palette);
+
+    // Center tower (taller)
+    drawTower(ctx, -10 * z, -55 * z, 20 * z, 50 * z, z, palette);
+
+    // Banners on towers
+    drawBanner(ctx, -40 * z, -65 * z, z, palette.primary);
+    drawBanner(ctx, 40 * z, -65 * z, z, palette.primary);
+
+    // Torch lights
+    const flicker = 0.7 + Math.sin(time * 8) * 0.15 + Math.sin(time * 13) * 0.1;
+    drawTorchGlow(ctx, -25 * z, -5 * z, z, flicker);
+    drawTorchGlow(ctx, 25 * z, -5 * z, z, flicker);
+
+    ctx.restore();
+
+    // Health bar above castle
+    drawHealthBar(pos.x, pos.y - 80 * z, 100 * z, castleData.hp, castleData.maxHp,
+      side === mySide ? 'friendly' : 'enemy');
+
+    // HP text
+    ctx.font = `bold ${11 * z}px Cinzel, serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 3;
+    ctx.fillText(`${Math.ceil(castleData.hp)} / ${castleData.maxHp}`, pos.x, pos.y - 82 * z - 4);
+    ctx.shadowBlur = 0;
+  }
+
+  function drawTower(ctx, x, y, w, h, z, palette) {
+    // Tower body
+    const tGrad = ctx.createLinearGradient(x, y, x + w, y + h);
+    tGrad.addColorStop(0, '#585858');
+    tGrad.addColorStop(0.5, '#4a4a4a');
+    tGrad.addColorStop(1, '#383838');
+    ctx.fillStyle = tGrad;
+    ctx.fillRect(x, y, w, h);
+
+    // Stone lines
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 0.5 * z;
+    for (let i = 0; i < h / (8 * z); i++) {
+      ctx.beginPath();
+      ctx.moveTo(x, y + i * 8 * z);
+      ctx.lineTo(x + w, y + i * 8 * z);
+      ctx.stroke();
     }
 
-    // Special aura for level 9+
-    if (level >= 9) {
-      ctx.globalAlpha = 0.05 + Math.sin(time * 1.5) * 0.03;
-      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius + 20);
-      gradient.addColorStop(0, '#f1c40f');
-      gradient.addColorStop(1, 'transparent');
-      ctx.fillStyle = gradient;
+    // Crenellations
+    ctx.fillStyle = '#555';
+    const crenW = 4 * z;
+    for (let i = 0; i < w / crenW; i += 2) {
+      ctx.fillRect(x + i * crenW, y - 5 * z, crenW, 5 * z);
+    }
+
+    // Roof/cap
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.moveTo(x - 2 * z, y - 5 * z);
+    ctx.lineTo(x + w / 2, y - 18 * z);
+    ctx.lineTo(x + w + 2 * z, y - 5 * z);
+    ctx.fill();
+  }
+
+  function drawBanner(ctx, x, y, z, color) {
+    // Pole
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1.5 * z;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 15 * z);
+    ctx.lineTo(x, y - 5 * z);
+    ctx.stroke();
+
+    // Banner cloth with wave
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 5 * z);
+    const wave = Math.sin(time * 3 + x) * 2 * z;
+    ctx.lineTo(x + 10 * z + wave, y - 2 * z);
+    ctx.lineTo(x + 8 * z + wave * 0.5, y + 5 * z);
+    ctx.lineTo(x, y + 8 * z);
+    ctx.fill();
+
+    // Banner edge highlight
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 0.5 * z;
+    ctx.stroke();
+  }
+
+  function drawTorchGlow(ctx, x, y, z, flicker) {
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, 25 * z * flicker);
+    grad.addColorStop(0, `rgba(255, 180, 50, ${0.3 * flicker})`);
+    grad.addColorStop(0.5, `rgba(255, 120, 20, ${0.1 * flicker})`);
+    grad.addColorStop(1, 'rgba(255, 80, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, 25 * z * flicker, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Torch flame
+    ctx.fillStyle = `rgba(255, 200, 50, ${flicker})`;
+    ctx.beginPath();
+    ctx.arc(x, y - 3 * z, 2.5 * z, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ─── Draw Building ──────────────────────────────────────────────
+  function drawBuilding(bData) {
+    if (!isVisible(bData.x, bData.y, 100)) return;
+    const pos = worldToScreen(bData.x, bData.y);
+    const z = camera.zoom;
+    const palette = CHAR_PALETTES[bData.characterId] || CHAR_PALETTES.northern_lord;
+    const isMySide = bData.side === mySide;
+
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+
+    // Construction state
+    if (!bData.constructed) {
+      ctx.globalAlpha = 0.4 + bData.constructionProgress * 0.6;
+      // Scaffolding effect
+      ctx.strokeStyle = '#8B7355';
+      ctx.lineWidth = 1.5 * z;
+      const progress = bData.constructionProgress;
+      const h = 30 * z * progress;
+      ctx.strokeRect(-15 * z, -h, 30 * z, h);
       ctx.beginPath();
-      ctx.arc(x, y, radius + 20, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(-15 * z, 0);
+      ctx.lineTo(15 * z, -h);
+      ctx.stroke();
+    }
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(0, 20 * z, 22 * z, 7 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw building based on the unit type it produces
+    drawBuildingStructure(ctx, bData.typeId, z, palette, bData.characterId);
+
+    // Ownership indicator
+    if (isMySide) {
+      ctx.strokeStyle = 'rgba(100, 200, 100, 0.3)';
+      ctx.lineWidth = 1 * z;
+      ctx.setLineDash([3 * z, 3 * z]);
+      ctx.beginPath();
+      ctx.arc(0, 5 * z, 28 * z, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     ctx.globalAlpha = 1;
-  }
+    ctx.restore();
 
-  // ─── Draw Health Bar ────────────────────────────────────────
-  function drawHealthBar(x, y, w, hp, maxHp, isFriendly) {
-    const pct = Math.max(0, hp / maxHp);
-    const halfW = w / 2;
-
-    // Background
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(x - halfW - 1, y - 1, w + 2, 6);
-
-    // Bar
-    let barColor;
-    if (pct > 0.6) barColor = isFriendly ? '#2ecc71' : '#e74c3c';
-    else if (pct > 0.3) barColor = '#f39c12';
-    else barColor = '#e74c3c';
-
-    ctx.fillStyle = barColor;
-    ctx.fillRect(x - halfW, y, w * pct, 4);
-
-    // Border
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x - halfW - 1, y - 1, w + 2, 6);
-  }
-
-  // ─── Draw Projectiles ───────────────────────────────────────
-  function drawProjectiles(projectilesList) {
-    const now = Date.now();
-    for (const p of projectilesList) {
-      const elapsed = (now - p.time) / 500; // 0 to 1
-      if (elapsed > 1) continue;
-
-      const px = p.x + (p.tx - p.x) * elapsed;
-      const py = p.y + (p.ty - p.y) * elapsed - Math.sin(elapsed * Math.PI) * 20;
-
-      if (!isOnScreen(px, py)) continue;
-      const pos = worldToScreen(px, py);
-
-      // Magic orb
-      const sprite = getSprite('magic', Sprites.MAGIC_DATA, Sprites.MAGIC_PALETTE, null, 2);
-      ctx.drawImage(sprite, pos.x - sprite.width / 2, pos.y - sprite.height / 2);
-
-      // Trail
-      ctx.fillStyle = `rgba(155, 89, 182, ${0.3 * (1 - elapsed)})`;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-      ctx.fill();
+    // Health bar
+    if (bData.constructed) {
+      drawHealthBar(pos.x, pos.y - 35 * z, 36 * z, bData.hp, bData.maxHp,
+        isMySide ? 'friendly' : 'enemy');
     }
   }
 
-  // ─── Draw Damage Numbers ────────────────────────────────────
-  function drawDamageNumbers(dmgNums) {
-    const now = Date.now();
-    ctx.font = '10px "Press Start 2P", monospace';
-    ctx.textAlign = 'center';
+  function drawBuildingStructure(ctx, typeId, z, palette, charId) {
+    // Generic building with character color accents
+    // Categorize by what unit it produces - find the building def
+    const charData = CHARACTERS[charId];
+    const bDef = charData ? charData.buildings.find(b => b.id === typeId) : null;
+    const unitDef = charData && bDef ? charData.units.find(u => u.id === bDef.unit) : null;
+    const unitType = unitDef ? unitDef.type : 'infantry';
 
-    for (const d of dmgNums) {
-      const elapsed = (now - d.time) / 1200;
+    // Building style varies by unit type produced
+    if (unitType === 'infantry') {
+      drawBarracksBuilding(ctx, z, palette);
+    } else if (unitType === 'ranged') {
+      drawRangedBuilding(ctx, z, palette);
+    } else if (unitType === 'cavalry') {
+      drawStablesBuilding(ctx, z, palette);
+    } else if (unitType === 'siege') {
+      drawSiegeBuilding(ctx, z, palette);
+    } else if (unitType === 'flying') {
+      drawFlyingBuilding(ctx, z, palette);
+    } else {
+      drawBarracksBuilding(ctx, z, palette);
+    }
+  }
+
+  function drawBarracksBuilding(ctx, z, palette) {
+    // Stone barracks with wooden door
+    const wallG = ctx.createLinearGradient(-18 * z, -25 * z, 18 * z, 15 * z);
+    wallG.addColorStop(0, '#5a5045');
+    wallG.addColorStop(1, '#45392e');
+    ctx.fillStyle = wallG;
+    ctx.fillRect(-18 * z, -18 * z, 36 * z, 33 * z);
+
+    // Stone texture
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.lineWidth = 0.5 * z;
+    for (let r = 0; r < 4; r++) {
+      const ry = (-16 + r * 8) * z;
+      for (let c = 0; c < 3; c++) {
+        ctx.strokeRect((-16 + c * 11 + (r % 2) * 5) * z, ry, 10 * z, 7 * z);
+      }
+    }
+
+    // Roof
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.moveTo(-22 * z, -18 * z);
+    ctx.lineTo(0, -32 * z);
+    ctx.lineTo(22 * z, -18 * z);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.moveTo(0, -32 * z);
+    ctx.lineTo(22 * z, -18 * z);
+    ctx.lineTo(0, -18 * z);
+    ctx.fill();
+
+    // Door
+    ctx.fillStyle = '#2a1f14';
+    ctx.fillRect(-5 * z, 2 * z, 10 * z, 13 * z);
+
+    // Weapon rack beside door
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1.2 * z;
+    ctx.beginPath();
+    ctx.moveTo(12 * z, -5 * z);
+    ctx.lineTo(12 * z, 10 * z);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(10 * z, -3 * z);
+    ctx.lineTo(14 * z, -3 * z);
+    ctx.stroke();
+
+    // Banner
+    ctx.fillStyle = palette.primary;
+    ctx.fillRect(-20 * z, -28 * z, 5 * z, 10 * z);
+  }
+
+  function drawRangedBuilding(ctx, z, palette) {
+    // Open archery range / tower
+    ctx.fillStyle = '#4d4234';
+    ctx.fillRect(-16 * z, -12 * z, 32 * z, 27 * z);
+
+    // Open front (darker interior)
+    ctx.fillStyle = '#1a1510';
+    ctx.fillRect(-10 * z, -2 * z, 20 * z, 17 * z);
+
+    // Pillars
+    ctx.fillStyle = '#5a5045';
+    ctx.fillRect(-12 * z, -10 * z, 4 * z, 25 * z);
+    ctx.fillRect(8 * z, -10 * z, 4 * z, 25 * z);
+
+    // Slanted roof
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.moveTo(-20 * z, -12 * z);
+    ctx.lineTo(0, -24 * z);
+    ctx.lineTo(20 * z, -12 * z);
+    ctx.fill();
+
+    // Target
+    ctx.fillStyle = '#b22222';
+    ctx.beginPath();
+    ctx.arc(0, 5 * z, 4 * z, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(0, 5 * z, 2 * z, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Arrow slits
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-14 * z, -7 * z, 1.5 * z, 6 * z);
+    ctx.fillRect(12.5 * z, -7 * z, 1.5 * z, 6 * z);
+  }
+
+  function drawStablesBuilding(ctx, z, palette) {
+    // Barn-like stables
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(-20 * z, -10 * z, 40 * z, 25 * z);
+
+    // Barn doors (open)
+    ctx.fillStyle = '#3a2618';
+    ctx.fillRect(-15 * z, 0 * z, 12 * z, 15 * z);
+    ctx.fillRect(3 * z, 0 * z, 12 * z, 15 * z);
+
+    // Gambrel roof
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.moveTo(-24 * z, -10 * z);
+    ctx.lineTo(-12 * z, -22 * z);
+    ctx.lineTo(0, -28 * z);
+    ctx.lineTo(12 * z, -22 * z);
+    ctx.lineTo(24 * z, -10 * z);
+    ctx.fill();
+
+    // Hay detail
+    ctx.fillStyle = '#c4a03a';
+    ctx.fillRect(-13 * z, 5 * z, 8 * z, 4 * z);
+
+    // Horse head silhouette peeking out
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath();
+    ctx.arc(8 * z, 3 * z, 3 * z, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Fence
+    ctx.strokeStyle = '#6B4226';
+    ctx.lineWidth = 1.2 * z;
+    ctx.beginPath();
+    ctx.moveTo(-22 * z, 15 * z);
+    ctx.lineTo(-22 * z, 8 * z);
+    ctx.lineTo(22 * z, 8 * z);
+    ctx.lineTo(22 * z, 15 * z);
+    ctx.stroke();
+  }
+
+  function drawSiegeBuilding(ctx, z, palette) {
+    // Heavy stone forge/workshop
+    ctx.fillStyle = '#4a4240';
+    ctx.fillRect(-22 * z, -15 * z, 44 * z, 30 * z);
+
+    // Reinforced look
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1.5 * z;
+    ctx.strokeRect(-22 * z, -15 * z, 44 * z, 30 * z);
+
+    // Flat heavy roof
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-25 * z, -18 * z, 50 * z, 5 * z);
+
+    // Chimney with smoke
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(12 * z, -28 * z, 8 * z, 13 * z);
+
+    // Anvil silhouette
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-5 * z, 5 * z, 10 * z, 5 * z);
+    ctx.fillRect(-3 * z, 0 * z, 6 * z, 5 * z);
+
+    // Gear/wheel
+    ctx.strokeStyle = palette.primary;
+    ctx.lineWidth = 1.5 * z;
+    ctx.beginPath();
+    ctx.arc(-12 * z, 2 * z, 5 * z, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Fire glow inside
+    const flicker = 0.5 + Math.sin(time * 6) * 0.2;
+    const fireG = ctx.createRadialGradient(0, 5 * z, 0, 0, 5 * z, 15 * z);
+    fireG.addColorStop(0, `rgba(255, 120, 20, ${0.3 * flicker})`);
+    fireG.addColorStop(1, 'rgba(255, 80, 0, 0)');
+    ctx.fillStyle = fireG;
+    ctx.fillRect(-20 * z, -10 * z, 40 * z, 25 * z);
+  }
+
+  function drawFlyingBuilding(ctx, z, palette) {
+    // Tall tower / roost / nest
+    ctx.fillStyle = '#4d4540';
+    ctx.fillRect(-10 * z, -10 * z, 20 * z, 25 * z);
+
+    // Taller section
+    ctx.fillStyle = '#555045';
+    ctx.fillRect(-8 * z, -30 * z, 16 * z, 22 * z);
+
+    // Pointed roof
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.moveTo(-12 * z, -30 * z);
+    ctx.lineTo(0, -45 * z);
+    ctx.lineTo(12 * z, -30 * z);
+    ctx.fill();
+
+    // Window/opening at top
+    ctx.fillStyle = '#1a1510';
+    ctx.beginPath();
+    ctx.arc(0, -22 * z, 4 * z, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Nest/perch
+    ctx.fillStyle = '#6B4226';
+    ctx.beginPath();
+    ctx.ellipse(0, -30 * z, 12 * z, 3 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bird silhouette on perch (animated)
+    const bob = Math.sin(time * 2) * 2 * z;
+    ctx.fillStyle = palette.primary;
+    ctx.beginPath();
+    ctx.ellipse(3 * z, -33 * z + bob, 4 * z, 2.5 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Wing
+    const wingAngle = Math.sin(time * 4) * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(3 * z, -34 * z + bob);
+    ctx.lineTo(8 * z, -37 * z + bob + wingAngle * 5 * z);
+    ctx.lineTo(6 * z, -33 * z + bob);
+    ctx.fill();
+  }
+
+  // ─── Draw Unit ──────────────────────────────────────────────────
+  function drawUnit(uData) {
+    if (!isVisible(uData.x, uData.y, 60)) return;
+    const pos = worldToScreen(uData.x, uData.y);
+    const z = camera.zoom;
+    const vis = UNIT_VISUALS[uData.unitType] || UNIT_VISUALS.infantry;
+    const palette = CHAR_PALETTES[uData.characterId] || CHAR_PALETTES.northern_lord;
+    const isMySide = uData.side === mySide;
+    const facingRight = uData.side === 'left';
+    const yOffset = vis.yOff * z;
+
+    ctx.save();
+    ctx.translate(pos.x, pos.y + yOffset);
+
+    // Shadow (on ground, not for flying offset)
+    if (uData.unitType === 'flying') {
+      // Shadow on ground below
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath();
+      ctx.ellipse(0, 20 * z, 8 * z, 3 * z, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(0, vis.size * 0.6 * z, vis.size * 0.7 * z, vis.size * 0.2 * z, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const dir = facingRight ? 1 : -1;
+    ctx.scale(dir, 1);
+
+    // Draw based on unit type
+    if (uData.unitType === 'infantry') {
+      drawInfantryUnit(ctx, z, palette, uData);
+    } else if (uData.unitType === 'ranged') {
+      drawRangedUnit(ctx, z, palette, uData);
+    } else if (uData.unitType === 'cavalry') {
+      drawCavalryUnit(ctx, z, palette, uData);
+    } else if (uData.unitType === 'siege') {
+      drawSiegeUnit(ctx, z, palette, uData);
+    } else if (uData.unitType === 'flying') {
+      drawFlyingUnit(ctx, z, palette, uData);
+    }
+
+    ctx.restore();
+
+    // Health bar
+    const barY = pos.y + yOffset - (vis.size + 8) * z;
+    if (uData.hp < uData.maxHp) {
+      drawHealthBar(pos.x, barY, 20 * z, uData.hp, uData.maxHp,
+        isMySide ? 'friendly' : 'enemy');
+    }
+  }
+
+  function drawInfantryUnit(ctx, z, palette, uData) {
+    const bob = Math.sin(time * 6 + uData.id * 2) * 1.5 * z;
+    // Body armor
+    ctx.fillStyle = palette.primary;
+    ctx.fillRect(-4 * z, -8 * z + bob, 8 * z, 10 * z);
+    // Head
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(0, -11 * z + bob, 3.5 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Helmet
+    ctx.fillStyle = '#666';
+    ctx.beginPath();
+    ctx.arc(0, -12 * z + bob, 3.5 * z, Math.PI, 0);
+    ctx.fill();
+    // Shield
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.ellipse(-5 * z, -4 * z + bob, 3 * z, 5 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = palette.secondary;
+    ctx.lineWidth = 0.5 * z;
+    ctx.stroke();
+    // Sword
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1.2 * z;
+    const swordSwing = uData.state === 'fighting' ? Math.sin(time * 10) * 0.4 : 0;
+    ctx.save();
+    ctx.rotate(swordSwing);
+    ctx.beginPath();
+    ctx.moveTo(5 * z, -6 * z + bob);
+    ctx.lineTo(10 * z, -14 * z + bob);
+    ctx.stroke();
+    ctx.restore();
+    // Legs
+    ctx.fillStyle = '#4a3a2a';
+    ctx.fillRect(-3 * z, 2 * z + bob, 2.5 * z, 5 * z);
+    ctx.fillRect(0.5 * z, 2 * z + bob, 2.5 * z, 5 * z);
+  }
+
+  function drawRangedUnit(ctx, z, palette, uData) {
+    const bob = Math.sin(time * 5 + uData.id * 3) * 1 * z;
+    // Cloak
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.moveTo(-4 * z, -6 * z + bob);
+    ctx.lineTo(-6 * z, 4 * z + bob);
+    ctx.lineTo(4 * z, 4 * z + bob);
+    ctx.lineTo(3 * z, -6 * z + bob);
+    ctx.fill();
+    // Body
+    ctx.fillStyle = palette.primary;
+    ctx.fillRect(-3 * z, -7 * z + bob, 6 * z, 9 * z);
+    // Head
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(0, -10 * z + bob, 3 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Hood
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.arc(0, -11 * z + bob, 3.2 * z, Math.PI + 0.3, -0.3);
+    ctx.fill();
+    // Bow
+    ctx.strokeStyle = '#6B4226';
+    ctx.lineWidth = 1.2 * z;
+    ctx.beginPath();
+    ctx.arc(6 * z, -4 * z + bob, 7 * z, -1.2, 1.2);
+    ctx.stroke();
+    // Bowstring
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 0.5 * z;
+    const bx = 6 * z + 7 * z * Math.cos(-1.2);
+    const by1 = -4 * z + bob + 7 * z * Math.sin(-1.2);
+    const by2 = -4 * z + bob + 7 * z * Math.sin(1.2);
+    ctx.beginPath();
+    ctx.moveTo(bx, by1);
+    ctx.lineTo(bx, by2);
+    ctx.stroke();
+    // Legs
+    ctx.fillStyle = '#3a3020';
+    ctx.fillRect(-2 * z, 2 * z + bob, 2 * z, 5 * z);
+    ctx.fillRect(1 * z, 2 * z + bob, 2 * z, 5 * z);
+  }
+
+  function drawCavalryUnit(ctx, z, palette, uData) {
+    const gallop = Math.sin(time * 8 + uData.id) * 2 * z;
+    // Horse body
+    ctx.fillStyle = '#5c3a1e';
+    ctx.beginPath();
+    ctx.ellipse(0, 0 + gallop, 10 * z, 5 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Horse head
+    ctx.fillStyle = '#4a2e15';
+    ctx.beginPath();
+    ctx.ellipse(9 * z, -4 * z + gallop, 4 * z, 3 * z, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // Horse legs
+    ctx.strokeStyle = '#4a2e15';
+    ctx.lineWidth = 1.5 * z;
+    const legPhase = Math.sin(time * 8 + uData.id);
+    ctx.beginPath();
+    ctx.moveTo(-6 * z, 5 * z + gallop);
+    ctx.lineTo(-7 * z, 10 * z + legPhase * 2 * z);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-2 * z, 5 * z + gallop);
+    ctx.lineTo(-1 * z, 10 * z - legPhase * 2 * z);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(4 * z, 5 * z + gallop);
+    ctx.lineTo(3 * z, 10 * z + legPhase * 2 * z);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(8 * z, 5 * z + gallop);
+    ctx.lineTo(9 * z, 10 * z - legPhase * 2 * z);
+    ctx.stroke();
+    // Rider body
+    ctx.fillStyle = palette.primary;
+    ctx.fillRect(-3 * z, -10 * z + gallop, 6 * z, 8 * z);
+    // Rider head
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(0, -13 * z + gallop, 2.5 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Helmet
+    ctx.fillStyle = '#777';
+    ctx.beginPath();
+    ctx.arc(0, -14 * z + gallop, 2.5 * z, Math.PI, 0);
+    ctx.fill();
+    // Lance
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 1.2 * z;
+    ctx.beginPath();
+    ctx.moveTo(4 * z, -8 * z + gallop);
+    ctx.lineTo(16 * z, -16 * z + gallop);
+    ctx.stroke();
+    // Lance tip
+    ctx.fillStyle = '#ccc';
+    ctx.beginPath();
+    ctx.moveTo(16 * z, -18 * z + gallop);
+    ctx.lineTo(17 * z, -16 * z + gallop);
+    ctx.lineTo(15 * z, -16 * z + gallop);
+    ctx.fill();
+    // Horse armor (barding)
+    ctx.fillStyle = palette.dark;
+    ctx.fillRect(-2 * z, -3 * z + gallop, 8 * z, 3 * z);
+  }
+
+  function drawSiegeUnit(ctx, z, palette, uData) {
+    const rumble = Math.sin(time * 12 + uData.id) * 0.8 * z;
+    // Wheels
+    ctx.fillStyle = '#4a3520';
+    ctx.beginPath();
+    ctx.arc(-8 * z, 6 * z + rumble, 4 * z, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8 * z, 6 * z + rumble, 4 * z, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1 * z;
+    ctx.stroke();
+    // Platform
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(-12 * z, -2 * z + rumble, 24 * z, 6 * z);
+    // Main structure (varies - tower/ram/catapult)
+    ctx.fillStyle = '#6B4226';
+    ctx.fillRect(-8 * z, -16 * z + rumble, 16 * z, 14 * z);
+    // Metal reinforcement
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1.5 * z;
+    ctx.strokeRect(-8 * z, -16 * z + rumble, 16 * z, 14 * z);
+    // Cross braces
+    ctx.beginPath();
+    ctx.moveTo(-8 * z, -16 * z + rumble);
+    ctx.lineTo(8 * z, -2 * z + rumble);
+    ctx.stroke();
+    // Flag on top
+    ctx.fillStyle = palette.primary;
+    ctx.fillRect(-1 * z, -22 * z + rumble, 2 * z, 8 * z);
+    ctx.fillRect(1 * z, -22 * z + rumble, 6 * z, 4 * z);
+  }
+
+  function drawFlyingUnit(ctx, z, palette, uData) {
+    const hover = Math.sin(time * 3 + uData.id * 1.5) * 4 * z;
+    const wingFlap = Math.sin(time * 6 + uData.id) * 0.4;
+    // Body
+    ctx.fillStyle = palette.primary;
+    ctx.beginPath();
+    ctx.ellipse(0, hover, 6 * z, 3.5 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Head
+    ctx.fillStyle = palette.secondary;
+    ctx.beginPath();
+    ctx.ellipse(5 * z, -2 * z + hover, 3 * z, 2.5 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Eye
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(6.5 * z, -2.5 * z + hover, 0.8 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Beak
+    ctx.fillStyle = '#d4a017';
+    ctx.beginPath();
+    ctx.moveTo(8 * z, -2 * z + hover);
+    ctx.lineTo(11 * z, -1.5 * z + hover);
+    ctx.lineTo(8 * z, -1 * z + hover);
+    ctx.fill();
+    // Wings
+    ctx.fillStyle = palette.dark;
+    ctx.save();
+    ctx.translate(0, hover);
+    // Left wing
+    ctx.save();
+    ctx.rotate(-wingFlap);
+    ctx.beginPath();
+    ctx.moveTo(-2 * z, 0);
+    ctx.lineTo(-12 * z, -8 * z);
+    ctx.lineTo(-5 * z, -1 * z);
+    ctx.fill();
+    ctx.restore();
+    // Right wing
+    ctx.save();
+    ctx.rotate(wingFlap);
+    ctx.beginPath();
+    ctx.moveTo(-2 * z, 0);
+    ctx.lineTo(-12 * z, 8 * z);
+    ctx.lineTo(-5 * z, 1 * z);
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+    // Tail
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.moveTo(-6 * z, hover);
+    ctx.lineTo(-12 * z, -2 * z + hover);
+    ctx.lineTo(-12 * z, 2 * z + hover);
+    ctx.fill();
+  }
+
+  // ─── Health Bar ─────────────────────────────────────────────────
+  function drawHealthBar(x, y, w, hp, maxHp, type) {
+    const pct = Math.max(0, hp / maxHp);
+    const halfW = w / 2;
+    const h = 4 * camera.zoom;
+
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x - halfW - 1, y - 1, w + 2, h + 2);
+
+    // Bar color
+    let color;
+    if (type === 'friendly') {
+      color = pct > 0.5 ? '#4a8c3f' : pct > 0.25 ? '#c4a03a' : '#b22222';
+    } else {
+      color = pct > 0.5 ? '#b22222' : pct > 0.25 ? '#c4a03a' : '#8b1a1a';
+    }
+
+    ctx.fillStyle = color;
+    ctx.fillRect(x - halfW, y, w * pct, h);
+
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x - halfW, y, w * pct, h / 2);
+
+    // Border
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.3)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x - halfW - 1, y - 1, w + 2, h + 2);
+  }
+
+  // ─── Draw Projectiles ──────────────────────────────────────────
+  function drawProjectiles(projectiles) {
+    const now = Date.now();
+    for (const p of projectiles) {
+      const elapsed = (now - p.time) / 350;
       if (elapsed > 1) continue;
 
-      const pos = worldToScreen(d.x, d.y - elapsed * 40);
-      if (!isOnScreen(d.x, d.y)) continue;
+      const px = p.x + (p.tx - p.x) * elapsed;
+      const py = p.y + (p.ty - p.y) * elapsed - Math.sin(elapsed * Math.PI) * 30;
 
-      ctx.globalAlpha = 1 - elapsed;
+      if (!isVisible(px, py, 20)) continue;
+      const pos = worldToScreen(px, py);
+      const z = camera.zoom;
+
+      const palette = CHAR_PALETTES[p.characterId] || CHAR_PALETTES.northern_lord;
+
+      // Glow trail
+      ctx.fillStyle = palette.secondary;
+      ctx.globalAlpha = 0.6 * (1 - elapsed);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 3 * z, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Core
+      ctx.globalAlpha = 1 - elapsed * 0.5;
       ctx.fillStyle = '#fff';
-      ctx.fillText('-' + d.value, pos.x + 1, pos.y + 1);
-      ctx.fillStyle = '#e74c3c';
-      ctx.fillText('-' + d.value, pos.x, pos.y);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 1.5 * z, 0, Math.PI * 2);
+      ctx.fill();
+
       ctx.globalAlpha = 1;
     }
   }
 
-  // ─── Particles System ──────────────────────────────────────
-  function spawnParticle(x, y, color, life, size) {
-    particles.push({
-      x, y,
-      vx: (Math.random() - 0.5) * 60,
-      vy: -Math.random() * 40 - 20,
-      color, life, maxLife: life,
-      size: size || 3
-    });
-  }
+  // ─── Draw Damage Numbers ───────────────────────────────────────
+  function drawDamageNumbers(dmgNums) {
+    const now = Date.now();
+    for (const d of dmgNums) {
+      const elapsed = (now - d.time) / 1200;
+      if (elapsed > 1) continue;
 
-  function spawnGoldParticles(wx, wy) {
-    const pos = worldToScreen(wx, wy);
-    for (let i = 0; i < 6; i++) {
-      spawnParticle(pos.x, pos.y, i % 2 === 0 ? '#f1c40f' : '#ffe066', 0.6, 3);
+      const wx = d.x + (Math.sin(d.x) * 10) * elapsed;
+      const wy = d.y - elapsed * 50;
+      if (!isVisible(wx, wy, 20)) continue;
+      const pos = worldToScreen(wx, wy);
+      const z = camera.zoom;
+
+      ctx.globalAlpha = 1 - elapsed;
+      ctx.font = `bold ${Math.max(10, 13 * z)}px Cinzel, serif`;
+      ctx.textAlign = 'center';
+
+      // Shadow
+      ctx.fillStyle = '#000';
+      ctx.fillText('-' + d.value, pos.x + 1, pos.y + 1);
+      // Text
+      ctx.fillStyle = '#ff4444';
+      ctx.fillText('-' + d.value, pos.x, pos.y);
+
+      ctx.globalAlpha = 1;
     }
   }
 
-  function updateAndDrawParticles(dt) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vy += 80 * dt; // gravity
-      p.life -= dt;
+  // ─── Draw Effects ──────────────────────────────────────────────
+  function drawEffects(effects) {
+    const now = Date.now();
+    for (const e of effects) {
+      const elapsed = now - e.time;
+      const progress = Math.min(1, elapsed / e.duration);
 
-      if (p.life <= 0) {
-        particles.splice(i, 1);
-        continue;
+      if (e.type === 'rescue_strike') {
+        if (!isVisible(e.x, e.y, e.radius + 100)) continue;
+        const pos = worldToScreen(e.x, e.y);
+        const z = camera.zoom;
+        const r = e.radius * z;
+
+        // Expanding shockwave ring
+        const ringR = r * Math.min(1, progress * 2);
+        ctx.strokeStyle = `rgba(255, 215, 0, ${1 - progress})`;
+        ctx.lineWidth = (8 - progress * 8) * z;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Inner flash
+        if (progress < 0.3) {
+          const flashAlpha = (0.3 - progress) / 0.3;
+          const grad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, ringR);
+          grad.addColorStop(0, `rgba(255, 255, 255, ${flashAlpha * 0.8})`);
+          grad.addColorStop(0.5, `rgba(255, 215, 0, ${flashAlpha * 0.3})`);
+          grad.addColorStop(1, 'rgba(255, 200, 0, 0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, ringR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (e.type === 'construction') {
+        if (!isVisible(e.x, e.y, 40)) continue;
+        const pos = worldToScreen(e.x, e.y);
+        particles.constructionEffect(e.x, e.y);
+      } else if (e.type === 'building_destroy') {
+        if (elapsed < 100) {
+          particles.buildingDestroyEffect(e.x, e.y);
+        }
+      } else if (e.type === 'death') {
+        if (elapsed < 100) {
+          particles.deathEffect(e.x, e.y, e.unitType);
+        }
       }
-
-      const alpha = p.life / p.maxLife;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
     }
+  }
+
+  // ─── Draw Base Area Highlight ──────────────────────────────────
+  function drawBaseHighlight(isPlacing) {
+    if (!isPlacing) return;
+    const GC = GAME_CONSTANTS;
+    const z = camera.zoom;
+
+    let minX, maxX;
+    if (mySide === 'left') {
+      minX = GC.P1_BASE_MIN_X;
+      maxX = GC.P1_BASE_MAX_X;
+    } else {
+      minX = GC.P2_BASE_MIN_X;
+      maxX = GC.P2_BASE_MAX_X;
+    }
+
+    const tl = worldToScreen(minX, GC.BASE_MIN_Y);
+    const br = worldToScreen(maxX, GC.BASE_MAX_Y);
+    const w = br.x - tl.x;
+    const h = br.y - tl.y;
+
+    ctx.fillStyle = 'rgba(100, 200, 100, 0.08)';
+    ctx.fillRect(tl.x, tl.y, w, h);
+
+    ctx.strokeStyle = 'rgba(100, 200, 100, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+    ctx.strokeRect(tl.x, tl.y, w, h);
+    ctx.setLineDash([]);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(100, 200, 100, 0.1)';
+    ctx.lineWidth = 0.5;
+    const gridSize = GC.BUILDING_GRID_SIZE;
+    const startX = Math.ceil(minX / gridSize) * gridSize;
+    const startY = Math.ceil(GC.BASE_MIN_Y / gridSize) * gridSize;
+
+    for (let gx = startX; gx <= maxX; gx += gridSize) {
+      const sp = worldToScreen(gx, GC.BASE_MIN_Y);
+      const ep = worldToScreen(gx, GC.BASE_MAX_Y);
+      ctx.beginPath();
+      ctx.moveTo(sp.x, sp.y);
+      ctx.lineTo(ep.x, ep.y);
+      ctx.stroke();
+    }
+    for (let gy = startY; gy <= GC.BASE_MAX_Y; gy += gridSize) {
+      const sp = worldToScreen(minX, gy);
+      const ep = worldToScreen(maxX, gy);
+      ctx.beginPath();
+      ctx.moveTo(sp.x, sp.y);
+      ctx.lineTo(ep.x, ep.y);
+      ctx.stroke();
+    }
+  }
+
+  // ─── Draw Build Ghost ─────────────────────────────────────────
+  function drawBuildGhost(mouseWorld, selectedBuilding) {
+    if (!mouseWorld || !selectedBuilding) return;
+    const GC = GAME_CONSTANTS;
+    const gx = Math.round(mouseWorld.x / GC.BUILDING_GRID_SIZE) * GC.BUILDING_GRID_SIZE;
+    const gy = Math.round(mouseWorld.y / GC.BUILDING_GRID_SIZE) * GC.BUILDING_GRID_SIZE;
+
+    const pos = worldToScreen(gx, gy);
+    const z = camera.zoom;
+
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = 'rgba(100, 200, 100, 0.3)';
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 25 * z, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(100, 200, 100, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
     ctx.globalAlpha = 1;
   }
 
-  // ─── Draw Minimap ───────────────────────────────────────────
-  function drawMinimap(minimapCanvas, minimapData, selfX, selfY, mapSize) {
+  // ─── Draw Minimap ─────────────────────────────────────────────
+  function drawMinimap(minimapCanvas, state) {
     const mCtx = minimapCanvas.getContext('2d');
     const mW = minimapCanvas.width;
     const mH = minimapCanvas.height;
+    const GC = GAME_CONSTANTS;
 
     // Background
-    mCtx.fillStyle = '#1a3d1a';
+    mCtx.fillStyle = '#1a2a14';
     mCtx.fillRect(0, 0, mW, mH);
 
-    // Grid
-    mCtx.strokeStyle = 'rgba(255,255,255,0.05)';
-    for (let i = 0; i < 5; i++) {
-      const p = (i / 4) * mW;
-      mCtx.beginPath();
-      mCtx.moveTo(p, 0);
-      mCtx.lineTo(p, mH);
-      mCtx.stroke();
-      mCtx.beginPath();
-      mCtx.moveTo(0, p);
-      mCtx.lineTo(mW, p);
-      mCtx.stroke();
+    // Lanes
+    mCtx.fillStyle = '#3a3228';
+    const laneH = 6;
+    mCtx.fillRect(0, (GC.LANE_TOP_Y / GC.MAP_HEIGHT) * mH - laneH / 2, mW, laneH);
+    mCtx.fillRect(0, (GC.LANE_BOT_Y / GC.MAP_HEIGHT) * mH - laneH / 2, mW, laneH);
+
+    // Base areas
+    mCtx.fillStyle = 'rgba(70, 130, 180, 0.15)';
+    mCtx.fillRect(0, 0, (GC.P1_BASE_MAX_X / GC.MAP_WIDTH) * mW, mH);
+    mCtx.fillStyle = 'rgba(180, 70, 70, 0.15)';
+    const p2Start = (GC.P2_BASE_MIN_X / GC.MAP_WIDTH) * mW;
+    mCtx.fillRect(p2Start, 0, mW - p2Start, mH);
+
+    // Castles
+    if (state.castle1) {
+      const cx = (state.castle1.x / GC.MAP_WIDTH) * mW;
+      const cy = (state.castle1.y / GC.MAP_HEIGHT) * mH;
+      mCtx.fillStyle = mySide === 'left' ? '#4a8c3f' : '#b22222';
+      mCtx.fillRect(cx - 4, cy - 5, 8, 10);
+    }
+    if (state.castle2) {
+      const cx = (state.castle2.x / GC.MAP_WIDTH) * mW;
+      const cy = (state.castle2.y / GC.MAP_HEIGHT) * mH;
+      mCtx.fillStyle = mySide === 'right' ? '#4a8c3f' : '#b22222';
+      mCtx.fillRect(cx - 4, cy - 5, 8, 10);
     }
 
-    // Entities
-    for (const entity of minimapData) {
-      const mx = (entity.x / mapSize) * mW;
-      const my = (entity.y / mapSize) * mH;
-
-      if (entity.type === 'castle') {
-        // Large pulsing red skull marker for doom castle
-        const pulseSize = 5 + Math.sin(time * 4) * 2;
-        mCtx.fillStyle = '#ff0000';
-        mCtx.fillRect(mx - pulseSize, my - pulseSize, pulseSize * 2, pulseSize * 2);
-        mCtx.strokeStyle = '#ff4444';
-        mCtx.lineWidth = 2;
-        mCtx.strokeRect(mx - pulseSize - 1, my - pulseSize - 1, pulseSize * 2 + 2, pulseSize * 2 + 2);
-        // Skull "X" marker
-        mCtx.strokeStyle = '#ffffff';
-        mCtx.lineWidth = 1;
-        mCtx.beginPath();
-        mCtx.moveTo(mx - 3, my - 3);
-        mCtx.lineTo(mx + 3, my + 3);
-        mCtx.moveTo(mx + 3, my - 3);
-        mCtx.lineTo(mx - 3, my + 3);
-        mCtx.stroke();
-      } else if (entity.type === 'building') {
-        mCtx.fillStyle = entity.color;
-        mCtx.fillRect(mx - 1, my - 1, 3, 3);
-      } else {
-        mCtx.fillStyle = entity.color;
-        mCtx.fillRect(mx - 2, my - 2, 4, 4);
+    // Buildings
+    if (state.buildings) {
+      for (const b of state.buildings) {
+        const bx = (b.x / GC.MAP_WIDTH) * mW;
+        const by = (b.y / GC.MAP_HEIGHT) * mH;
+        mCtx.fillStyle = b.side === mySide ? '#5a9a4f' : '#9a4f4f';
+        mCtx.fillRect(bx - 2, by - 2, 4, 4);
       }
     }
 
-    // Self (blinking)
-    if (Math.floor(time * 3) % 2 === 0) {
-      const sx = (selfX / mapSize) * mW;
-      const sy = (selfY / mapSize) * mH;
-      mCtx.fillStyle = '#fff';
-      mCtx.fillRect(sx - 3, sy - 3, 6, 6);
-      mCtx.strokeStyle = '#f1c40f';
-      mCtx.lineWidth = 1;
-      mCtx.strokeRect(sx - 3, sy - 3, 6, 6);
+    // Units
+    if (state.units) {
+      for (const u of state.units) {
+        const ux = (u.x / GC.MAP_WIDTH) * mW;
+        const uy = (u.y / GC.MAP_HEIGHT) * mH;
+        mCtx.fillStyle = u.side === mySide ? '#7acc6a' : '#cc6a6a';
+        mCtx.fillRect(ux - 1, uy - 1, 2, 2);
+      }
     }
 
-    // Viewport rectangle
-    const vx = (camX / mapSize) * mW;
-    const vy = (camY / mapSize) * mH;
-    const vw = (width / mapSize) * mW;
-    const vh = (height / mapSize) * mH;
-    mCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+    // Camera viewport
+    const vx = ((camera.x - screenW / (2 * camera.zoom)) / GC.MAP_WIDTH) * mW;
+    const vy = ((camera.y - screenH / (2 * camera.zoom)) / GC.MAP_HEIGHT) * mH;
+    const vw = (screenW / camera.zoom / GC.MAP_WIDTH) * mW;
+    const vh = (screenH / camera.zoom / GC.MAP_HEIGHT) * mH;
+    mCtx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
     mCtx.lineWidth = 1;
     mCtx.strokeRect(vx, vy, vw, vh);
 
     // Border
-    mCtx.strokeStyle = 'rgba(241, 196, 15, 0.5)';
-    mCtx.lineWidth = 2;
+    mCtx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
+    mCtx.lineWidth = 1;
     mCtx.strokeRect(0, 0, mW, mH);
   }
 
-  // ─── Main Render ────────────────────────────────────────────
-  function render(state, dt) {
-    if (!state || !state.self) return;
-    time += dt;
+  // ─── Atmospheric Effects ───────────────────────────────────────
+  function drawAtmosphere() {
+    // Edge vignette
+    const grad = ctx.createRadialGradient(
+      screenW / 2, screenH / 2, screenH * 0.35,
+      screenW / 2, screenH / 2, screenH * 0.85
+    );
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, screenW, screenH);
 
-    const self = state.self;
-    updateCamera(self.x, self.y, dt);
-
-    // Clear
-    ctx.clearRect(0, 0, width, height);
-
-    // Terrain
-    drawTerrain(state.mapSize);
-
-    // Decorations (behind entities)
-    drawDecorations();
-
-    // Gold coins
-    drawGoldCoins(state.goldCoins || []);
-
-    // Buildings
-    const playerMap = {};
-    for (const p of state.players || []) {
-      playerMap[p.id] = p;
+    // Ambient dust motes
+    ctx.fillStyle = 'rgba(200, 180, 140, 0.15)';
+    for (let i = 0; i < 20; i++) {
+      const x = (Math.sin(time * 0.3 + i * 7.3) * 0.5 + 0.5) * screenW;
+      const y = (Math.cos(time * 0.2 + i * 4.7) * 0.5 + 0.5) * screenH;
+      const size = 1 + Math.sin(time + i) * 0.5;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
     }
-    drawBuildings(state.buildings || [], self.id);
+  }
 
-    // Units
-    drawUnits(state.units || [], playerMap, self.id);
+  // ─── Lane labels ──────────────────────────────────────────────
+  function drawLaneLabels() {
+    const GC = GAME_CONSTANTS;
+    const z = camera.zoom;
+    const midX = GC.MAP_WIDTH / 2;
 
-    // Players
-    drawPlayers(state.players || [], self.id, self.level);
+    // Top lane label
+    if (isVisible(midX, GC.LANE_TOP_Y - 60)) {
+      const pos = worldToScreen(midX, GC.LANE_TOP_Y - 50);
+      ctx.font = `${11 * z}px Cinzel, serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(201, 168, 76, 0.25)';
+      ctx.fillText('— North Road —', pos.x, pos.y);
+    }
+
+    // Bottom lane label
+    if (isVisible(midX, GC.LANE_BOT_Y + 60)) {
+      const pos = worldToScreen(midX, GC.LANE_BOT_Y + 60);
+      ctx.font = `${11 * z}px Cinzel, serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(201, 168, 76, 0.25)';
+      ctx.fillText('— South Road —', pos.x, pos.y);
+    }
+  }
+
+  // ─── Utility ──────────────────────────────────────────────────
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // ─── Main Render ──────────────────────────────────────────────
+  function render(state, cam, dt, isPlacing, mouseWorld, selectedBuilding, charIds) {
+    time += dt;
+    camera = cam;
+
+    ctx.clearRect(0, 0, screenW, screenH);
+
+    const GC = GAME_CONSTANTS;
+
+    // Draw pre-rendered terrain
+    if (terrainDirty) {
+      renderTerrain(GC.MAP_WIDTH, GC.MAP_HEIGHT);
+    }
+
+    // Draw terrain (scaled from pre-rendered)
+    const tl = worldToScreen(0, 0);
+    const br = worldToScreen(GC.MAP_WIDTH, GC.MAP_HEIGHT);
+    ctx.drawImage(terrainCanvas, tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+
+    // Dark outside map
+    ctx.fillStyle = '#0a0c08';
+    if (tl.x > 0) ctx.fillRect(0, 0, tl.x, screenH);
+    if (br.x < screenW) ctx.fillRect(br.x, 0, screenW - br.x, screenH);
+    if (tl.y > 0) ctx.fillRect(0, 0, screenW, tl.y);
+    if (br.y < screenH) ctx.fillRect(0, br.y, screenW, screenH - br.y);
+
+    // Lane labels
+    drawLaneLabels();
+
+    // Base area highlight when placing
+    drawBaseHighlight(isPlacing);
+
+    // Castles
+    if (state.castle1) drawCastle(state.castle1, 'left', charIds.left);
+    if (state.castle2) drawCastle(state.castle2, 'right', charIds.right);
+
+    // Buildings (sorted by Y)
+    const allBuildings = state.buildings || [];
+    const sortedBuildings = [...allBuildings].sort((a, b) => a.y - b.y);
+    for (const b of sortedBuildings) {
+      drawBuilding(b);
+    }
+
+    // Units (sorted by Y)
+    const allUnits = state.units || [];
+    const sortedUnits = [...allUnits].sort((a, b) => a.y - b.y);
+    for (const u of sortedUnits) {
+      drawUnit(u);
+    }
 
     // Projectiles
     drawProjectiles(state.projectiles || []);
@@ -700,101 +1382,24 @@ const Renderer = (() => {
     // Damage numbers
     drawDamageNumbers(state.damageNumbers || []);
 
+    // Effects
+    drawEffects(state.effects || []);
+
     // Particles
-    updateAndDrawParticles(dt);
+    particles.update(dt * 1000);
+    particles.render(ctx, camera);
 
-    // Vignette effect (red during doom phase)
-    drawVignette(state.doom);
-
-    // Doom phase HUD overlay
-    if (state.doom && state.doom.active) {
-      drawDoomOverlay(state.doom, self.id);
+    // Build ghost
+    if (isPlacing) {
+      drawBuildGhost(mouseWorld, selectedBuilding);
     }
-  }
 
-  function drawVignette(doom) {
-    const isDoom = doom && doom.active;
-    const gradient = ctx.createRadialGradient(
-      width / 2, height / 2, height * 0.3,
-      width / 2, height / 2, height * 0.8
-    );
-    if (isDoom) {
-      const pulse = 0.15 + Math.sin(time * 2) * 0.05;
-      gradient.addColorStop(0, 'rgba(0,0,0,0)');
-      gradient.addColorStop(0.7, `rgba(80,0,0,${pulse})`);
-      gradient.addColorStop(1, `rgba(120,0,0,${pulse + 0.15})`);
-    } else {
-      gradient.addColorStop(0, 'rgba(0,0,0,0)');
-      gradient.addColorStop(1, 'rgba(0,0,0,0.3)');
-    }
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-  }
-
-  function drawDoomOverlay(doom, myId) {
-    // "DOOM IMPENDING" text at top of screen
-    const seconds = Math.ceil(doom.timeRemaining / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    const timeStr = `${minutes}:${secs.toString().padStart(2, '0')}`;
-
-    // Flashing warning header
-    const flash = Math.sin(time * 4) > 0 ? 1 : 0.6;
-    ctx.globalAlpha = flash;
-    ctx.font = '16px "Press Start 2P", monospace';
-    ctx.textAlign = 'center';
-
-    // Background bar
-    ctx.fillStyle = 'rgba(120, 0, 0, 0.7)';
-    ctx.fillRect(width / 2 - 250, 50, 500, 60);
-    ctx.strokeStyle = '#ff4444';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(width / 2 - 250, 50, 500, 60);
-
-    // Skull icon (text)
-    ctx.fillStyle = '#ff3333';
-    ctx.fillText('\u2620 DOOM IMPENDING \u2620', width / 2, 72);
-
-    ctx.globalAlpha = 1;
-    ctx.font = '12px "Press Start 2P", monospace';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(doom.playerName + "'s Castle - " + timeStr, width / 2, 96);
-
-    // Progress bar showing time remaining
-    const pct = doom.timeRemaining / 300000;
-    const barW = 400;
-    const barX = width / 2 - barW / 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(barX, 114, barW, 8);
-    const barColor = pct > 0.5 ? '#e74c3c' : pct > 0.2 ? '#ff6600' : '#ff0000';
-    ctx.fillStyle = barColor;
-    ctx.fillRect(barX, 114, barW * pct, 8);
-
-    // Castle direction indicator if off-screen
-    if (!isOnScreen(doom.castleX, doom.castleY, -50)) {
-      const angle = Math.atan2(doom.castleY - (camY + height / 2), doom.castleX - (camX + width / 2));
-      const indicatorDist = 120;
-      const ix = width / 2 + Math.cos(angle) * indicatorDist;
-      const iy = height / 2 + Math.sin(angle) * indicatorDist;
-
-      // Arrow pointing toward castle
-      const arrowPulse = 0.5 + Math.sin(time * 5) * 0.3;
-      ctx.globalAlpha = arrowPulse;
-      ctx.fillStyle = '#ff0000';
-      ctx.beginPath();
-      ctx.arc(ix, iy, 12, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = '10px "Press Start 2P", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('\u2620', ix, iy + 4);
-      ctx.globalAlpha = 1;
-    }
+    // Atmospheric overlay
+    drawAtmosphere();
   }
 
   return {
-    init, render, setDecorations,
-    shake, spawnGoldParticles, spawnParticle,
-    worldToScreen, isOnScreen, drawMinimap
+    init, resize, render, setDecorations, setSide,
+    worldToScreen, screenToWorld, isVisible, drawMinimap
   };
 })();

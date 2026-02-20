@@ -1,171 +1,227 @@
-// ═══════════════════════════════════════════════════════════════════
-//  MAIN.JS - Game Client Entry Point
-//  Networking, Input, UI, Game Loop
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// Castle Fight - Client Game Logic
+// Networking, Input, Camera, UI, Game Loop
+// ═══════════════════════════════════════════════════════════════════════
 
-(() => {
+(function () {
   'use strict';
 
-  // ─── DOM Elements ────────────────────────────────────────────
-  const menuScreen = document.getElementById('menu-screen');
-  const deathScreen = document.getElementById('death-screen');
-  const deathScore = document.getElementById('death-score');
-  const gameHud = document.getElementById('game-hud');
-  const canvas = document.getElementById('game-canvas');
-  const playBtn = document.getElementById('play-btn');
-  const nameInput = document.getElementById('player-name');
+  // ─── DOM Elements ───────────────────────────────────────────────
+  const titleScreen = document.getElementById('titleScreen');
+  const matchmakingScreen = document.getElementById('matchmakingScreen');
+  const gameScreen = document.getElementById('gameScreen');
+  const gameOverScreen = document.getElementById('gameOverScreen');
+  const gameCanvas = document.getElementById('gameCanvas');
+  const minimapCanvas = document.getElementById('minimapCanvas');
+  const playerNameInput = document.getElementById('playerName');
+  const findMatchBtn = document.getElementById('findMatchBtn');
+  const characterGrid = document.getElementById('characterGrid');
+  const buildingList = document.getElementById('buildingList');
+  const rescueStrikeBtn = document.getElementById('rescueStrikeBtn');
+  const goldDisplay = document.getElementById('goldDisplay');
+  const incomeDisplay = document.getElementById('incomeDisplay');
+  const gameTimer = document.getElementById('gameTimer');
+  const myCastleHpBar = document.getElementById('myCastleHpBar');
+  const myCastleHpText = document.getElementById('myCastleHpText');
+  const enemyCastleHpBar = document.getElementById('enemyCastleHpBar');
+  const enemyCastleHpText = document.getElementById('enemyCastleHpText');
+  const myCastleLabel = document.getElementById('myCastleLabel');
+  const enemyCastleLabel = document.getElementById('enemyCastleLabel');
+  const passiveText = document.getElementById('passiveText');
+  const gameOverTitle = document.getElementById('gameOverTitle');
+  const gameOverSub = document.getElementById('gameOverSub');
+  const gameOverDuration = document.getElementById('gameOverDuration');
+  const playAgainBtn = document.getElementById('playAgainBtn');
 
-  // HUD elements
-  const hudName = document.getElementById('hud-name');
-  const hudLevel = document.getElementById('hud-level');
-  const hudGold = document.getElementById('hud-gold');
-  const hudPop = document.getElementById('hud-pop');
-  const hudXp = document.getElementById('hud-xp');
-  const xpBarFill = document.getElementById('xp-bar-fill');
-  const xpBarText = document.getElementById('xp-bar-text');
-  const hpBarFill = document.getElementById('hp-bar-fill');
-  const leaderboardList = document.getElementById('leaderboard-list');
-  const minimapCanvas = document.getElementById('minimap');
-  const levelUpNotification = document.getElementById('level-up-notification');
-  const levelUpName = document.getElementById('level-up-name');
-  const levelUpBonus = document.getElementById('level-up-bonus');
-
-  // ─── Game State ──────────────────────────────────────────────
+  // ─── State ─────────────────────────────────────────────────────
   let socket;
+  let selectedCharacterId = null;
+  let mySide = 'left';
+  let myCharacterId = null;
+  let opponentCharacterId = null;
   let gameState = null;
-  let myId = null;
-  let running = false;
-  let lastTime = 0;
-  let lastLevel = 0;
-  let wasAlive = true;
-  let levelUpTimeout = null;
+  let gameActive = false;
+  let lastFrameTime = 0;
 
-  // Input state
-  const keys = {};
-  let mouseX = 0, mouseY = 0;
+  // Camera
+  let camera = {
+    x: 0, y: 0,
+    targetX: 0, targetY: 0,
+    zoom: 0.65,
+    minZoom: 0.3,
+    maxZoom: 1.2,
+    screenW: window.innerWidth,
+    screenH: window.innerHeight
+  };
 
-  // Server config received on join
-  let serverConfig = {};
+  // Input
+  let keys = {};
+  let mouse = { x: 0, y: 0, worldX: 0, worldY: 0 };
+  let isPlacing = false;
+  let selectedBuildingType = null;
 
-  // ─── Level XP thresholds (synced with server) ────────────────
-  const LEVEL_XP = [0, 100, 300, 600, 1000, 1800, 2800, 4200, 6500, 10000];
+  // Character icon map
+  const CHAR_ICONS = {
+    northern_lord: '&#x2744;',   // snowflake
+    dragon_empress: '&#x1F525;', // fire
+    iron_admiral: '&#x2693;',    // anchor
+    golden_lord: '&#x1F451;',    // crown
+    shadow_priest: '&#x1F480;',  // skull
+    forest_warden: '&#x1F333;'   // tree
+  };
 
-  // ─── Connect and Join ────────────────────────────────────────
-  function connect() {
+  // ─── Initialize ─────────────────────────────────────────────────
+  function init() {
     socket = io();
+    Renderer.init(gameCanvas);
+    buildCharacterGrid();
+    setupEventListeners();
+    setupSocketListeners();
+    gameLoop(0);
+  }
 
-    socket.on('connect', () => {
-      console.log('Connected to server');
+  // ─── Build Character Selection Grid ────────────────────────────
+  function buildCharacterGrid() {
+    characterGrid.innerHTML = '';
+    for (const [id, char] of Object.entries(CHARACTERS)) {
+      const card = document.createElement('div');
+      card.className = 'char-card';
+      card.dataset.charId = id;
+      card.style.setProperty('--char-color', char.color);
+
+      card.innerHTML = `
+        <div class="char-emblem" style="border-color: ${char.color}; color: ${char.color}">
+          ${CHAR_ICONS[id] || '&#9876;'}
+        </div>
+        <div class="char-name">${char.name}</div>
+        <div class="char-title" style="color: ${char.color}">${char.title}</div>
+        <div class="char-passive"><strong>${char.passive.name}:</strong> ${char.passive.description}</div>
+        <div class="char-desc">${char.description}</div>
+      `;
+
+      card.addEventListener('click', () => selectCharacter(id));
+      characterGrid.appendChild(card);
+    }
+  }
+
+  function selectCharacter(charId) {
+    selectedCharacterId = charId;
+    document.querySelectorAll('.char-card').forEach(c => {
+      c.classList.toggle('selected', c.dataset.charId === charId);
     });
+    findMatchBtn.disabled = false;
+  }
 
-    socket.on('joined', (data) => {
-      myId = data.id;
-      serverConfig = data;
-      Renderer.setDecorations(data.decorations || []);
-      menuScreen.classList.add('hidden');
-      gameHud.classList.remove('hidden');
-      running = true;
-      lastTime = performance.now();
-      requestAnimationFrame(gameLoop);
-      Audio8Bit.init();
-    });
+  // ─── Build Building Panel ──────────────────────────────────────
+  function buildBuildingPanel() {
+    if (!myCharacterId || !CHARACTERS[myCharacterId]) return;
+    const char = CHARACTERS[myCharacterId];
+    buildingList.innerHTML = '';
 
-    socket.on('state', (state) => {
-      gameState = state;
-    });
+    for (const b of char.buildings) {
+      const unitDef = char.units.find(u => u.id === b.unit);
+      const item = document.createElement('div');
+      item.className = 'building-item';
+      item.dataset.buildingId = b.id;
 
-    socket.on('buildResult', (data) => {
-      if (data.success) {
-        Audio8Bit.build();
-      } else {
-        Audio8Bit.error();
-        showToast(data.reason || 'Cannot build here');
-      }
-    });
+      item.innerHTML = `
+        <div class="building-header">
+          <span class="building-name">${b.name}</span>
+          <span class="building-cost">${b.cost}g</span>
+        </div>
+        <div class="building-desc">${b.description}</div>
+        <div class="building-stats">
+          <span class="building-stat">+${b.income}g/5s</span>
+          <span class="building-stat">Spawns: ${unitDef ? unitDef.name : b.unit}</span>
+        </div>
+      `;
 
-    socket.on('unitResult', (data) => {
-      if (data.success) {
-        Audio8Bit.buyUnit();
-        if (data.type === 'dragon') Audio8Bit.dragonRoar();
-      } else {
-        Audio8Bit.error();
-        showToast(data.reason || 'Cannot recruit unit');
-      }
-    });
+      item.addEventListener('click', () => {
+        if (item.classList.contains('cant-afford')) return;
+        toggleBuildingSelection(b.id);
+      });
 
-    // ─── Doom Phase Events ──────────────────────────────────────
-    socket.on('doomCastleDestroyed', (data) => {
-      showDoomToast('\u2620 DOOM CASTLE DESTROYED! \u2620', data.destroyerName + ' saved the realm!');
-    });
+      buildingList.appendChild(item);
+    }
+  }
 
-    socket.on('gameWon', (data) => {
-      showGameEndScreen(data.winnerId, data.winnerName);
-    });
+  function toggleBuildingSelection(buildingId) {
+    if (selectedBuildingType === buildingId) {
+      // Deselect
+      selectedBuildingType = null;
+      isPlacing = false;
+      gameCanvas.classList.remove('placing');
+    } else {
+      selectedBuildingType = buildingId;
+      isPlacing = true;
+      gameCanvas.classList.add('placing');
+    }
 
-    socket.on('gameReset', () => {
-      hideGameEndScreen();
-      lastLevel = 0;
-      lastGold = 0;
-      showToast('New round starting!');
-    });
-
-    socket.on('disconnect', () => {
-      running = false;
-      menuScreen.classList.remove('hidden');
-      gameHud.classList.add('hidden');
-      deathScreen.classList.add('hidden');
-      hideGameEndScreen();
-      showToast('Disconnected from server');
+    document.querySelectorAll('.building-item').forEach(item => {
+      item.classList.toggle('selected', item.dataset.buildingId === selectedBuildingType);
     });
   }
 
-  // ─── Join Game ───────────────────────────────────────────────
-  function joinGame() {
-    const name = nameInput.value.trim() || undefined;
-    connect();
-    // Wait for connection then join
-    const waitForConnect = setInterval(() => {
-      if (socket && socket.connected) {
-        socket.emit('join', { name });
-        clearInterval(waitForConnect);
+  function updateBuildingAffordability(gold) {
+    if (!myCharacterId || !CHARACTERS[myCharacterId]) return;
+    const char = CHARACTERS[myCharacterId];
+    document.querySelectorAll('.building-item').forEach(item => {
+      const bDef = char.buildings.find(b => b.id === item.dataset.buildingId);
+      if (bDef) {
+        item.classList.toggle('cant-afford', gold < bDef.cost);
       }
-    }, 100);
+    });
   }
 
-  // ─── Input Handling ──────────────────────────────────────────
-  function setupInput() {
+  // ─── Event Listeners ──────────────────────────────────────────
+  function setupEventListeners() {
+    // Find match button
+    findMatchBtn.addEventListener('click', () => {
+      if (!selectedCharacterId) return;
+      const name = playerNameInput.value.trim() || 'Unnamed Lord';
+      socket.emit('findMatch', { characterId: selectedCharacterId, name });
+      titleScreen.classList.add('hidden');
+      matchmakingScreen.classList.remove('hidden');
+    });
+
+    // Play again
+    playAgainBtn.addEventListener('click', () => {
+      gameOverScreen.classList.add('hidden');
+      titleScreen.classList.remove('hidden');
+      gameActive = false;
+      gameState = null;
+      particles.clear();
+    });
+
+    // Rescue strike
+    rescueStrikeBtn.addEventListener('click', () => {
+      if (rescueStrikeBtn.classList.contains('used')) return;
+      socket.emit('rescueStrike');
+    });
+
+    // Keyboard
     window.addEventListener('keydown', (e) => {
       keys[e.key.toLowerCase()] = true;
-
-      if (!running || !gameState) return;
-
-      // Unit purchases
-      switch (e.key) {
-        case '1': socket.emit('buyUnit', { type: 'soldier' }); break;
-        case '2': socket.emit('buyUnit', { type: 'horse' }); break;
-        case '3': socket.emit('buyUnit', { type: 'wizard' }); break;
-        case '4': socket.emit('buyUnit', { type: 'dragon' }); break;
-        case '5':
-          // Doom Castle (only available at level 9+)
-          if (gameState.self && gameState.self.level >= 9) {
-            socket.emit('build', { type: 'castle', x: gameState.self.x, y: gameState.self.y });
-          } else if (gameState.self) {
-            showToast('Must be Legend rank (Lv.9) to build Doom Castle!');
-          }
-          break;
-        case 'q': case 'Q':
-          if (gameState.self) {
-            socket.emit('build', { type: 'house', x: gameState.self.x, y: gameState.self.y });
-          }
-          break;
-        case 'e': case 'E':
-          if (gameState.self) {
-            socket.emit('build', { type: 'goldmine', x: gameState.self.x, y: gameState.self.y });
-          }
-          break;
-        case 'm': case 'M':
-          Audio8Bit.toggleMute();
-          break;
+      // Number keys to select buildings
+      const num = parseInt(e.key);
+      if (num >= 1 && num <= 5 && gameActive && myCharacterId) {
+        const char = CHARACTERS[myCharacterId];
+        if (char && char.buildings[num - 1]) {
+          toggleBuildingSelection(char.buildings[num - 1].id);
+        }
+      }
+      // Escape to cancel placement
+      if (e.key === 'Escape') {
+        selectedBuildingType = null;
+        isPlacing = false;
+        gameCanvas.classList.remove('placing');
+        document.querySelectorAll('.building-item').forEach(i => i.classList.remove('selected'));
+      }
+      // R for rescue strike
+      if (e.key.toLowerCase() === 'r' && gameActive) {
+        if (!rescueStrikeBtn.classList.contains('used')) {
+          socket.emit('rescueStrike');
+        }
       }
     });
 
@@ -173,335 +229,341 @@
       keys[e.key.toLowerCase()] = false;
     });
 
-    window.addEventListener('mousemove', (e) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
+    // Mouse
+    gameCanvas.addEventListener('mousemove', (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      // Convert to world coordinates
+      const world = Renderer.screenToWorld(e.clientX, e.clientY);
+      mouse.worldX = world.x;
+      mouse.worldY = world.y;
     });
 
-    // Click shop items
-    document.querySelectorAll('.shop-item').forEach(item => {
-      item.addEventListener('click', () => {
-        if (!running || !gameState || !gameState.self) return;
-        const action = item.dataset.action;
-        const type = item.dataset.type;
-        if (action === 'buyUnit') {
-          socket.emit('buyUnit', { type });
-        } else if (action === 'build') {
-          socket.emit('build', { type, x: gameState.self.x, y: gameState.self.y });
-        }
+    gameCanvas.addEventListener('click', (e) => {
+      if (!gameActive || !isPlacing || !selectedBuildingType) return;
+
+      const world = Renderer.screenToWorld(e.clientX, e.clientY);
+      socket.emit('build', {
+        buildingTypeId: selectedBuildingType,
+        x: world.x,
+        y: world.y
       });
     });
-  }
 
-  function getMovementInput() {
-    let x = 0, y = 0;
-    if (keys['w'] || keys['arrowup']) y -= 1;
-    if (keys['s'] || keys['arrowdown']) y += 1;
-    if (keys['a'] || keys['arrowleft']) x -= 1;
-    if (keys['d'] || keys['arrowright']) x += 1;
-    return { x, y };
-  }
+    // Mouse wheel zoom
+    gameCanvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomDelta = e.deltaY > 0 ? -0.05 : 0.05;
+      camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom + zoomDelta));
+    }, { passive: false });
 
-  // ─── UI Updates ──────────────────────────────────────────────
-  function updateUI() {
-    if (!gameState || !gameState.self) return;
-    const self = gameState.self;
+    // Minimap click to pan
+    minimapCanvas.addEventListener('click', (e) => {
+      const rect = minimapCanvas.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) / rect.width;
+      const my = (e.clientY - rect.top) / rect.height;
+      camera.targetX = mx * GAME_CONSTANTS.MAP_WIDTH;
+      camera.targetY = my * GAME_CONSTANTS.MAP_HEIGHT;
+    });
 
-    // Player info
-    hudName.textContent = self.name;
-    hudLevel.textContent = 'Lv.' + self.level + ' ' + self.levelName;
-
-    // Resources
-    hudGold.textContent = Math.floor(self.gold);
-    hudPop.textContent = self.currentPop + '/' + self.maxPop;
-    hudXp.textContent = self.xp;
-
-    // XP bar
-    const currentLevelXp = LEVEL_XP[self.level] || 0;
-    const nextLevelXp = LEVEL_XP[self.level + 1] || LEVEL_XP[LEVEL_XP.length - 1];
-    const xpProgress = self.level >= 9 ? 1 : (self.xp - currentLevelXp) / (nextLevelXp - currentLevelXp);
-    xpBarFill.style.width = (xpProgress * 100) + '%';
-    xpBarText.textContent = self.level >= 9 ? 'MAX LEVEL' : `${self.xp - currentLevelXp} / ${nextLevelXp - currentLevelXp} XP`;
-
-    // HP bar
-    const hpPct = self.hp / self.maxHp;
-    hpBarFill.style.width = (hpPct * 100) + '%';
-    if (hpPct < 0.3) hpBarFill.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
-    else if (hpPct < 0.6) hpBarFill.style.background = 'linear-gradient(90deg, #f39c12, #e67e22)';
-    else hpBarFill.style.background = 'linear-gradient(90deg, #2ecc71, #27ae60)';
-
-    // Level up detection
-    if (self.level > lastLevel && lastLevel > 0) {
-      onLevelUp(self.level, self.levelName);
-    }
-    lastLevel = self.level;
-
-    // Death detection
-    if (!self.alive && wasAlive) {
-      onDeath(self.score);
-    }
-    if (self.alive && !wasAlive) {
-      onRespawn();
-    }
-    wasAlive = self.alive;
-
-    // Update shop affordability
-    updateShopAffordability(self.gold, self.currentPop, self.maxPop, self.level);
-
-    // Show/hide castle button based on level
-    const castleItem = document.getElementById('castle-shop-item');
-    if (castleItem) {
-      castleItem.style.display = self.level >= 9 ? 'flex' : 'none';
-    }
-
-    // Leaderboard
-    updateLeaderboard(gameState.leaderboard || []);
-
-    // Minimap
-    if (gameState.minimap) {
-      Renderer.drawMinimap(minimapCanvas, gameState.minimap, self.x, self.y, gameState.mapSize);
-    }
-  }
-
-  function updateShopAffordability(gold, pop, maxPop, level) {
-    const costs = {
-      soldier: { gold: 10, pop: 1 },
-      horse: { gold: 30, pop: 2 },
-      wizard: { gold: 50, pop: 2 },
-      dragon: { gold: 100, pop: 5 },
-      house: { gold: 50, pop: 0 },
-      goldmine: { gold: 100, pop: 0 },
-      castle: { gold: 5000, pop: 0, levelReq: 9 }
-    };
-
-    document.querySelectorAll('.shop-item').forEach(item => {
-      const type = item.dataset.type;
-      const cost = costs[type];
-      if (!cost) return;
-
-      const meetsLevel = !cost.levelReq || (level || 0) >= cost.levelReq;
-      const canAfford = gold >= cost.gold && (cost.pop === 0 || pop + cost.pop <= maxPop) && meetsLevel;
-      item.classList.toggle('cant-afford', !canAfford);
+    // Window resize
+    window.addEventListener('resize', () => {
+      camera.screenW = window.innerWidth;
+      camera.screenH = window.innerHeight;
     });
   }
 
-  function updateLeaderboard(lb) {
-    leaderboardList.innerHTML = '';
-    lb.forEach((entry, i) => {
-      const div = document.createElement('div');
-      div.className = 'lb-entry' + (entry.id === myId ? ' self' : '');
-      div.innerHTML = `
-        <span class="lb-rank">${i + 1}.</span>
-        <span class="lb-color" style="background:${entry.color}"></span>
-        <span class="lb-name">${escapeHtml(entry.name)}</span>
-        <span class="lb-score">${entry.score}</span>
-      `;
-      leaderboardList.appendChild(div);
+  // ─── Socket Listeners ─────────────────────────────────────────
+  function setupSocketListeners() {
+    socket.on('matchmaking', (data) => {
+      // Still searching
+    });
+
+    socket.on('gameStart', (data) => {
+      matchmakingScreen.classList.add('hidden');
+      gameScreen.classList.remove('hidden');
+      gameActive = true;
+
+      mySide = data.side;
+      myCharacterId = data.yourCharacter;
+      opponentCharacterId = data.opponentCharacter;
+
+      Renderer.setDecorations(data.decorations);
+      Renderer.setSide(mySide);
+
+      // Set initial camera position
+      const GC = data.constants;
+      if (mySide === 'left') {
+        camera.targetX = GC.P1_CASTLE_X + 200;
+        camera.targetY = GC.CASTLE_Y;
+        camera.x = camera.targetX;
+        camera.y = camera.targetY;
+      } else {
+        camera.targetX = GC.P2_CASTLE_X - 200;
+        camera.targetY = GC.CASTLE_Y;
+        camera.x = camera.targetX;
+        camera.y = camera.targetY;
+      }
+
+      // Setup building panel
+      buildBuildingPanel();
+
+      // Set labels
+      const myChar = CHARACTERS[myCharacterId];
+      const oppChar = CHARACTERS[opponentCharacterId];
+      myCastleLabel.textContent = myChar ? myChar.name : 'Your Castle';
+      myCastleLabel.style.color = myChar ? myChar.color : '#fff';
+      enemyCastleLabel.textContent = data.opponentName || (oppChar ? oppChar.name : 'Enemy');
+      enemyCastleLabel.style.color = oppChar ? oppChar.color : '#fff';
+
+      // Set passive display
+      if (myChar) {
+        passiveText.textContent = `${myChar.passive.name}: ${myChar.passive.description}`;
+      }
+
+      console.log(`Game started! Playing as ${myChar.name} (${mySide})`);
+    });
+
+    socket.on('state', (data) => {
+      gameState = data;
+      updateHUD(data);
+    });
+
+    socket.on('buildResult', (data) => {
+      if (data.success) {
+        // Keep placing mode for rapid building, but deselect if they want
+      } else {
+        showToast(data.reason || 'Cannot build there');
+      }
+    });
+
+    socket.on('rescueStrike', (data) => {
+      // Trigger big visual effect
+      particles.rescueStrikeEffect(data.x, data.y, data.radius);
+    });
+
+    socket.on('rescueStrikeResult', (data) => {
+      if (!data.success) {
+        showToast('Rescue Strike already used!');
+      }
+    });
+
+    socket.on('gameOver', (data) => {
+      gameActive = false;
+      gameScreen.classList.add('hidden');
+      gameOverScreen.classList.remove('hidden');
+
+      const won = data.winner === mySide;
+      gameOverTitle.textContent = won ? 'Victory!' : 'Defeat';
+      gameOverTitle.className = won ? 'victory-title' : 'defeat-title';
+      gameOverSub.textContent = won
+        ? 'The enemy castle has fallen before your might!'
+        : data.reason === 'disconnect'
+          ? 'Your opponent has retreated from battle.'
+          : 'Your castle has been reduced to rubble.';
+
+      const duration = Math.floor((data.duration || 0) / 1000);
+      const mins = Math.floor(duration / 60);
+      const secs = duration % 60;
+      gameOverDuration.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    });
+
+    socket.on('error', (data) => {
+      showToast(data.message);
     });
   }
 
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+  // ─── HUD Updates ──────────────────────────────────────────────
+  function updateHUD(state) {
+    if (!state.self) return;
+
+    // Gold & income
+    goldDisplay.textContent = state.self.gold;
+    incomeDisplay.textContent = '+' + state.self.income;
+
+    // Update building affordability
+    updateBuildingAffordability(state.self.gold);
+
+    // Castle HP
+    const myCastle = mySide === 'left' ? state.castle1 : state.castle2;
+    const enemyCastle = mySide === 'left' ? state.castle2 : state.castle1;
+
+    if (myCastle) {
+      const pct = Math.max(0, myCastle.hp / myCastle.maxHp) * 100;
+      myCastleHpBar.style.width = pct + '%';
+      myCastleHpText.textContent = `${Math.ceil(myCastle.hp)} / ${myCastle.maxHp}`;
+    }
+
+    if (enemyCastle) {
+      const pct = Math.max(0, enemyCastle.hp / enemyCastle.maxHp) * 100;
+      enemyCastleHpBar.style.width = pct + '%';
+      enemyCastleHpText.textContent = `${Math.ceil(enemyCastle.hp)} / ${enemyCastle.maxHp}`;
+    }
+
+    // Game timer
+    if (state.gameTime !== undefined) {
+      const totalSec = Math.floor(state.gameTime / 1000);
+      const mins = Math.floor(totalSec / 60);
+      const secs = totalSec % 60;
+      gameTimer.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // Rescue strike
+    if (state.self.rescueStrikeUsed) {
+      rescueStrikeBtn.classList.add('used');
+      rescueStrikeBtn.disabled = true;
+    }
   }
 
-  // ─── Game Events ─────────────────────────────────────────────
-  function onLevelUp(level, name) {
-    Audio8Bit.levelUp();
-    levelUpName.textContent = name;
+  // ─── Camera Update ────────────────────────────────────────────
+  function updateCamera(dt) {
+    const panSpeed = 600 / camera.zoom;
+    const edgePanThreshold = 30;
+    const edgePanSpeed = 400 / camera.zoom;
 
-    const descs = [
-      '', 'Battle Cry: +8% troop damage!',
-      'Swift Boots: +10% troop speed!',
-      'Fortify: +15% building HP!',
-      'War Drums: +12% damage aura!',
-      'Gold Rush: +25% gold income!',
-      "Dragon's Might: +18% dragon power!",
-      'Iron Will: +12% troop HP!',
-      'Regeneration: troops heal over time!',
-      'LEGENDARY: Doom Castle unlocked!'
-    ];
-    levelUpBonus.textContent = descs[level] || '';
+    // WASD panning
+    if (keys['w'] || keys['arrowup']) camera.targetY -= panSpeed * dt;
+    if (keys['s'] || keys['arrowdown']) camera.targetY += panSpeed * dt;
+    if (keys['a'] || keys['arrowleft']) camera.targetX -= panSpeed * dt;
+    if (keys['d'] || keys['arrowright']) camera.targetX += panSpeed * dt;
 
-    levelUpNotification.classList.remove('hidden');
-    if (levelUpTimeout) clearTimeout(levelUpTimeout);
-    levelUpTimeout = setTimeout(() => {
-      levelUpNotification.classList.add('hidden');
-    }, 3500);
+    // Edge panning
+    if (mouse.x < edgePanThreshold) camera.targetX -= edgePanSpeed * dt;
+    if (mouse.x > camera.screenW - edgePanThreshold) camera.targetX += edgePanSpeed * dt;
+    if (mouse.y < edgePanThreshold) camera.targetY -= edgePanSpeed * dt;
+    if (mouse.y > camera.screenH - edgePanThreshold) camera.targetY += edgePanSpeed * dt;
+
+    // Clamp camera to map bounds
+    const GC = GAME_CONSTANTS;
+    camera.targetX = Math.max(0, Math.min(GC.MAP_WIDTH, camera.targetX));
+    camera.targetY = Math.max(0, Math.min(GC.MAP_HEIGHT, camera.targetY));
+
+    // Smooth follow
+    camera.x += (camera.targetX - camera.x) * Math.min(1, 8 * dt);
+    camera.y += (camera.targetY - camera.y) * Math.min(1, 8 * dt);
+
+    // Home key: snap to castle
+    if (keys[' ']) {
+      const GC = GAME_CONSTANTS;
+      camera.targetX = mySide === 'left' ? GC.P1_CASTLE_X + 200 : GC.P2_CASTLE_X - 200;
+      camera.targetY = GC.CASTLE_Y;
+    }
+
+    camera.screenW = window.innerWidth;
+    camera.screenH = window.innerHeight;
   }
 
-  function onDeath(score) {
-    Audio8Bit.death();
-    deathScore.textContent = 'Score: ' + score;
-    deathScreen.classList.remove('hidden');
-  }
-
-  function onRespawn() {
-    Audio8Bit.respawn();
-    deathScreen.classList.add('hidden');
-  }
-
-  // ─── Toast Notifications ────────────────────────────────────
+  // ─── Toast Notification ───────────────────────────────────────
   function showToast(msg) {
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    toast.style.cssText = `
+      position: fixed; top: 100px; left: 50%; transform: translateX(-50%);
+      background: rgba(42, 35, 24, 0.95); border: 1px solid rgba(201, 168, 76, 0.5);
+      padding: 10px 24px; font-family: 'Cinzel', serif; font-size: 14px;
+      color: #e6c766; z-index: 999; border-radius: 2px;
+      animation: toastFade 2.5s ease forwards; pointer-events: none;
+    `;
     toast.textContent = msg;
     document.body.appendChild(toast);
+
+    // Add animation keyframes if not already present
+    if (!document.getElementById('toast-animation')) {
+      const style = document.createElement('style');
+      style.id = 'toast-animation';
+      style.textContent = `
+        @keyframes toastFade {
+          0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+          15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          70% { opacity: 1; }
+          100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     setTimeout(() => toast.remove(), 2500);
   }
 
-  // ─── Doom Phase UI ─────────────────────────────────────────
-  function showDoomToast(title, subtitle) {
-    const toast = document.createElement('div');
-    toast.className = 'doom-toast';
-    toast.innerHTML = `<div class="doom-toast-title">${title}</div><div class="doom-toast-sub">${subtitle}</div>`;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 5000);
-  }
-
-  function showGameEndScreen(winnerId, winnerName) {
-    let overlay = document.getElementById('game-end-overlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'game-end-overlay';
-      document.body.appendChild(overlay);
-    }
-    const isWinner = winnerId === myId;
-    overlay.innerHTML = `
-      <div class="game-end-content ${isWinner ? 'victory' : 'defeat'}">
-        <h1>${isWinner ? '\u2655 VICTORY \u2655' : '\u2620 DEFEAT \u2620'}</h1>
-        <p class="game-end-text">${isWinner ? 'Your Doom Castle stood the test of time!' : winnerName + "'s Doom Castle survived! The realm has fallen."}</p>
-        <p class="game-end-sub">Game resetting in 10 seconds...</p>
-      </div>
-    `;
-    overlay.style.display = 'flex';
-  }
-
-  function hideGameEndScreen() {
-    const overlay = document.getElementById('game-end-overlay');
-    if (overlay) overlay.style.display = 'none';
-  }
-
-  // ─── Gold Collection Detection ──────────────────────────────
-  let lastCoinCount = 0;
-  let lastGold = 0;
-
-  function detectGoldCollection() {
-    if (!gameState || !gameState.self) return;
-
-    // Detect gold increase (rough approximation for coin collect sound)
-    const currentGold = gameState.self.gold;
-    if (currentGold > lastGold + 2) {
-      Audio8Bit.coinCollect();
-      Renderer.spawnGoldParticles(gameState.self.x, gameState.self.y);
-    }
-    lastGold = currentGold;
-  }
-
-  // ─── Combat Detection (for sound/screen shake) ─────────────
-  let lastDmgNumCount = 0;
-
-  function detectCombat() {
-    if (!gameState || !gameState.damageNumbers) return;
-
-    const currentCount = gameState.damageNumbers.length;
-    if (currentCount > lastDmgNumCount) {
-      // New damage happened nearby
-      const newDmg = gameState.damageNumbers.slice(lastDmgNumCount);
-      for (const d of newDmg) {
-        Renderer.shake(2);
-        // Check if it's wizard magic
-        if (gameState.projectiles && gameState.projectiles.length > 0) {
-          Audio8Bit.magicCast();
-        } else {
-          Audio8Bit.swordHit();
-        }
-      }
-    }
-    lastDmgNumCount = currentCount;
-  }
-
-  // ─── Game Loop ───────────────────────────────────────────────
+  // ─── Game Loop ────────────────────────────────────────────────
   function gameLoop(timestamp) {
-    if (!running) return;
+    requestAnimationFrame(gameLoop);
 
-    const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
-    lastTime = timestamp;
+    const dt = Math.min(0.05, (timestamp - lastFrameTime) / 1000);
+    lastFrameTime = timestamp;
 
-    // Send input
-    const input = getMovementInput();
-    if (socket && socket.connected) {
-      socket.emit('input', input);
-    }
+    if (!gameActive || !gameState) return;
+
+    updateCamera(dt);
+
+    // Update mouse world coords
+    const world = Renderer.screenToWorld(mouse.x, mouse.y);
+    mouse.worldX = world.x;
+    mouse.worldY = world.y;
+
+    // Build character ID map for renderer
+    const charIds = {
+      left: mySide === 'left' ? myCharacterId : opponentCharacterId,
+      right: mySide === 'right' ? myCharacterId : opponentCharacterId
+    };
 
     // Render
-    if (gameState) {
-      Renderer.render(gameState, dt);
-      updateUI();
-      detectGoldCollection();
-      detectCombat();
-    }
+    Renderer.render(
+      gameState,
+      camera,
+      dt,
+      isPlacing,
+      { x: mouse.worldX, y: mouse.worldY },
+      selectedBuildingType,
+      charIds
+    );
 
-    requestAnimationFrame(gameLoop);
+    // Minimap
+    Renderer.drawMinimap(minimapCanvas, gameState);
   }
 
-  // ─── Initialization ─────────────────────────────────────────
-  function init() {
-    Renderer.init(canvas);
-    setupInput();
-
-    playBtn.addEventListener('click', joinGame);
-    nameInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') joinGame();
-    });
-
-    // Focus name input
-    nameInput.focus();
-
-    // Draw animated background on menu
-    drawMenuBackground();
-  }
-
-  // ─── Animated Menu Background ───────────────────────────────
-  function drawMenuBackground() {
-    const bgCanvas = document.createElement('canvas');
-    bgCanvas.width = window.innerWidth;
-    bgCanvas.height = window.innerHeight;
-    bgCanvas.style.position = 'fixed';
-    bgCanvas.style.top = '0';
-    bgCanvas.style.left = '0';
-    bgCanvas.style.zIndex = '999';
-    bgCanvas.style.pointerEvents = 'none';
-    menuScreen.style.position = 'relative';
-    menuScreen.insertBefore(bgCanvas, menuScreen.firstChild);
-
-    const bgCtx = bgCanvas.getContext('2d');
-    const stars = [];
-    for (let i = 0; i < 50; i++) {
-      stars.push({
-        x: Math.random() * bgCanvas.width,
-        y: Math.random() * bgCanvas.height,
-        size: Math.random() * 3 + 1,
-        speed: Math.random() * 0.5 + 0.1,
-        alpha: Math.random()
-      });
+  // ─── Title Screen Ambient Particles ────────────────────────────
+  function animateTitleParticles() {
+    const container = document.getElementById('titleParticles');
+    if (!container || titleScreen.classList.contains('hidden')) {
+      requestAnimationFrame(animateTitleParticles);
+      return;
     }
 
-    function animateBg() {
-      if (!menuScreen.classList.contains('hidden')) {
-        bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-        for (const star of stars) {
-          star.alpha = 0.3 + Math.sin(Date.now() / 1000 * star.speed) * 0.4;
-          bgCtx.fillStyle = `rgba(241, 196, 15, ${star.alpha})`;
-          bgCtx.fillRect(star.x, star.y, star.size, star.size);
-        }
-        requestAnimationFrame(animateBg);
-      }
+    // Create floating embers
+    if (Math.random() < 0.05) {
+      const ember = document.createElement('div');
+      ember.style.cssText = `
+        position: absolute;
+        width: ${2 + Math.random() * 3}px;
+        height: ${2 + Math.random() * 3}px;
+        background: rgba(201, 168, 76, ${0.2 + Math.random() * 0.3});
+        border-radius: 50%;
+        left: ${Math.random() * 100}%;
+        bottom: -10px;
+        pointer-events: none;
+        animation: emberFloat ${5 + Math.random() * 5}s linear forwards;
+      `;
+      container.appendChild(ember);
+      setTimeout(() => ember.remove(), 10000);
     }
-    animateBg();
+
+    requestAnimationFrame(animateTitleParticles);
   }
 
-  // Start
+  // Add ember animation CSS
+  const emberStyle = document.createElement('style');
+  emberStyle.textContent = `
+    @keyframes emberFloat {
+      0% { transform: translateY(0) translateX(0); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 0.5; }
+      100% { transform: translateY(-100vh) translateX(${Math.random() * 100 - 50}px); opacity: 0; }
+    }
+  `;
+  document.head.appendChild(emberStyle);
+
+  // ─── Start ────────────────────────────────────────────────────
   init();
+  animateTitleParticles();
+
 })();
