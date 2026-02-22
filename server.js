@@ -302,13 +302,13 @@ function canAttackTarget(attackerUnitType, targetUnitType) {
   return true;
 }
 
-// Fixed targeting: units always have the enemy castle as ultimate goal
+// Find the absolute nearest enemy (unit, hero, building, or castle). No range limit.
 function findTarget(room, unit) {
   let nearest = null;
-  let nearestDist = GC.UNIT_DETECTION_RANGE;
+  let nearestDist = Infinity;
   const enemySide = unit.side === 'left' ? 'right' : 'left';
 
-  // 1. Check nearby enemy units
+  // Check all enemy units
   for (const [, other] of room.units) {
     if (other.side === unit.side || other.hp <= 0) continue;
     if (!canAttackTarget(unit.unitType, other.unitType)) continue;
@@ -316,31 +316,28 @@ function findTarget(room, unit) {
     if (d < nearestDist) { nearestDist = d; nearest = { id: other.id, type: 'unit' }; }
   }
 
-  // 2. Check enemy hero
+  // Check enemy hero
   const enemyHero = getHero(room, enemySide);
   if (enemyHero && enemyHero.hp > 0) {
     const d = dist(unit, enemyHero);
     if (d < nearestDist) { nearestDist = d; nearest = { id: enemyHero.id, type: 'hero' }; }
   }
 
-  if (nearest) return nearest;
-
-  // 3. Check nearby enemy buildings
+  // Check all enemy buildings
   for (const [, b] of room.buildings) {
     if (b.side === unit.side || b.hp <= 0) continue;
     const d = dist(unit, b);
     if (d < nearestDist) { nearestDist = d; nearest = { id: b.id, type: 'building' }; }
   }
 
-  if (nearest) return nearest;
-
-  // 4. ALWAYS fall back to enemy castle (no range limit)
+  // Check enemy castle
   const enemyCastle = getEnemyCastle(room, unit.side);
   if (enemyCastle.hp > 0) {
-    return { id: enemyCastle.id, type: 'castle' };
+    const d = dist(unit, enemyCastle);
+    if (d < nearestDist) { nearestDist = d; nearest = { id: enemyCastle.id, type: 'castle' }; }
   }
 
-  return null;
+  return nearest;
 }
 
 function getTargetPos(room, targetInfo) {
@@ -773,79 +770,74 @@ function gameTick() {
         unit.hp = Math.min(unit.maxHp, unit.hp + charData.passive.value * dt);
       }
 
-      // Move to lane first
-      if (!unit.onLane) {
-        const dy = unit.laneY - unit.y;
-        if (Math.abs(dy) > 5) {
-          unit.y += Math.sign(dy) * unit.speed * dt;
-          continue;
-        } else {
-          unit.y = unit.laneY;
-          unit.onLane = true;
-        }
-      }
-
-      const enemyCastle = getEnemyCastle(room, unit.side);
+      // Territory checks
       const inEnemyTerritory = (unit.side === 'left' && unit.x > GC.P2_BASE_MIN_X) ||
                                (unit.side === 'right' && unit.x < GC.P1_BASE_MAX_X);
+      const laneHalfW = GC.LANE_WIDTH / 2 + 30;
+      const onLaneY = Math.abs(unit.y - unit.laneY) < laneHalfW;
 
-      // Find/validate target
-      let target = null;
-      if (unit.targetId) {
-        target = getTargetPos(room, { id: unit.targetId, type: unit.targetType });
-        if (target && target.hp <= 0) target = null;
+      // Always find the nearest enemy (unit/building/hero/castle)
+      const found = findTarget(room, unit);
+      if (found) {
+        unit.targetId = found.id;
+        unit.targetType = found.type;
       }
 
-      if (!target) {
-        const found = findTarget(room, unit);
-        if (found) {
-          unit.targetId = found.id;
-          unit.targetType = found.type;
+      const targetPos = unit.targetId ? getTargetPos(room, { id: unit.targetId, type: unit.targetType }) : null;
+
+      if (targetPos && targetPos.hp > 0) {
+        const d = dist(unit, targetPos);
+
+        if (d <= unit.range + 10) {
+          // In range — attack
           unit.state = 'fighting';
-        } else {
-          unit.state = 'marching';
-          unit.targetId = null;
-          unit.targetType = null;
-        }
-      }
-
-      if (unit.state === 'fighting' && unit.targetId) {
-        const targetPos = getTargetPos(room, { id: unit.targetId, type: unit.targetType });
-
-        if (targetPos && targetPos.hp > 0) {
-          const d = dist(unit, targetPos);
-          if (d > unit.range + 10) {
-            // Move toward target, stay on lane if not in enemy territory
-            const a = angleTo(unit, targetPos);
-            let newX = unit.x + Math.cos(a) * unit.speed * dt;
-            let newY = unit.y + Math.sin(a) * unit.speed * dt;
-
-            if (!inEnemyTerritory) {
-              newY = unit.laneY; // Stay on lane
-            }
-
-            unit.x = clamp(newX, 20, GC.MAP_WIDTH - 20);
-            unit.y = clamp(newY, 20, GC.MAP_HEIGHT - 20);
-          } else {
-            // Attack
-            if (now - unit.lastAttackTime >= unit.attackSpeed) {
-              unit.lastAttackTime = now;
-              dealDamage(room, unit, { id: unit.targetId, type: unit.targetType }, false);
-            }
+          if (now - unit.lastAttackTime >= unit.attackSpeed) {
+            unit.lastAttackTime = now;
+            dealDamage(room, unit, { id: unit.targetId, type: unit.targetType }, false);
           }
         } else {
+          // Move toward target
           unit.state = 'marching';
-          unit.targetId = null;
-          unit.targetType = null;
-        }
-      }
+          const targetIsNearby = d < GC.UNIT_DETECTION_RANGE;
+          const targetIsOffLane = Math.abs(targetPos.y - unit.laneY) > laneHalfW;
 
-      if (unit.state === 'marching') {
-        // March toward enemy castle, stay on lane
-        const targetY = inEnemyTerritory ? unit.y : unit.laneY;
-        const a = angleTo(unit, { x: enemyCastle.x, y: targetY });
-        unit.x += Math.cos(a) * unit.speed * dt;
-        unit.y += Math.sin(a) * unit.speed * dt;
+          if (inEnemyTerritory) {
+            // In enemy territory: move freely toward target
+            const a = angleTo(unit, targetPos);
+            unit.x += Math.cos(a) * unit.speed * dt;
+            unit.y += Math.sin(a) * unit.speed * dt;
+          } else if (targetIsNearby && targetIsOffLane) {
+            // Nearby enemy off-lane: chase them
+            const a = angleTo(unit, targetPos);
+            unit.x += Math.cos(a) * unit.speed * dt;
+            unit.y += Math.sin(a) * unit.speed * dt;
+          } else if (!onLaneY) {
+            // Not on lane yet: move to lane first
+            const dy = unit.laneY - unit.y;
+            unit.y += Math.sign(dy) * unit.speed * dt;
+          } else {
+            // On lane: march along it toward the target's X
+            const moveDir = unit.side === 'left' ? 1 : -1;
+            unit.x += moveDir * unit.speed * dt;
+            unit.y = unit.laneY; // stay on lane
+          }
+
+          unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
+          unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
+        }
+      } else {
+        // No target — return to lane and march forward
+        unit.state = 'marching';
+        unit.targetId = null;
+        unit.targetType = null;
+        if (!onLaneY) {
+          const dy = unit.laneY - unit.y;
+          unit.y += Math.sign(dy) * unit.speed * dt;
+        } else {
+          const moveDir = unit.side === 'left' ? 1 : -1;
+          unit.x += moveDir * unit.speed * dt;
+          unit.y = unit.laneY;
+        }
         unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
         unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
       }

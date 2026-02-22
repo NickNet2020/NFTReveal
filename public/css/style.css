@@ -475,6 +475,14 @@ body {
   letter-spacing: 1px;
 }
 
+.game-version {
+  font-family: 'Cinzel', serif;
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  opacity: 0.5;
+}
+
 .game-timer {
   font-family: 'Cinzel', serif;
   font-size: 20px;
