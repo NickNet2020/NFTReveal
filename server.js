@@ -28,23 +28,38 @@ function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 // ═══════════════════════════════════════════════════════════════════════
 function generateDecorations() {
   const decorations = [];
-  for (let i = 0; i < 80; i++) {
-    let x, y;
-    const zone = Math.random();
-    if (zone < 0.3) {
-      x = Math.random() * GC.MAP_WIDTH;
-      y = Math.random() * 120 + 20;
-    } else if (zone < 0.6) {
-      x = Math.random() * GC.MAP_WIDTH;
-      y = GC.MAP_HEIGHT - Math.random() * 120 - 20;
-    } else {
-      x = 700 + Math.random() * 1800;
-      y = GC.LANE_TOP_Y + 120 + Math.random() * (GC.LANE_BOT_Y - GC.LANE_TOP_Y - 240);
-    }
+  const midMinX = GC.P1_BASE_MAX_X + 20;
+  const midMaxX = GC.P2_BASE_MIN_X - 20;
+  const topLaneHi = GC.LANE_TOP_Y + GC.LANE_WIDTH / 2 + 15;
+  const botLaneLo = GC.LANE_BOT_Y - GC.LANE_WIDTH / 2 - 15;
+  const topLaneLo = GC.LANE_TOP_Y - GC.LANE_WIDTH / 2 - 15;
+  const botLaneHi = GC.LANE_BOT_Y + GC.LANE_WIDTH / 2 + 15;
+
+  // Trees between lanes in the middle (the grassy wilderness)
+  for (let i = 0; i < 50; i++) {
+    const x = midMinX + Math.random() * (midMaxX - midMinX);
+    const y = topLaneHi + Math.random() * (botLaneLo - topLaneHi);
     decorations.push({ type: 'tree', x, y, variant: Math.floor(Math.random() * 4), scale: 0.7 + Math.random() * 0.6 });
   }
-  for (let i = 0; i < 40; i++) {
-    decorations.push({ type: 'rock', x: Math.random() * GC.MAP_WIDTH, y: Math.random() * GC.MAP_HEIGHT, variant: Math.floor(Math.random() * 3), scale: 0.5 + Math.random() * 0.5 });
+  // Trees north of top lane (middle only)
+  for (let i = 0; i < 15; i++) {
+    const x = midMinX + Math.random() * (midMaxX - midMinX);
+    const y = 20 + Math.random() * Math.max(10, topLaneLo - 40);
+    decorations.push({ type: 'tree', x, y, variant: Math.floor(Math.random() * 4), scale: 0.7 + Math.random() * 0.6 });
+  }
+  // Trees south of bottom lane (middle only)
+  for (let i = 0; i < 15; i++) {
+    const x = midMinX + Math.random() * (midMaxX - midMinX);
+    const y = botLaneHi + Math.random() * (GC.MAP_HEIGHT - botLaneHi - 20);
+    decorations.push({ type: 'tree', x, y, variant: Math.floor(Math.random() * 4), scale: 0.7 + Math.random() * 0.6 });
+  }
+  // Rocks in grassy middle areas only
+  for (let i = 0; i < 30; i++) {
+    const x = midMinX + Math.random() * (midMaxX - midMinX);
+    const y = Math.random() * GC.MAP_HEIGHT;
+    if (Math.abs(y - GC.LANE_TOP_Y) < GC.LANE_WIDTH / 2 + 20) continue;
+    if (Math.abs(y - GC.LANE_BOT_Y) < GC.LANE_WIDTH / 2 + 20) continue;
+    decorations.push({ type: 'rock', x, y, variant: Math.floor(Math.random() * 3), scale: 0.5 + Math.random() * 0.5 });
   }
   return decorations;
 }
@@ -128,7 +143,12 @@ function createGameRoom(p1Socket, p1Char, p2Socket, p2Char, p2IsBot = false) {
 
     botState: p2IsBot ? { nextBuildTime: Date.now() + 3000, phase: 'early', heroMoveTime: 0 } : null,
     winner: null,
-    winTime: null
+    winTime: null,
+
+    outposts: {
+      north: { x: GC.MAP_WIDTH / 2, y: GC.LANE_TOP_Y - 80, lane: 'top', controlledBy: null, captureProgress: { left: 0, right: 0 } },
+      south: { x: GC.MAP_WIDTH / 2, y: GC.LANE_BOT_Y + 80, lane: 'bottom', controlledBy: null, captureProgress: { left: 0, right: 0 } }
+    }
   };
 
   applyPassives(room);
@@ -193,6 +213,58 @@ function getEnemyData(room, side) { return side === 'left' ? room.player2 : room
 function getCastle(room, side) { return side === 'left' ? room.castle1 : room.castle2; }
 function getEnemyCastle(room, side) { return side === 'left' ? room.castle2 : room.castle1; }
 function getHero(room, side) { return side === 'left' ? room.hero1 : room.hero2; }
+
+function getOutpostBuffs(room, side) {
+  if (!room.outposts) return { attackSpeedMult: 1.0, damageReduction: 0 };
+  let count = 0;
+  if (room.outposts.north.controlledBy === side) count++;
+  if (room.outposts.south.controlledBy === side) count++;
+  return {
+    attackSpeedMult: count >= 1 ? 0.9 : 1.0,
+    damageReduction: count >= 2 ? 0.1 : 0
+  };
+}
+
+function updateOutposts(room, dt) {
+  const laneHalfW = GC.LANE_WIDTH / 2 + 50;
+  const outpostEntries = [room.outposts.north, room.outposts.south];
+
+  for (const outpost of outpostEntries) {
+    const laneY = outpost.lane === 'top' ? GC.LANE_TOP_Y : GC.LANE_BOT_Y;
+
+    let leftPast = false;
+    let rightPast = false;
+
+    for (const [, unit] of room.units) {
+      if (unit.hp <= 0) continue;
+      if (Math.abs(unit.y - laneY) > laneHalfW) continue;
+      if (unit.side === 'left' && unit.x > outpost.x) leftPast = true;
+      if (unit.side === 'right' && unit.x < outpost.x) rightPast = true;
+    }
+
+    // Left capture progress
+    if (leftPast && outpost.controlledBy !== 'left') {
+      outpost.captureProgress.left = Math.min(10, outpost.captureProgress.left + dt);
+      if (outpost.captureProgress.left >= 10) {
+        outpost.controlledBy = 'left';
+        outpost.captureProgress.right = 0;
+      }
+    } else if (!leftPast) {
+      outpost.captureProgress.left = Math.max(0, outpost.captureProgress.left - dt * 2);
+    }
+
+    // Right capture progress
+    if (rightPast && outpost.controlledBy !== 'right') {
+      outpost.captureProgress.right = Math.min(10, outpost.captureProgress.right + dt);
+      if (outpost.captureProgress.right >= 10) {
+        outpost.controlledBy = 'right';
+        outpost.captureProgress.left = 0;
+      }
+    } else if (!rightPast) {
+      outpost.captureProgress.right = Math.max(0, outpost.captureProgress.right - dt * 2);
+    }
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // Building Placement
@@ -303,35 +375,46 @@ function canAttackTarget(attackerUnitType, targetUnitType) {
   return true;
 }
 
-// Find the absolute nearest enemy (unit, hero, building, or castle). No range limit.
+// Find the nearest reachable enemy. Lane-aware: units in the middle can only target
+// enemies on the same lane or in home territories.
 function findTarget(room, unit) {
   let nearest = null;
   let nearestDist = Infinity;
   const enemySide = unit.side === 'left' ? 'right' : 'left';
+  const inMiddle = unit.x > GC.P1_BASE_MAX_X && unit.x < GC.P2_BASE_MIN_X;
+  const laneReach = GC.LANE_WIDTH / 2 + 50;
 
-  // Check all enemy units
+  // Flying units are unrestricted
+  const isFlying = unit.unitType === 'flying';
+
+  function isReachable(t) {
+    if (isFlying || !inMiddle) return true;
+    // Target in a home territory — always reachable by marching forward
+    if (t.x <= GC.P1_BASE_MAX_X || t.x >= GC.P2_BASE_MIN_X) return true;
+    // Target in middle — must be on same lane
+    return Math.abs(t.y - unit.laneY) <= laneReach;
+  }
+
   for (const [, other] of room.units) {
     if (other.side === unit.side || other.hp <= 0) continue;
     if (!canAttackTarget(unit.unitType, other.unitType)) continue;
+    if (!isReachable(other)) continue;
     const d = dist(unit, other);
     if (d < nearestDist) { nearestDist = d; nearest = { id: other.id, type: 'unit' }; }
   }
 
-  // Check enemy hero
   const enemyHero = getHero(room, enemySide);
-  if (enemyHero && enemyHero.hp > 0) {
+  if (enemyHero && enemyHero.hp > 0 && isReachable(enemyHero)) {
     const d = dist(unit, enemyHero);
     if (d < nearestDist) { nearestDist = d; nearest = { id: enemyHero.id, type: 'hero' }; }
   }
 
-  // Check all enemy buildings
   for (const [, b] of room.buildings) {
     if (b.side === unit.side || b.hp <= 0) continue;
     const d = dist(unit, b);
     if (d < nearestDist) { nearestDist = d; nearest = { id: b.id, type: 'building' }; }
   }
 
-  // Check enemy castle
   const enemyCastle = getEnemyCastle(room, unit.side);
   if (enemyCastle.hp > 0) {
     const d = dist(unit, enemyCastle);
@@ -378,6 +461,14 @@ function dealDamage(room, attacker, targetInfo, isHero) {
   }
 
   dmg = Math.max(1, Math.floor(dmg));
+
+  // Outpost buff: 2 outposts = 10% damage reduction
+  const targetSide = target.side || null;
+  if (targetSide) {
+    const tBuffs = getOutpostBuffs(room, targetSide);
+    if (tBuffs.damageReduction > 0) dmg = Math.max(1, Math.floor(dmg * (1 - tBuffs.damageReduction)));
+  }
+
   target.hp -= dmg;
 
   room.damageNumbers.push({ x: target.x, y: target.y - 20, value: dmg, time: Date.now(), side: attacker.side });
@@ -610,7 +701,9 @@ function updateHero(room, hero, now, dt) {
     }
 
     if (nearestEnemy && nearestDist <= hero.range + 10) {
-      if (now - hero.lastAttackTime >= hero.attackSpeed) {
+      const heroBuff = getOutpostBuffs(room, hero.side);
+      const heroEffAS = Math.floor(hero.attackSpeed * heroBuff.attackSpeedMult);
+      if (now - hero.lastAttackTime >= heroEffAS) {
         hero.lastAttackTime = now;
         hero.state = 'fighting';
         dealDamage(room, hero, nearestEnemy, true);
@@ -758,6 +851,9 @@ function gameTick() {
     updateHero(room, room.hero1, now, dt);
     updateHero(room, room.hero2, now, dt);
 
+    // ─── Outpost Updates ──────────────────────────────────────────
+    updateOutposts(room, dt);
+
     // ─── Unit Updates ────────────────────────────────────────────
     const unitsToRemove = [];
 
@@ -771,13 +867,17 @@ function gameTick() {
         unit.hp = Math.min(unit.maxHp, unit.hp + charData.passive.value * dt);
       }
 
-      // Territory checks
-      const inEnemyTerritory = (unit.side === 'left' && unit.x > GC.P2_BASE_MIN_X) ||
-                               (unit.side === 'right' && unit.x < GC.P1_BASE_MAX_X);
+      // Movement zones
+      const inHomeTerritory = unit.x <= GC.P1_BASE_MAX_X || unit.x >= GC.P2_BASE_MIN_X;
+      const isFlying = unit.unitType === 'flying';
       const laneHalfW = GC.LANE_WIDTH / 2 + 30;
       const onLaneY = Math.abs(unit.y - unit.laneY) < laneHalfW;
 
-      // Always find the nearest enemy (unit/building/hero/castle)
+      // Outpost attack speed buff
+      const buffs = getOutpostBuffs(room, unit.side);
+      const effectiveAS = Math.floor(unit.attackSpeed * buffs.attackSpeedMult);
+
+      // Find the nearest reachable enemy
       const found = findTarget(room, unit);
       if (found) {
         unit.targetId = found.id;
@@ -792,49 +892,51 @@ function gameTick() {
         if (d <= unit.range + 10) {
           // In range — attack
           unit.state = 'fighting';
-          if (now - unit.lastAttackTime >= unit.attackSpeed) {
+          if (now - unit.lastAttackTime >= effectiveAS) {
             unit.lastAttackTime = now;
             dealDamage(room, unit, { id: unit.targetId, type: unit.targetType }, false);
           }
         } else {
           // Move toward target
           unit.state = 'marching';
-          const targetIsNearby = d < GC.UNIT_DETECTION_RANGE;
-          const targetIsOffLane = Math.abs(targetPos.y - unit.laneY) > laneHalfW;
 
-          if (inEnemyTerritory) {
-            // In enemy territory: move freely toward target
+          if (isFlying || inHomeTerritory) {
+            // Free movement: flying units or in any home territory
             const a = angleTo(unit, targetPos);
             unit.x += Math.cos(a) * unit.speed * dt;
             unit.y += Math.sin(a) * unit.speed * dt;
-          } else if (targetIsNearby && targetIsOffLane) {
-            // Nearby enemy off-lane: chase them
-            const a = angleTo(unit, targetPos);
-            unit.x += Math.cos(a) * unit.speed * dt;
-            unit.y += Math.sin(a) * unit.speed * dt;
-          } else if (!onLaneY) {
-            // Smoothly angle toward a point on the lane ahead
-            const moveDir = unit.side === 'left' ? 1 : -1;
-            const aheadX = unit.x + moveDir * 80;
-            const a = angleTo(unit, { x: aheadX, y: unit.laneY });
-            unit.x += Math.cos(a) * unit.speed * dt;
-            unit.y += Math.sin(a) * unit.speed * dt;
-            if (Math.abs(unit.y - unit.laneY) < 5) unit.y = unit.laneY;
           } else {
-            // On lane: march forward
-            const moveDir = unit.side === 'left' ? 1 : -1;
-            unit.x += moveDir * unit.speed * dt;
+            // In the middle: constrained to lane (brick paths only)
+            const targetOnLane = Math.abs(targetPos.y - unit.laneY) < laneHalfW &&
+              targetPos.x > GC.P1_BASE_MAX_X && targetPos.x < GC.P2_BASE_MIN_X;
+
+            if (targetOnLane) {
+              // Enemy on our lane in the middle — move at them, clamped to lane
+              const a = angleTo(unit, targetPos);
+              unit.x += Math.cos(a) * unit.speed * dt;
+              const newY = unit.y + Math.sin(a) * unit.speed * dt;
+              unit.y = clamp(newY, unit.laneY - laneHalfW, unit.laneY + laneHalfW);
+            } else {
+              // Target in home territory — march forward on lane
+              const moveDir = unit.side === 'left' ? 1 : -1;
+              unit.x += moveDir * unit.speed * dt;
+              if (Math.abs(unit.y - unit.laneY) > 3) {
+                const dy = unit.laneY - unit.y;
+                unit.y += Math.sign(dy) * Math.min(Math.abs(dy), unit.speed * dt * 0.3);
+              }
+            }
           }
 
           unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
           unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
         }
       } else {
-        // No target — return to lane and march forward
+        // No target — march along lane toward enemy base
         unit.state = 'marching';
         unit.targetId = null;
         unit.targetType = null;
-        if (!onLaneY) {
+
+        if (!onLaneY && !isFlying) {
           const moveDir = unit.side === 'left' ? 1 : -1;
           const aheadX = unit.x + moveDir * 80;
           const a = angleTo(unit, { x: aheadX, y: unit.laneY });
@@ -845,6 +947,7 @@ function gameTick() {
           const moveDir = unit.side === 'left' ? 1 : -1;
           unit.x += moveDir * unit.speed * dt;
         }
+
         unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
         unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
       }
@@ -959,7 +1062,11 @@ function serializeState(room, now, playerSide) {
       time: p.time, side: p.side, characterId: p.characterId, isTower: p.isTower || false
     })),
     damageNumbers: room.damageNumbers.map(d => ({ x: d.x, y: d.y, value: d.value, time: d.time })),
-    effects: room.effects
+    effects: room.effects,
+    outposts: {
+      north: { x: room.outposts.north.x, y: room.outposts.north.y, controlledBy: room.outposts.north.controlledBy, captureProgress: { ...room.outposts.north.captureProgress } },
+      south: { x: room.outposts.south.x, y: room.outposts.south.y, controlledBy: room.outposts.south.controlledBy, captureProgress: { ...room.outposts.south.captureProgress } }
+    }
   };
 }
 

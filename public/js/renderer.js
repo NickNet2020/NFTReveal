@@ -82,14 +82,15 @@ const Renderer = (() => {
 
   // ─── Pre-render terrain ─────────────────────────────────────────
   function renderTerrain(mapW, mapH) {
-    const scale = 0.25; // Render at quarter res for performance
+    const scale = 0.25;
     const tw = Math.ceil(mapW * scale);
     const th = Math.ceil(mapH * scale);
     terrainCanvas.width = tw;
     terrainCanvas.height = th;
     const tc = terrainCtx;
+    const GC = GAME_CONSTANTS;
 
-    // Base ground - dark earth
+    // ─── Base ground - dark earth/grass (middle area) ────────────
     const groundGrad = tc.createLinearGradient(0, 0, 0, th);
     groundGrad.addColorStop(0, '#2a3a1e');
     groundGrad.addColorStop(0.3, '#334422');
@@ -99,88 +100,175 @@ const Renderer = (() => {
     tc.fillStyle = groundGrad;
     tc.fillRect(0, 0, tw, th);
 
-    // Add noise-like ground variation
+    // Ground noise
     for (let i = 0; i < 3000; i++) {
       const x = Math.random() * tw;
       const y = Math.random() * th;
       const brightness = Math.random() * 20 - 10;
-      const r = 46 + brightness;
-      const g = 60 + brightness + Math.random() * 10;
-      const b = 30 + brightness;
-      tc.fillStyle = `rgb(${r},${g},${b})`;
+      tc.fillStyle = `rgb(${46 + brightness},${60 + brightness + Math.random() * 10},${30 + brightness})`;
       tc.fillRect(x, y, 2 + Math.random() * 3, 2 + Math.random() * 3);
     }
 
-    // Lane paths (cobblestone roads)
-    const GC = GAME_CONSTANTS;
+    // ─── Lane paths (cobblestone roads through the middle) ───────
     const laneTopY = GC.LANE_TOP_Y * scale;
     const laneBotY = GC.LANE_BOT_Y * scale;
     const laneW = GC.LANE_WIDTH * scale;
+    const p1MaxX = GC.P1_BASE_MAX_X * scale;
+    const p2MinX = GC.P2_BASE_MIN_X * scale;
 
-    function drawLane(cy) {
-      // Road base
+    function drawBrickArea(x, y, w, h) {
       tc.fillStyle = '#4a4035';
-      tc.fillRect(0, cy - laneW / 2, tw, laneW);
-      // Road edges
-      tc.fillStyle = '#3a3028';
-      tc.fillRect(0, cy - laneW / 2, tw, 3);
-      tc.fillRect(0, cy + laneW / 2 - 3, tw, 3);
-      // Stone texture
-      for (let x = 0; x < tw; x += 6) {
-        for (let row = -2; row <= 2; row++) {
-          const py = cy + row * (laneW / 5);
+      tc.fillRect(x, y, w, h);
+      for (let bx = x; bx < x + w; bx += 6) {
+        for (let by = y; by < y + h; by += 4) {
+          const row = Math.floor((by - y) / 4);
           const offset = (row % 2) * 3;
           const brightness = Math.random() * 15 - 5;
           tc.fillStyle = `rgb(${74 + brightness},${64 + brightness},${53 + brightness})`;
-          tc.fillRect(x + offset, py - 2, 5, 4);
-          tc.strokeStyle = `rgba(0,0,0,0.2)`;
-          tc.lineWidth = 0.5;
-          tc.strokeRect(x + offset, py - 2, 5, 4);
+          tc.fillRect(bx + offset, by, 5, 3);
+          tc.strokeStyle = 'rgba(0,0,0,0.15)';
+          tc.lineWidth = 0.3;
+          tc.strokeRect(bx + offset, by, 5, 3);
         }
       }
+    }
+
+    function drawLane(cy) {
+      drawBrickArea(p1MaxX, cy - laneW / 2, p2MinX - p1MaxX, laneW);
+      // Road edges
+      tc.fillStyle = '#3a3028';
+      tc.fillRect(p1MaxX, cy - laneW / 2, p2MinX - p1MaxX, 2);
+      tc.fillRect(p1MaxX, cy + laneW / 2 - 2, p2MinX - p1MaxX, 2);
     }
 
     drawLane(laneTopY);
     drawLane(laneBotY);
 
-    // Base areas (slightly different color)
-    const p1BaseMaxX = GC.P1_BASE_MAX_X * scale;
-    const p2BaseMinX = GC.P2_BASE_MIN_X * scale;
+    // ─── Elevated home territory platforms (brick) ───────────────
+    const baseMinY = GC.BASE_MIN_Y * scale;
+    const baseMaxY = GC.BASE_MAX_Y * scale;
+    const p1MinX = GC.P1_BASE_MIN_X * scale;
+    const p2MaxX = GC.P2_BASE_MAX_X * scale;
 
-    tc.fillStyle = 'rgba(30, 50, 80, 0.15)';
-    tc.fillRect(0, 0, p1BaseMaxX, th);
-    tc.fillStyle = 'rgba(80, 30, 30, 0.15)';
-    tc.fillRect(p2BaseMinX, 0, tw - p2BaseMinX, th);
+    // Left base platform
+    drawBrickArea(p1MinX, baseMinY, p1MaxX - p1MinX, baseMaxY - baseMinY);
+    // Right base platform
+    drawBrickArea(p2MinX, baseMinY, p2MaxX - p2MinX, baseMaxY - baseMinY);
 
-    // Base area borders (subtle dashed)
-    tc.setLineDash([4, 4]);
-    tc.strokeStyle = 'rgba(201, 168, 76, 0.2)';
+    // ─── Elevation drop shadows (south and east edges) ───────────
+    tc.fillStyle = 'rgba(0,0,0,0.4)';
+    // Left base south shadow
+    tc.fillRect(p1MinX, baseMaxY, p1MaxX - p1MinX, 4);
+    // Left base east shadow (cliff face)
+    tc.fillRect(p1MaxX, baseMinY, 4, baseMaxY - baseMinY);
+    // Right base south shadow
+    tc.fillRect(p2MinX, baseMaxY, p2MaxX - p2MinX, 4);
+    // Right base west shadow (cliff face)
+    tc.fillRect(p2MinX - 4, baseMinY, 4, baseMaxY - baseMinY);
+
+    // ─── Cliff edges (non-lane borders of the platforms) ─────────
+    const stairW = laneW + 6;
+    tc.fillStyle = '#3a3530';
+    tc.strokeStyle = '#2a2520';
     tc.lineWidth = 1;
-    tc.beginPath();
-    tc.moveTo(p1BaseMaxX, 0);
-    tc.lineTo(p1BaseMaxX, th);
-    tc.stroke();
-    tc.beginPath();
-    tc.moveTo(p2BaseMinX, 0);
-    tc.lineTo(p2BaseMinX, th);
-    tc.stroke();
-    tc.setLineDash([]);
 
-    // Draw trees on terrain
+    // Left base east cliff face (with gaps for stairs)
+    function drawCliffEdge(edgeX, minY, maxY, laneYs, isRight) {
+      const segments = [];
+      let lastY = minY;
+      for (const ly of laneYs) {
+        const stairTop = ly - stairW / 2;
+        const stairBot = ly + stairW / 2;
+        if (stairTop > lastY) segments.push({ y1: lastY, y2: stairTop });
+        lastY = stairBot;
+      }
+      if (lastY < maxY) segments.push({ y1: lastY, y2: maxY });
+
+      for (const seg of segments) {
+        const cx = isRight ? edgeX - 6 : edgeX;
+        const cw = 6;
+        // Cliff face
+        tc.fillStyle = '#4a4540';
+        tc.fillRect(cx, seg.y1, cw, seg.y2 - seg.y1);
+        // Dark line
+        tc.fillStyle = '#2a2520';
+        tc.fillRect(isRight ? edgeX - 1 : edgeX, seg.y1, 1, seg.y2 - seg.y1);
+        // Stone pattern on cliff
+        for (let cy = seg.y1; cy < seg.y2; cy += 5) {
+          const brightness = Math.random() * 10 - 5;
+          tc.fillStyle = `rgb(${60 + brightness},${55 + brightness},${48 + brightness})`;
+          tc.fillRect(cx + 1, cy, cw - 2, 4);
+        }
+      }
+    }
+
+    drawCliffEdge(p1MaxX, baseMinY, baseMaxY, [laneTopY, laneBotY], false);
+    drawCliffEdge(p2MinX, baseMinY, baseMaxY, [laneTopY, laneBotY], true);
+
+    // ─── Stairs where lanes meet base platforms ──────────────────
+    function drawStairs(x, laneY, isRight) {
+      const stairTop = laneY - stairW / 2;
+      const stairBot = laneY + stairW / 2;
+      const stairDepth = 10;
+      const numSteps = 4;
+      const stepH = (stairBot - stairTop) / 1;
+      const stepW = stairDepth / numSteps;
+
+      for (let i = 0; i < numSteps; i++) {
+        const sx = isRight ? x - stairDepth + i * stepW : x + i * stepW;
+        const brightness = 50 + i * 8;
+        tc.fillStyle = `rgb(${brightness + 20},${brightness + 15},${brightness + 10})`;
+        tc.fillRect(sx, stairTop, stepW, stairBot - stairTop);
+        tc.strokeStyle = 'rgba(0,0,0,0.3)';
+        tc.lineWidth = 0.5;
+        tc.strokeRect(sx, stairTop, stepW, stairBot - stairTop);
+      }
+    }
+
+    drawStairs(p1MaxX, laneTopY, false);
+    drawStairs(p1MaxX, laneBotY, false);
+    drawStairs(p2MinX, laneTopY, true);
+    drawStairs(p2MinX, laneBotY, true);
+
+    // ─── Base tint overlays ──────────────────────────────────────
+    tc.fillStyle = 'rgba(30, 50, 80, 0.12)';
+    tc.fillRect(p1MinX, baseMinY, p1MaxX - p1MinX, baseMaxY - baseMinY);
+    tc.fillStyle = 'rgba(80, 30, 30, 0.12)';
+    tc.fillRect(p2MinX, baseMinY, p2MaxX - p2MinX, baseMaxY - baseMinY);
+
+    // ─── Outpost markers on terrain ──────────────────────────────
+    const opNorthX = (GC.MAP_WIDTH / 2) * scale;
+    const opNorthY = (GC.LANE_TOP_Y - 80) * scale;
+    const opSouthX = opNorthX;
+    const opSouthY = (GC.LANE_BOT_Y + 80) * scale;
+
+    function drawOutpostBase(ox, oy) {
+      tc.fillStyle = '#5a5550';
+      tc.beginPath();
+      tc.arc(ox, oy, 10, 0, Math.PI * 2);
+      tc.fill();
+      tc.strokeStyle = '#888';
+      tc.lineWidth = 1;
+      tc.stroke();
+      tc.fillStyle = '#666';
+      tc.fillRect(ox - 2, oy - 12, 4, 14);
+    }
+
+    drawOutpostBase(opNorthX, opNorthY);
+    drawOutpostBase(opSouthX, opSouthY);
+
+    // ─── Trees (grassy middle area only) ─────────────────────────
     for (const dec of decorations) {
       if (dec.type === 'tree') {
         const dx = dec.x * scale;
         const dy = dec.y * scale;
         const s = dec.scale * 0.8;
-        // Tree shadow
         tc.fillStyle = 'rgba(0,0,0,0.15)';
         tc.beginPath();
         tc.ellipse(dx, dy + 4 * s, 8 * s, 3 * s, 0, 0, Math.PI * 2);
         tc.fill();
-        // Trunk
         tc.fillStyle = '#3d2b1f';
         tc.fillRect(dx - 1.5 * s, dy - 8 * s, 3 * s, 12 * s);
-        // Canopy layers
         const greens = ['#1a4d1a', '#266326', '#1f5420', '#2d7a2d'];
         for (let l = 0; l < 3; l++) {
           tc.fillStyle = greens[dec.variant % greens.length];
@@ -1286,6 +1374,91 @@ const Renderer = (() => {
     }
   }
 
+  // ─── Draw Command Outpost ──────────────────────────────────────
+  function drawOutpost(outpost, isNorth) {
+    if (!isVisible(outpost.x, outpost.y, 120)) return;
+    const pos = worldToScreen(outpost.x, outpost.y);
+    const z = camera.zoom;
+
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+
+    // Tower base
+    ctx.fillStyle = '#5a5550';
+    ctx.beginPath();
+    ctx.arc(0, 0, 16 * z, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tower structure
+    const towerColor = outpost.controlledBy === 'left' ? '#4a8c3f' :
+                       outpost.controlledBy === 'right' ? '#b22222' : '#666';
+    ctx.fillStyle = towerColor;
+    ctx.fillRect(-6 * z, -24 * z, 12 * z, 24 * z);
+
+    // Crenellations
+    ctx.fillRect(-8 * z, -28 * z, 4 * z, 4 * z);
+    ctx.fillRect(4 * z, -28 * z, 4 * z, 4 * z);
+    ctx.fillRect(-2 * z, -28 * z, 4 * z, 4 * z);
+
+    // Flag on top
+    const flagColor = outpost.controlledBy === 'left' ? '#5cb85c' :
+                      outpost.controlledBy === 'right' ? '#d9534f' : '#aaa';
+    ctx.fillStyle = '#888';
+    ctx.fillRect(-1 * z, -38 * z, 2 * z, 12 * z);
+    ctx.fillStyle = flagColor;
+    const wave = Math.sin(time * 3 + (isNorth ? 0 : 3)) * 2 * z;
+    ctx.beginPath();
+    ctx.moveTo(1 * z, -38 * z);
+    ctx.lineTo(10 * z + wave, -35 * z);
+    ctx.lineTo(8 * z + wave * 0.5, -30 * z);
+    ctx.lineTo(1 * z, -32 * z);
+    ctx.fill();
+
+    // Label
+    ctx.font = `bold ${9 * z}px Cinzel, serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(201, 168, 76, 0.7)';
+    ctx.fillText('OUTPOST', 0, 20 * z);
+
+    ctx.restore();
+
+    // ─── Capture progress bar ────────────────────────────────────
+    const barW = 50 * z;
+    const barH = 5 * z;
+    const barY = isNorth ? pos.y - 44 * z : pos.y + 24 * z;
+    const barX = pos.x - barW / 2;
+
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+
+    // Left (blue/green) side progress
+    const leftProg = Math.min(1, (outpost.captureProgress.left || 0) / 10);
+    if (leftProg > 0) {
+      ctx.fillStyle = mySide === 'left' ? '#4a8c3f' : '#b22222';
+      ctx.fillRect(barX, barY, barW * leftProg, barH);
+    }
+
+    // Right side progress
+    const rightProg = Math.min(1, (outpost.captureProgress.right || 0) / 10);
+    if (rightProg > 0) {
+      ctx.fillStyle = mySide === 'right' ? '#4a8c3f' : '#b22222';
+      ctx.fillRect(barX + barW * (1 - rightProg), barY, barW * rightProg, barH);
+    }
+
+    // Captured indicator
+    if (outpost.controlledBy) {
+      const controlColor = outpost.controlledBy === mySide ? 'rgba(100,200,100,0.3)' : 'rgba(200,100,100,0.3)';
+      ctx.fillStyle = controlColor;
+      ctx.fillRect(barX, barY, barW, barH);
+    }
+
+    // Border
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(barX - 1, barY - 1, barW + 2, barH + 2);
+  }
+
   // ─── Lane labels ──────────────────────────────────────────────
   function drawLaneLabels() {
     const GC = GAME_CONSTANTS;
@@ -1367,6 +1540,12 @@ const Renderer = (() => {
     const sortedBuildings = [...allBuildings].sort((a, b) => a.y - b.y);
     for (const b of sortedBuildings) {
       drawBuilding(b);
+    }
+
+    // Command outposts
+    if (state.outposts) {
+      if (state.outposts.north) drawOutpost(state.outposts.north, true);
+      if (state.outposts.south) drawOutpost(state.outposts.south, false);
     }
 
     // Units (sorted by Y)
