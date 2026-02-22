@@ -51,7 +51,7 @@
     targetX: 0, targetY: 0,
     zoom: 0.65,
     minZoom: 0.3,
-    maxZoom: 1.2,
+    maxZoom: 2.0,
     screenW: window.innerWidth,
     screenH: window.innerHeight
   };
@@ -62,10 +62,11 @@
   let isPlacing = false;
   let selectedBuildingType = null;
 
-  // Unit selection
+  // Selection (units and buildings)
   let selectedUnitId = null;
   let selectedUnitName = null;
-  let unitCardEl = null;
+  let selectedBuildingId = null;
+  let bannerEl = null;
 
   // Name generator for units
   const UNIT_NAMES = [
@@ -586,293 +587,562 @@
     setTimeout(() => toast.remove(), 2500);
   }
 
-  // ─── Unit Selection & Card ──────────────────────────────────
+  // ─── Selection & Info Banner (300x200) ─────────────────────
   function trySelectUnit(wx, wy) {
-    if (!gameState || !gameState.units) { deselectUnit(); return; }
+    if (!gameState) { deselectAll(); return; }
 
+    // Try units first (closest within 30 world units)
     let closest = null;
-    let closestDist = 30; // click radius in world units
+    let closestDist = 30;
 
-    for (const u of gameState.units) {
-      const dx = u.x - wx;
-      const dy = u.y - wy;
+    if (gameState.units) {
+      for (const u of gameState.units) {
+        const dx = u.x - wx;
+        const dy = u.y - wy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < closestDist) { closestDist = d; closest = { type: 'unit', data: u }; }
+      }
+    }
+
+    // Also try heroes
+    const heroes = [gameState.hero1, gameState.hero2].filter(h => h && h.hp > 0);
+    for (const h of heroes) {
+      const dx = h.x - wx;
+      const dy = h.y - wy;
       const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < closestDist) { closestDist = d; closest = u; }
+      if (d < closestDist) { closestDist = d; closest = { type: 'hero', data: h }; }
+    }
+
+    // Try buildings (within 40 world units)
+    if (gameState.buildings) {
+      for (const b of gameState.buildings) {
+        const dx = b.x - wx;
+        const dy = b.y - wy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 40 && d < closestDist) { closestDist = d; closest = { type: 'building', data: b }; }
+      }
     }
 
     if (closest) {
-      selectedUnitId = closest.id;
-      selectedUnitName = getUnitDisplayName(closest);
-      Renderer.setSelectedUnit(selectedUnitId);
-      showUnitCard(closest);
+      if (closest.type === 'unit' || closest.type === 'hero') {
+        selectedUnitId = closest.data.id;
+        selectedBuildingId = null;
+        selectedUnitName = closest.data.isHero ? closest.data.name : getUnitDisplayName(closest.data);
+        Renderer.setSelectedUnit(selectedUnitId);
+        showBanner(closest.data, closest.type);
+      } else {
+        selectedBuildingId = closest.data.id;
+        selectedUnitId = null;
+        selectedUnitName = null;
+        Renderer.setSelectedUnit(null);
+        showBanner(closest.data, 'building');
+      }
     } else {
-      deselectUnit();
+      deselectAll();
     }
   }
 
-  function deselectUnit() {
+  function deselectAll() {
     selectedUnitId = null;
     selectedUnitName = null;
+    selectedBuildingId = null;
     Renderer.setSelectedUnit(null);
-    hideUnitCard();
+    hideBanner();
   }
 
-  function createUnitCard() {
-    unitCardEl = document.createElement('div');
-    unitCardEl.id = 'unitCard';
-    unitCardEl.style.cssText = `
-      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-      background: rgba(28, 22, 14, 0.95); border: 2px solid rgba(201, 168, 76, 0.6);
-      border-radius: 4px; padding: 12px 16px; display: none; z-index: 100;
-      font-family: 'Cinzel', serif; color: #e6c766; min-width: 280px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.6); pointer-events: auto;
+  // Alias for backward compat (escape key etc)
+  function deselectUnit() { deselectAll(); }
+
+  function createBanner() {
+    bannerEl = document.createElement('div');
+    bannerEl.id = 'infoBanner';
+    bannerEl.style.cssText = `
+      position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+      width: 300px; height: 200px; display: none; z-index: 100;
+      pointer-events: none; font-family: 'Cinzel', serif;
     `;
-    unitCardEl.innerHTML = `
-      <div style="display: flex; align-items: flex-start; gap: 12px;">
-        <canvas id="unitPortrait" width="48" height="48" style="border: 2px solid rgba(201,168,76,0.4); image-rendering: pixelated; background: #0a0806; flex-shrink: 0;"></canvas>
-        <div style="flex: 1; min-width: 0;">
-          <div id="ucName" style="font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
-          <div id="ucType" style="font-size: 10px; color: rgba(201,168,76,0.7); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;"></div>
-        </div>
-      </div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-top: 10px; font-size: 11px;">
-        <div style="display: flex; justify-content: space-between;"><span style="color: #888;">HP</span><span id="ucHp" style="color: #4a8c3f; font-weight: 600;"></span></div>
-        <div style="display: flex; justify-content: space-between;"><span style="color: #888;">DMG</span><span id="ucDmg" style="color: #c0392b; font-weight: 600;"></span></div>
-        <div style="display: flex; justify-content: space-between;"><span style="color: #888;">ATK SPD</span><span id="ucAtkSpd" style="color: #d4a017; font-weight: 600;"></span></div>
-        <div style="display: flex; justify-content: space-between;"><span style="color: #888;">MOVE</span><span id="ucMoveSpd" style="color: #4a6fa5; font-weight: 600;"></span></div>
-      </div>
-    `;
-    document.getElementById('gameScreen').appendChild(unitCardEl);
+    // We draw the banner on a canvas for the medieval sword-themed look
+    const c = document.createElement('canvas');
+    c.id = 'bannerCanvas';
+    c.width = 300;
+    c.height = 200;
+    c.style.cssText = 'width: 300px; height: 200px;';
+    bannerEl.appendChild(c);
+    document.getElementById('gameScreen').appendChild(bannerEl);
   }
 
-  function showUnitCard(unit) {
-    if (!unitCardEl) createUnitCard();
-    unitCardEl.style.display = 'block';
-    document.getElementById('ucName').textContent = selectedUnitName;
-    document.getElementById('ucType').textContent = unit.unitType;
-    updateUnitCardStats(unit);
-    drawUnitPortrait(unit);
+  function hideBanner() {
+    if (bannerEl) bannerEl.style.display = 'none';
   }
 
-  function hideUnitCard() {
-    if (unitCardEl) unitCardEl.style.display = 'none';
+  function showBanner(data, selType) {
+    if (!bannerEl) createBanner();
+    bannerEl.style.display = 'block';
+    renderBanner(data, selType);
   }
 
-  function updateUnitCardStats(unit) {
-    if (!unitCardEl) return;
-    document.getElementById('ucHp').textContent = `${Math.ceil(unit.hp)} / ${unit.maxHp}`;
-    document.getElementById('ucDmg').textContent = unit.damage || '?';
-    document.getElementById('ucAtkSpd').textContent = (unit.attackSpeed || '?') + 'ms';
-    document.getElementById('ucMoveSpd').textContent = unit.speed || '?';
-  }
-
-  function updateSelectedUnit() {
-    if (!selectedUnitId || !gameState || !gameState.units) return;
-    const unit = gameState.units.find(u => u.id === selectedUnitId);
-    if (!unit) { deselectUnit(); return; }
-    updateUnitCardStats(unit);
-  }
-
-  function drawUnitPortrait(unit) {
-    const canvas = document.getElementById('unitPortrait');
+  function renderBanner(data, selType) {
+    const canvas = document.getElementById('bannerCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    const W = 300, H = 200;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, 'rgba(28, 22, 14, 0.97)');
+    bg.addColorStop(1, 'rgba(18, 14, 8, 0.97)');
+    ctx.fillStyle = bg;
+    roundRectBanner(ctx, 4, 4, W - 8, H - 8, 6);
+    ctx.fill();
+
+    // Outer border - gold
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.7)';
+    ctx.lineWidth = 2;
+    roundRectBanner(ctx, 4, 4, W - 8, H - 8, 6);
+    ctx.stroke();
+
+    // Inner border
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.25)';
+    ctx.lineWidth = 1;
+    roundRectBanner(ctx, 8, 8, W - 16, H - 16, 4);
+    ctx.stroke();
+
+    // Corner ornaments (crossed swords)
+    drawSwordOrnament(ctx, 16, 16, 0.7);
+    drawSwordOrnament(ctx, W - 16, 16, 0.7);
+    drawSwordOrnament(ctx, 16, H - 16, 0.7);
+    drawSwordOrnament(ctx, W - 16, H - 16, 0.7);
+
+    const charData = CHARACTERS[data.characterId];
+    const primary = charData ? charData.color : '#888';
+
+    if (selType === 'building') {
+      renderBuildingBanner(ctx, data, charData, primary, W, H);
+    } else {
+      renderUnitBanner(ctx, data, charData, primary, W, H, selType);
+    }
+  }
+
+  function renderUnitBanner(ctx, unit, charData, primary, W, H, selType) {
+    // Portrait area (56x56, drawn from 48x48 source)
+    const px = 20, py = 22;
+    ctx.fillStyle = '#0a0806';
+    ctx.fillRect(px, py, 56, 56);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px, py, 56, 56);
+
+    // Draw portrait on sub-region
+    drawBannerPortrait(ctx, unit, px, py, 56, 56);
+
+    // Name + type + rank stars
+    const nameX = 84;
+    ctx.font = 'bold 13px Cinzel, serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    const displayName = unit.isHero ? unit.name : (selectedUnitName || 'Unit');
+    ctx.fillText(displayName, nameX, 38, W - nameX - 16);
+
+    // Type label
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = primary;
+    const typeLabel = unit.isHero ? 'HERO' : (unit.unitType || '').toUpperCase();
+    ctx.fillText(typeLabel, nameX, 52);
+
+    // Rank stars (only for non-heroes)
+    if (!unit.isHero && unit.rank > 0) {
+      const starColors = ['', '#cd7f32', '#c0c0c0', '#ffd700'];
+      const starColor = starColors[Math.min(unit.rank, 3)];
+      ctx.font = '12px serif';
+      ctx.fillStyle = starColor;
+      let stars = '';
+      for (let i = 0; i < unit.rank; i++) stars += '\u2605';
+      ctx.fillText(stars, nameX, 66);
+    }
+
+    // Separator line
+    ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
+    ctx.fillRect(20, 84, W - 40, 1);
+
+    // Stats grid
+    const statsY = 98;
+    const col1 = 24, col2 = 158;
+    ctx.font = '11px Cinzel, serif';
+
+    // HP
+    ctx.fillStyle = '#888';
+    ctx.fillText('HP', col1, statsY);
+    ctx.fillStyle = '#4a8c3f';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${Math.ceil(unit.hp)} / ${unit.maxHp}`, col1 + 40, statsY);
+
+    // DMG
+    ctx.font = '11px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('DMG', col2, statsY);
+    ctx.fillStyle = '#c0392b';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${unit.damage || '?'}`, col2 + 40, statsY);
+
+    // ATK SPD
+    const statsY2 = statsY + 18;
+    ctx.font = '11px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('ATK SPD', col1, statsY2);
+    ctx.fillStyle = '#d4a017';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${unit.attackSpeed || '?'}ms`, col1 + 58, statsY2);
+
+    // MOVE
+    ctx.font = '11px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('MOVE', col2, statsY2);
+    ctx.fillStyle = '#4a6fa5';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${unit.speed || '?'}`, col2 + 40, statsY2);
+
+    // Lane
+    if (unit.lane) {
+      const statsY3 = statsY2 + 18;
+      ctx.font = '11px Cinzel, serif';
+      ctx.fillStyle = '#888';
+      ctx.fillText('LANE', col1, statsY3);
+      ctx.fillStyle = '#c9a84c';
+      ctx.font = 'bold 11px Cinzel, serif';
+      ctx.fillText(unit.lane.toUpperCase(), col1 + 40, statsY3);
+    }
+
+    // XP bar (only for non-heroes)
+    if (!unit.isHero) {
+      const xpBarY = H - 30;
+      const xpBarX = 20;
+      const xpBarW = W - 40;
+      const xpBarH = 12;
+      const xp = unit.xp || 0;
+      const xpNeeded = unit.xpToNext || 30;
+      const rank = unit.rank || 0;
+
+      // XP label
+      ctx.font = '9px Cinzel, serif';
+      ctx.fillStyle = '#888';
+      ctx.textAlign = 'left';
+      ctx.fillText('XP', xpBarX, xpBarY - 3);
+
+      // Rank label on right
+      ctx.textAlign = 'right';
+      ctx.fillStyle = rank >= 3 ? '#ffd700' : '#888';
+      ctx.fillText(rank >= 3 ? 'MAX RANK' : `Rank ${rank}`, xpBarX + xpBarW, xpBarY - 3);
+
+      // XP bar bg
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(xpBarX, xpBarY, xpBarW, xpBarH);
+
+      // XP bar fill
+      const xpPct = rank >= 3 ? 1 : Math.min(1, xp / xpNeeded);
+      const xpGrad = ctx.createLinearGradient(xpBarX, 0, xpBarX + xpBarW * xpPct, 0);
+      xpGrad.addColorStop(0, '#6a5acd');
+      xpGrad.addColorStop(1, '#9370db');
+      ctx.fillStyle = xpGrad;
+      ctx.fillRect(xpBarX, xpBarY, xpBarW * xpPct, xpBarH);
+
+      // XP bar shine
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.fillRect(xpBarX, xpBarY, xpBarW * xpPct, xpBarH / 2);
+
+      // XP text
+      ctx.font = 'bold 9px Cinzel, serif';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      if (rank >= 3) {
+        ctx.fillText('MAX', xpBarX + xpBarW / 2, xpBarY + 9);
+      } else {
+        ctx.fillText(`${xp} / ${xpNeeded}`, xpBarX + xpBarW / 2, xpBarY + 9);
+      }
+
+      // XP bar border
+      ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(xpBarX, xpBarY, xpBarW, xpBarH);
+    }
+
+    ctx.textAlign = 'left';
+  }
+
+  function renderBuildingBanner(ctx, building, charData, primary, W, H) {
+    // Building icon area
+    const px = 20, py = 22;
+    ctx.fillStyle = '#0a0806';
+    ctx.fillRect(px, py, 56, 56);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px, py, 56, 56);
+
+    // Simple building icon
+    drawBuildingIcon(ctx, building, px, py, 56, 56);
+
+    // Building name
+    const nameX = 84;
+    const bDef = charData ? charData.buildings.find(b => b.id === building.typeId) : null;
+    ctx.font = 'bold 13px Cinzel, serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(bDef ? bDef.name : 'Building', nameX, 38, W - nameX - 16);
+
+    // Type (tower or barracks)
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = primary;
+    ctx.fillText(building.isTower ? 'DEFENSE TOWER' : 'BARRACKS', nameX, 52);
+
+    // Side
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = building.side === mySide ? '#4a8c3f' : '#b22222';
+    ctx.fillText(building.side === mySide ? 'FRIENDLY' : 'ENEMY', nameX, 66);
+
+    // Separator line
+    ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
+    ctx.fillRect(20, 84, W - 40, 1);
+
+    // Stats
+    const statsY = 100;
+    const col1 = 24, col2 = 158;
+
+    // HP
+    ctx.font = '11px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('HP', col1, statsY);
+    ctx.fillStyle = '#4a8c3f';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${Math.ceil(building.hp)} / ${building.maxHp}`, col1 + 40, statsY);
+
+    // Income
+    if (bDef) {
+      ctx.font = '11px Cinzel, serif';
+      ctx.fillStyle = '#888';
+      ctx.fillText('INCOME', col2, statsY);
+      ctx.fillStyle = '#d4a017';
+      ctx.font = 'bold 11px Cinzel, serif';
+      ctx.fillText(`+${bDef.income}g`, col2 + 52, statsY);
+    }
+
+    if (building.isTower) {
+      // Tower stats
+      const statsY2 = statsY + 20;
+      ctx.font = '11px Cinzel, serif';
+      ctx.fillStyle = '#888';
+      ctx.fillText('STATUS', col1, statsY2);
+      ctx.fillStyle = '#c9a84c';
+      ctx.font = 'bold 11px Cinzel, serif';
+      ctx.fillText(building.constructed ? 'ACTIVE' : 'BUILDING...', col1 + 52, statsY2);
+    } else {
+      // Spawn progress bar
+      const barY = H - 30;
+      const barX = 20;
+      const barW = W - 40;
+      const barH = 12;
+
+      ctx.font = '9px Cinzel, serif';
+      ctx.fillStyle = '#888';
+      ctx.textAlign = 'left';
+      ctx.fillText('SPAWN', barX, barY - 3);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#888';
+      const pct = Math.round((building.spawnProgress || 0) * 100);
+      ctx.fillText(building.constructed ? `${pct}%` : 'Building...', barX + barW, barY - 3);
+
+      // Bar bg
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(barX, barY, barW, barH);
+
+      // Bar fill
+      const fillPct = building.constructed ? (building.spawnProgress || 0) : (building.constructionProgress || 0);
+      const barGrad = ctx.createLinearGradient(barX, 0, barX + barW * fillPct, 0);
+      barGrad.addColorStop(0, building.constructed ? '#4a8c3f' : '#d4a017');
+      barGrad.addColorStop(1, building.constructed ? '#6aac5f' : '#e6c766');
+      ctx.fillStyle = barGrad;
+      ctx.fillRect(barX, barY, barW * fillPct, barH);
+
+      // Bar shine
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';
+      ctx.fillRect(barX, barY, barW * fillPct, barH / 2);
+
+      // Bar border
+      ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barW, barH);
+    }
+
+    ctx.textAlign = 'left';
+  }
+
+  function drawSwordOrnament(ctx, cx, cy, scale) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
+    ctx.lineWidth = 1.5;
+    // Crossed swords
+    ctx.beginPath();
+    ctx.moveTo(-6, -6); ctx.lineTo(6, 6);
+    ctx.moveTo(6, -6); ctx.lineTo(-6, 6);
+    ctx.stroke();
+    // Hilts
+    ctx.beginPath();
+    ctx.moveTo(-3, 0); ctx.lineTo(3, 0);
+    ctx.moveTo(0, -3); ctx.lineTo(0, 3);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function roundRectBanner(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function drawBannerPortrait(ctx, unit, px, py, pw, ph) {
     const charData = CHARACTERS[unit.characterId];
     const primary = charData ? charData.color : '#666';
     const accent = charData ? charData.accentColor : '#888';
     const dark = charData ? charData.darkColor : '#444';
-
-    ctx.clearRect(0, 0, 48, 48);
-    ctx.imageSmoothingEnabled = false;
-
-    // Dark background
-    ctx.fillStyle = '#0a0806';
-    ctx.fillRect(0, 0, 48, 48);
-
     const type = unit.unitType;
+    const s = pw / 48; // scale factor
+
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.scale(s, s);
 
     if (type === 'infantry') {
-      // Helmet top
-      ctx.fillStyle = '#777';
-      ctx.fillRect(14, 4, 20, 14);
-      // Helmet brim
-      ctx.fillStyle = '#666';
-      ctx.fillRect(12, 12, 24, 4);
-      // Face
-      ctx.fillStyle = '#d4a574';
-      ctx.fillRect(16, 16, 16, 12);
-      // Eyes
-      ctx.fillStyle = '#222';
-      ctx.fillRect(18, 19, 4, 3);
-      ctx.fillRect(26, 19, 4, 3);
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(19, 19, 2, 2);
-      ctx.fillRect(27, 19, 2, 2);
-      // Nose
-      ctx.fillStyle = '#c49464';
-      ctx.fillRect(22, 22, 4, 4);
-      // Mouth
-      ctx.fillStyle = '#8a6040';
-      ctx.fillRect(20, 27, 8, 2);
-      // Armor collar
-      ctx.fillStyle = primary;
-      ctx.fillRect(12, 30, 24, 14);
-      // Armor detail
-      ctx.fillStyle = dark;
-      ctx.fillRect(22, 30, 4, 14);
-      // Helmet crest
-      ctx.fillStyle = accent;
-      ctx.fillRect(20, 0, 8, 6);
-      // Shield edge
-      ctx.fillStyle = dark;
-      ctx.fillRect(2, 28, 10, 16);
-      ctx.fillStyle = primary;
-      ctx.fillRect(3, 29, 8, 14);
-      ctx.fillStyle = accent;
-      ctx.fillRect(5, 33, 4, 6);
+      ctx.fillStyle = '#777'; ctx.fillRect(14, 4, 20, 14);
+      ctx.fillStyle = '#666'; ctx.fillRect(12, 12, 24, 4);
+      ctx.fillStyle = '#d4a574'; ctx.fillRect(16, 16, 16, 12);
+      ctx.fillStyle = '#222'; ctx.fillRect(18, 19, 4, 3); ctx.fillRect(26, 19, 4, 3);
+      ctx.fillStyle = '#fff'; ctx.fillRect(19, 19, 2, 2); ctx.fillRect(27, 19, 2, 2);
+      ctx.fillStyle = '#c49464'; ctx.fillRect(22, 22, 4, 4);
+      ctx.fillStyle = '#8a6040'; ctx.fillRect(20, 27, 8, 2);
+      ctx.fillStyle = primary; ctx.fillRect(12, 30, 24, 14);
+      ctx.fillStyle = dark; ctx.fillRect(22, 30, 4, 14);
+      ctx.fillStyle = accent; ctx.fillRect(20, 0, 8, 6);
+      ctx.fillStyle = dark; ctx.fillRect(2, 28, 10, 16);
+      ctx.fillStyle = primary; ctx.fillRect(3, 29, 8, 14);
+      ctx.fillStyle = accent; ctx.fillRect(5, 33, 4, 6);
     } else if (type === 'ranged') {
-      // Hood
-      ctx.fillStyle = dark;
-      ctx.fillRect(10, 2, 28, 18);
-      ctx.fillRect(8, 10, 32, 12);
-      // Hood shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(14, 8, 20, 6);
-      // Face in shadow
-      ctx.fillStyle = '#d4a574';
-      ctx.fillRect(16, 14, 16, 12);
-      // Narrow eyes
-      ctx.fillStyle = '#333';
-      ctx.fillRect(18, 18, 5, 2);
-      ctx.fillRect(25, 18, 5, 2);
-      ctx.fillStyle = '#aad';
-      ctx.fillRect(20, 18, 2, 2);
-      ctx.fillRect(27, 18, 2, 2);
-      // Nose
-      ctx.fillStyle = '#c49464';
-      ctx.fillRect(22, 21, 4, 3);
-      // Cloak body
-      ctx.fillStyle = dark;
-      ctx.fillRect(8, 28, 32, 20);
-      ctx.fillStyle = primary;
-      ctx.fillRect(10, 30, 28, 16);
-      // Bow on right side
-      ctx.strokeStyle = '#6B4226';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(42, 26, 16, -1.2, 1.2);
-      ctx.stroke();
-      // Quiver hint
-      ctx.fillStyle = '#5c4033';
-      ctx.fillRect(38, 8, 6, 20);
+      ctx.fillStyle = dark; ctx.fillRect(10, 2, 28, 18); ctx.fillRect(8, 10, 32, 12);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(14, 8, 20, 6);
+      ctx.fillStyle = '#d4a574'; ctx.fillRect(16, 14, 16, 12);
+      ctx.fillStyle = '#333'; ctx.fillRect(18, 18, 5, 2); ctx.fillRect(25, 18, 5, 2);
+      ctx.fillStyle = '#aad'; ctx.fillRect(20, 18, 2, 2); ctx.fillRect(27, 18, 2, 2);
+      ctx.fillStyle = '#c49464'; ctx.fillRect(22, 21, 4, 3);
+      ctx.fillStyle = dark; ctx.fillRect(8, 28, 32, 20);
+      ctx.fillStyle = primary; ctx.fillRect(10, 30, 28, 16);
+      ctx.fillStyle = '#5c4033'; ctx.fillRect(38, 8, 6, 20);
     } else if (type === 'cavalry') {
-      // Visor helmet
-      ctx.fillStyle = '#999';
-      ctx.fillRect(14, 2, 20, 18);
-      // Visor detail
-      ctx.fillStyle = '#777';
-      ctx.fillRect(14, 12, 20, 4);
-      // Eye slit
-      ctx.fillStyle = '#111';
-      ctx.fillRect(16, 13, 16, 2);
-      // Plume
-      ctx.fillStyle = primary;
-      ctx.fillRect(16, 0, 16, 4);
-      ctx.fillStyle = accent;
-      ctx.fillRect(20, 0, 8, 2);
-      // Neck armor
-      ctx.fillStyle = primary;
-      ctx.fillRect(12, 22, 24, 10);
-      // Horse head below
-      ctx.fillStyle = '#5c3a1e';
-      ctx.fillRect(10, 34, 20, 14);
-      ctx.fillStyle = '#4a2e15';
-      ctx.fillRect(6, 38, 10, 10);
-      // Horse eye
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(10, 41, 3, 2);
-      ctx.fillStyle = '#111';
-      ctx.fillRect(11, 41, 2, 2);
-      // Mane
-      ctx.fillStyle = '#3a2010';
-      ctx.fillRect(22, 34, 8, 4);
-      // Barding
-      ctx.fillStyle = dark;
-      ctx.fillRect(10, 34, 20, 3);
+      ctx.fillStyle = '#999'; ctx.fillRect(14, 2, 20, 18);
+      ctx.fillStyle = '#777'; ctx.fillRect(14, 12, 20, 4);
+      ctx.fillStyle = '#111'; ctx.fillRect(16, 13, 16, 2);
+      ctx.fillStyle = primary; ctx.fillRect(16, 0, 16, 4); ctx.fillRect(12, 22, 24, 10);
+      ctx.fillStyle = accent; ctx.fillRect(20, 0, 8, 2);
+      ctx.fillStyle = '#5c3a1e'; ctx.fillRect(10, 34, 20, 14);
+      ctx.fillStyle = '#4a2e15'; ctx.fillRect(6, 38, 10, 10);
+      ctx.fillStyle = '#fff'; ctx.fillRect(10, 41, 3, 2);
+      ctx.fillStyle = '#111'; ctx.fillRect(11, 41, 2, 2);
+      ctx.fillStyle = '#3a2010'; ctx.fillRect(22, 34, 8, 4);
+      ctx.fillStyle = dark; ctx.fillRect(10, 34, 20, 3);
     } else if (type === 'siege') {
-      // War machine frame
-      ctx.fillStyle = '#5c4033';
-      ctx.fillRect(6, 16, 36, 18);
-      // Beam/arm
-      ctx.fillStyle = '#6B4226';
-      ctx.fillRect(8, 6, 6, 28);
-      // Crossbar
+      ctx.fillStyle = '#5c4033'; ctx.fillRect(6, 16, 36, 18);
+      ctx.fillStyle = '#6B4226'; ctx.fillRect(8, 6, 6, 28);
+      ctx.fillStyle = '#4a3520'; ctx.fillRect(4, 22, 40, 4);
       ctx.fillStyle = '#4a3520';
-      ctx.fillRect(4, 22, 40, 4);
-      // Wheels
-      ctx.fillStyle = '#4a3520';
-      ctx.beginPath();
-      ctx.arc(12, 40, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(36, 40, 6, 0, Math.PI * 2);
-      ctx.fill();
-      // Wheel spokes
-      ctx.strokeStyle = '#333';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(12, 40, 6, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(36, 40, 6, 0, Math.PI * 2);
-      ctx.stroke();
-      // Metal bands
-      ctx.fillStyle = '#555';
-      ctx.fillRect(6, 18, 36, 2);
-      ctx.fillRect(6, 32, 36, 2);
-      // Flag
-      ctx.fillStyle = '#888';
-      ctx.fillRect(10, 0, 2, 8);
-      ctx.fillStyle = primary;
-      ctx.fillRect(12, 0, 10, 6);
-      ctx.fillStyle = accent;
-      ctx.fillRect(14, 2, 6, 2);
+      ctx.beginPath(); ctx.arc(12, 40, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(36, 40, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#555'; ctx.fillRect(6, 18, 36, 2); ctx.fillRect(6, 32, 36, 2);
+      ctx.fillStyle = '#888'; ctx.fillRect(10, 0, 2, 8);
+      ctx.fillStyle = primary; ctx.fillRect(12, 0, 10, 6);
+      ctx.fillStyle = accent; ctx.fillRect(14, 2, 6, 2);
     } else if (type === 'flying') {
-      // Bird/dragon head - larger
       ctx.fillStyle = primary;
-      ctx.beginPath();
-      ctx.arc(22, 22, 14, 0, Math.PI * 2);
-      ctx.fill();
-      // Head highlight
+      ctx.beginPath(); ctx.arc(22, 22, 14, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = accent; ctx.fillRect(14, 12, 12, 8);
+      ctx.fillStyle = '#d4a017'; ctx.fillRect(34, 18, 12, 4); ctx.fillRect(36, 16, 8, 8);
+      ctx.fillStyle = '#ffd700'; ctx.fillRect(28, 16, 6, 5);
+      ctx.fillStyle = '#111'; ctx.fillRect(30, 17, 3, 3);
+      ctx.fillStyle = '#fff'; ctx.fillRect(31, 17, 1, 1);
+      ctx.fillStyle = dark; ctx.fillRect(2, 6, 18, 6); ctx.fillRect(2, 34, 18, 6);
       ctx.fillStyle = accent;
-      ctx.fillRect(14, 12, 12, 8);
-      // Beak
-      ctx.fillStyle = '#d4a017';
-      ctx.fillRect(34, 18, 12, 4);
-      ctx.fillRect(36, 16, 8, 8);
-      // Eye
-      ctx.fillStyle = '#ffd700';
-      ctx.fillRect(28, 16, 6, 5);
-      ctx.fillStyle = '#111';
-      ctx.fillRect(30, 17, 3, 3);
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(31, 17, 1, 1);
-      // Wing hints
-      ctx.fillStyle = dark;
-      ctx.fillRect(2, 6, 18, 6);
-      ctx.fillRect(2, 34, 18, 6);
-      // Feather details
-      ctx.fillStyle = accent;
-      ctx.fillRect(4, 8, 4, 2);
-      ctx.fillRect(10, 8, 4, 2);
-      ctx.fillRect(4, 36, 4, 2);
-      ctx.fillRect(10, 36, 4, 2);
+      ctx.fillRect(4, 8, 4, 2); ctx.fillRect(10, 8, 4, 2);
+      ctx.fillRect(4, 36, 4, 2); ctx.fillRect(10, 36, 4, 2);
     }
 
-    // Frame border
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0, 0, 48, 48);
+    ctx.restore();
+  }
+
+  function drawBuildingIcon(ctx, building, px, py, pw, ph) {
+    ctx.save();
+    ctx.translate(px + pw / 2, py + ph / 2);
+    const s = pw / 56;
+    ctx.scale(s, s);
+
+    if (building.isTower) {
+      // Tower icon
+      ctx.fillStyle = '#5a5550';
+      ctx.fillRect(-8, -4, 16, 20);
+      ctx.fillStyle = '#666';
+      ctx.fillRect(-10, -20, 20, 18);
+      // Crenellations
+      ctx.fillRect(-12, -24, 6, 4);
+      ctx.fillRect(6, -24, 6, 4);
+      ctx.fillRect(-3, -24, 6, 4);
+      // Arrow slit
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-1, -14, 2, 8);
+    } else {
+      // Barracks icon
+      ctx.fillStyle = '#5a5045';
+      ctx.fillRect(-16, -10, 32, 26);
+      // Roof
+      const charData = CHARACTERS[building.characterId];
+      ctx.fillStyle = charData ? charData.darkColor || '#333' : '#333';
+      ctx.beginPath();
+      ctx.moveTo(-20, -10);
+      ctx.lineTo(0, -24);
+      ctx.lineTo(20, -10);
+      ctx.fill();
+      // Door
+      ctx.fillStyle = '#2a1f14';
+      ctx.fillRect(-4, 4, 8, 12);
+    }
+
+    ctx.restore();
+  }
+
+  function updateSelectedUnit() {
+    if (!gameState) return;
+
+    if (selectedUnitId) {
+      const units = gameState.units || [];
+      let unit = units.find(u => u.id === selectedUnitId);
+      // Also check heroes
+      if (!unit) {
+        if (gameState.hero1 && gameState.hero1.id === selectedUnitId) unit = gameState.hero1;
+        if (gameState.hero2 && gameState.hero2.id === selectedUnitId) unit = gameState.hero2;
+      }
+      if (!unit || unit.hp <= 0) { deselectAll(); return; }
+      renderBanner(unit, unit.isHero ? 'hero' : 'unit');
+    } else if (selectedBuildingId && gameState.buildings) {
+      const building = gameState.buildings.find(b => b.id === selectedBuildingId);
+      if (!building) { deselectAll(); return; }
+      renderBanner(building, 'building');
+    }
   }
 
   // ─── Game Loop ────────────────────────────────────────────────

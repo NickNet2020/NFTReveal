@@ -358,7 +358,9 @@ function spawnUnitFromBuilding(room, building) {
     range: unitDef.range, attackSpeed: unitDef.attackSpeed, lastAttackTime: 0,
     targetId: null, targetType: null,
     state: 'marching', lane, laneY, reachedLane: false, spawnTime: Date.now(),
-    onLane: false
+    onLane: false,
+    xp: 0, rank: 0,
+    baseDamage: damage, baseAttackSpeed: unitDef.attackSpeed, baseMaxHp: unitDef.hp
   };
 
   room.units.set(unit.id, unit);
@@ -503,6 +505,15 @@ function handleDeath(room, targetInfo, target, attacker) {
     const producingBuilding = defenderOwner.character.buildings.find(b => b.unit === target.typeId);
     if (producingBuilding) {
       attackerOwner.gold += Math.ceil(producingBuilding.cost * 0.02);
+    }
+    // XP reward to killing unit (not heroes, not towers/castles)
+    if (!attacker.isHero && room.units.has(attacker.id)) {
+      const killerUnit = room.units.get(attacker.id);
+      if (killerUnit && killerUnit.hp > 0) {
+        const xpGained = producingBuilding ? Math.ceil(producingBuilding.cost * 0.10) : 10;
+        killerUnit.xp += xpGained;
+        checkRankUp(killerUnit);
+      }
     }
     room.units.delete(targetInfo.id);
     room.effects.push({ type: 'death', x: target.x, y: target.y, unitType: target.unitType, time: Date.now(), duration: 1000 });
@@ -808,6 +819,24 @@ function botThink(room) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// XP & Rank System
+// ═══════════════════════════════════════════════════════════════════════
+const RANK_THRESHOLDS = [30, 70, 150]; // Cumulative XP needed for rank 1, 2, 3
+const RANK_BUFFS = [0, 0.05, 0.10, 0.20]; // Damage/HP boost + attack speed reduction per rank
+
+function checkRankUp(unit) {
+  while (unit.rank < 3 && unit.xp >= RANK_THRESHOLDS[unit.rank]) {
+    unit.rank++;
+    const buff = RANK_BUFFS[unit.rank];
+    unit.damage = Math.floor(unit.baseDamage * (1 + buff));
+    unit.attackSpeed = Math.max(200, Math.floor(unit.baseAttackSpeed * (1 - buff)));
+    const prevMaxHp = unit.maxHp;
+    unit.maxHp = Math.floor(unit.baseMaxHp * (1 + buff));
+    unit.hp += (unit.maxHp - prevMaxHp); // Gain extra HP on rank up
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Path Clamping — keep ground units on cobblestone (home territory or lane)
 // ═══════════════════════════════════════════════════════════════════════
 function clampToPath(unit) {
@@ -927,31 +956,34 @@ function gameTick() {
         } else {
           // Move toward target
           unit.state = 'marching';
+          const closeChaseRange = unit.range + 80;
 
-          if (isFlying || inHomeTerritory) {
-            // Free movement: flying units or in any home territory
+          if (isFlying) {
+            // Flying: direct toward target always
             const a = angleTo(unit, targetPos);
             unit.x += Math.cos(a) * unit.speed * dt;
             unit.y += Math.sin(a) * unit.speed * dt;
-          } else {
-            // In the middle: constrained to lane (brick paths only)
-            const targetOnLane = Math.abs(targetPos.y - unit.laneY) < laneHalfW &&
-              targetPos.x > GC.P1_BASE_MAX_X && targetPos.x < GC.P2_BASE_MIN_X;
-
-            if (targetOnLane) {
-              // Enemy on our lane in the middle — move at them, clamped to lane
+          } else if (inHomeTerritory) {
+            if (d <= closeChaseRange) {
+              // Close enemy in base — chase directly
               const a = angleTo(unit, targetPos);
               unit.x += Math.cos(a) * unit.speed * dt;
-              const newY = unit.y + Math.sin(a) * unit.speed * dt;
-              unit.y = clamp(newY, unit.laneY - laneHalfW, unit.laneY + laneHalfW);
+              unit.y += Math.sin(a) * unit.speed * dt;
             } else {
-              // Target in home territory — march forward on lane
-              const moveDir = unit.side === 'left' ? 1 : -1;
-              unit.x += moveDir * unit.speed * dt;
-              if (Math.abs(unit.y - unit.laneY) > 3) {
-                const dy = unit.laneY - unit.y;
-                unit.y += Math.sign(dy) * Math.min(Math.abs(dy), unit.speed * dt * 0.3);
-              }
+              // Far target — navigate toward stairs (lane entrance)
+              const stairsX = unit.side === 'left' ? GC.P1_BASE_MAX_X : GC.P2_BASE_MIN_X;
+              const a = angleTo(unit, { x: stairsX, y: unit.laneY });
+              unit.x += Math.cos(a) * unit.speed * dt;
+              unit.y += Math.sin(a) * unit.speed * dt;
+            }
+          } else {
+            // Middle: march forward on lane toward target
+            const moveDir = unit.side === 'left' ? 1 : -1;
+            unit.x += moveDir * unit.speed * dt;
+            // Gradually center on lane
+            if (Math.abs(unit.y - unit.laneY) > 3) {
+              const dy = unit.laneY - unit.y;
+              unit.y += Math.sign(dy) * Math.min(Math.abs(dy), unit.speed * dt * 0.5);
             }
           }
 
@@ -960,21 +992,29 @@ function gameTick() {
           clampToPath(unit);
         }
       } else {
-        // No target — march along lane toward enemy base
+        // No target — navigate toward lane and march forward
         unit.state = 'marching';
         unit.targetId = null;
         unit.targetType = null;
 
-        if (!onLaneY && !isFlying) {
-          const moveDir = unit.side === 'left' ? 1 : -1;
-          const aheadX = unit.x + moveDir * 80;
-          const a = angleTo(unit, { x: aheadX, y: unit.laneY });
-          unit.x += Math.cos(a) * unit.speed * dt;
-          unit.y += Math.sin(a) * unit.speed * dt;
-          if (Math.abs(unit.y - unit.laneY) < 5) unit.y = unit.laneY;
-        } else {
+        if (isFlying) {
           const moveDir = unit.side === 'left' ? 1 : -1;
           unit.x += moveDir * unit.speed * dt;
+        } else if (inHomeTerritory) {
+          // Navigate toward stairs (lane entrance)
+          const stairsX = unit.side === 'left' ? GC.P1_BASE_MAX_X : GC.P2_BASE_MIN_X;
+          const a = angleTo(unit, { x: stairsX, y: unit.laneY });
+          unit.x += Math.cos(a) * unit.speed * dt;
+          unit.y += Math.sin(a) * unit.speed * dt;
+        } else {
+          // On lane — march forward
+          const moveDir = unit.side === 'left' ? 1 : -1;
+          unit.x += moveDir * unit.speed * dt;
+          // Gradually center on lane
+          if (Math.abs(unit.y - unit.laneY) > 3) {
+            const dy = unit.laneY - unit.y;
+            unit.y += Math.sign(dy) * Math.min(Math.abs(dy), unit.speed * dt * 0.5);
+          }
         }
 
         unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
@@ -1038,15 +1078,21 @@ function gameTick() {
 // ═══════════════════════════════════════════════════════════════════════
 function serializeState(room, now, playerSide) {
   const unitArray = [];
+  const leftBuffs = getOutpostBuffs(room, 'left');
+  const rightBuffs = getOutpostBuffs(room, 'right');
   for (const [, u] of room.units) {
     // Fog of war: hide enemy units not visible
     if (u.side !== playerSide && !isVisibleTo(room, playerSide, u.x, u.y)) continue;
+    const buffs = u.side === 'left' ? leftBuffs : rightBuffs;
     unitArray.push({
       id: u.id, typeId: u.typeId, unitType: u.unitType, side: u.side,
       characterId: u.characterId,
       x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10,
       hp: Math.round(u.hp), maxHp: u.maxHp, state: u.state, lane: u.lane,
-      damage: u.damage, speed: u.speed, attackSpeed: u.attackSpeed
+      damage: u.damage, speed: u.speed,
+      attackSpeed: Math.floor(u.attackSpeed * buffs.attackSpeedMult),
+      xp: u.xp, rank: u.rank,
+      xpToNext: u.rank < 3 ? RANK_THRESHOLDS[u.rank] : RANK_THRESHOLDS[2]
     });
   }
 

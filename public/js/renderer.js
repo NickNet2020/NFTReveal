@@ -838,6 +838,85 @@ const Renderer = (() => {
       drawHealthBar(pos.x, barY, 20 * z, uData.hp, uData.maxHp,
         isMySide ? 'friendly' : 'enemy');
     }
+
+    // Rank cosmetic indicator above unit
+    if (uData.rank && uData.rank > 0) {
+      drawRankIndicator(pos.x, pos.y + yOffset - (vis.size + 14) * z, z, uData.rank);
+    }
+  }
+
+  function drawRankIndicator(x, y, z, rank) {
+    if (rank === 1) {
+      // Bronze star
+      drawStarShape(x, y, 4 * z, '#cd7f32', 'rgba(205,127,50,0.3)');
+    } else if (rank === 2) {
+      // Silver star
+      drawStarShape(x, y, 5 * z, '#c0c0c0', 'rgba(192,192,192,0.4)');
+    } else if (rank >= 3) {
+      // Gold crown with glow
+      const glowR = 8 * z;
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+      glow.addColorStop(0, 'rgba(255, 215, 0, 0.3)');
+      glow.addColorStop(1, 'rgba(255, 215, 0, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Crown
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.moveTo(x - 5 * z, y + 2 * z);
+      ctx.lineTo(x - 5 * z, y - 2 * z);
+      ctx.lineTo(x - 3 * z, y);
+      ctx.lineTo(x, y - 4 * z);
+      ctx.lineTo(x + 3 * z, y);
+      ctx.lineTo(x + 5 * z, y - 2 * z);
+      ctx.lineTo(x + 5 * z, y + 2 * z);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#b8860b';
+      ctx.lineWidth = 0.5 * z;
+      ctx.stroke();
+
+      // Gems on crown tips
+      ctx.fillStyle = '#ff4444';
+      ctx.beginPath();
+      ctx.arc(x, y - 3.5 * z, 0.8 * z, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawStarShape(cx, cy, r, fillColor, glowColor) {
+    // Small glow behind star
+    const glowR = r * 2;
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+    glow.addColorStop(0, glowColor);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 5-pointed star
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const angle = -Math.PI / 2 + (i * 2 * Math.PI / 5);
+      const innerAngle = angle + Math.PI / 5;
+      const ox = cx + Math.cos(angle) * r;
+      const oy = cy + Math.sin(angle) * r;
+      const ix = cx + Math.cos(innerAngle) * r * 0.4;
+      const iy = cy + Math.sin(innerAngle) * r * 0.4;
+      if (i === 0) ctx.moveTo(ox, oy);
+      else ctx.lineTo(ox, oy);
+      ctx.lineTo(ix, iy);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
   }
 
   function drawInfantryUnit(ctx, z, palette, uData) {
