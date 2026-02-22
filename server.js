@@ -181,7 +181,8 @@ function createHero(charData, side, x, y) {
     moveTargetY: null,
     state: 'idle',
     isHero: true,
-    name: h.name
+    name: h.name,
+    activated: false
   };
 }
 
@@ -578,43 +579,42 @@ function updateHero(room, hero, now, dt) {
     }
   }
 
-  // Auto-attack nearest enemy in range
-  let nearestEnemy = null;
-  let nearestDist = hero.range + 50;
-  const enemySide = hero.side === 'left' ? 'right' : 'left';
+  // Auto-attack nearest enemy in range (only after hero has been moved/activated)
+  if (hero.activated) {
+    let nearestEnemy = null;
+    let nearestDist = hero.range + 50;
+    const enemySide = hero.side === 'left' ? 'right' : 'left';
 
-  for (const [, u] of room.units) {
-    if (u.side === hero.side || u.hp <= 0) continue;
-    const d = dist(hero, u);
-    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: u.id, type: 'unit', target: u }; }
-  }
+    for (const [, u] of room.units) {
+      if (u.side === hero.side || u.hp <= 0) continue;
+      const d = dist(hero, u);
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: u.id, type: 'unit', target: u }; }
+    }
 
-  // Check enemy hero
-  const enemyHero = getHero(room, enemySide);
-  if (enemyHero && enemyHero.hp > 0) {
-    const d = dist(hero, enemyHero);
-    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: enemyHero.id, type: 'hero', target: enemyHero }; }
-  }
+    const enemyHero = getHero(room, enemySide);
+    if (enemyHero && enemyHero.hp > 0) {
+      const d = dist(hero, enemyHero);
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: enemyHero.id, type: 'hero', target: enemyHero }; }
+    }
 
-  // Check enemy buildings
-  for (const [, b] of room.buildings) {
-    if (b.side === hero.side || b.hp <= 0) continue;
-    const d = dist(hero, b);
-    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: b.id, type: 'building', target: b }; }
-  }
+    for (const [, b] of room.buildings) {
+      if (b.side === hero.side || b.hp <= 0) continue;
+      const d = dist(hero, b);
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: b.id, type: 'building', target: b }; }
+    }
 
-  // Check enemy castle
-  const eCastle = getEnemyCastle(room, hero.side);
-  if (eCastle.hp > 0) {
-    const d = dist(hero, eCastle);
-    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: eCastle.id, type: 'castle', target: eCastle }; }
-  }
+    const eCastle = getEnemyCastle(room, hero.side);
+    if (eCastle.hp > 0) {
+      const d = dist(hero, eCastle);
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: eCastle.id, type: 'castle', target: eCastle }; }
+    }
 
-  if (nearestEnemy && nearestDist <= hero.range + 10) {
-    if (now - hero.lastAttackTime >= hero.attackSpeed) {
-      hero.lastAttackTime = now;
-      hero.state = 'fighting';
-      dealDamage(room, hero, nearestEnemy, true);
+    if (nearestEnemy && nearestDist <= hero.range + 10) {
+      if (now - hero.lastAttackTime >= hero.attackSpeed) {
+        hero.lastAttackTime = now;
+        hero.state = 'fighting';
+        dealDamage(room, hero, nearestEnemy, true);
+      }
     }
   }
 }
@@ -656,6 +656,7 @@ function botThink(room) {
   const botHero = room.hero2;
   if (botHero && botHero.hp > 0 && now - room.botState.heroMoveTime > 5000) {
     room.botState.heroMoveTime = now;
+    botHero.activated = true;
     // Send hero to fight along a random lane
     const laneY = Math.random() < 0.5 ? GC.LANE_TOP_Y : GC.LANE_BOT_Y;
     const targetX = GC.P2_CASTLE_X - 200 - Math.random() * 800;
@@ -812,14 +813,17 @@ function gameTick() {
             unit.x += Math.cos(a) * unit.speed * dt;
             unit.y += Math.sin(a) * unit.speed * dt;
           } else if (!onLaneY) {
-            // Not on lane yet: move to lane first
-            const dy = unit.laneY - unit.y;
-            unit.y += Math.sign(dy) * unit.speed * dt;
+            // Smoothly angle toward a point on the lane ahead
+            const moveDir = unit.side === 'left' ? 1 : -1;
+            const aheadX = unit.x + moveDir * 80;
+            const a = angleTo(unit, { x: aheadX, y: unit.laneY });
+            unit.x += Math.cos(a) * unit.speed * dt;
+            unit.y += Math.sin(a) * unit.speed * dt;
+            if (Math.abs(unit.y - unit.laneY) < 5) unit.y = unit.laneY;
           } else {
-            // On lane: march along it toward the target's X
+            // On lane: march forward
             const moveDir = unit.side === 'left' ? 1 : -1;
             unit.x += moveDir * unit.speed * dt;
-            unit.y = unit.laneY; // stay on lane
           }
 
           unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
@@ -831,12 +835,15 @@ function gameTick() {
         unit.targetId = null;
         unit.targetType = null;
         if (!onLaneY) {
-          const dy = unit.laneY - unit.y;
-          unit.y += Math.sign(dy) * unit.speed * dt;
+          const moveDir = unit.side === 'left' ? 1 : -1;
+          const aheadX = unit.x + moveDir * 80;
+          const a = angleTo(unit, { x: aheadX, y: unit.laneY });
+          unit.x += Math.cos(a) * unit.speed * dt;
+          unit.y += Math.sin(a) * unit.speed * dt;
+          if (Math.abs(unit.y - unit.laneY) < 5) unit.y = unit.laneY;
         } else {
           const moveDir = unit.side === 'left' ? 1 : -1;
           unit.x += moveDir * unit.speed * dt;
-          unit.y = unit.laneY;
         }
         unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
         unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
@@ -844,6 +851,36 @@ function gameTick() {
     }
 
     for (const id of unitsToRemove) room.units.delete(id);
+
+    // ─── Unit Collision Separation ────────────────────────────────
+    const UNIT_RADIUS = { infantry: 12, ranged: 11, cavalry: 16, siege: 20, flying: 0 };
+    const unitArr = [];
+    for (const [, u] of room.units) {
+      if (u.hp > 0 && u.unitType !== 'flying') unitArr.push(u);
+    }
+    for (let i = 0; i < unitArr.length; i++) {
+      for (let j = i + 1; j < unitArr.length; j++) {
+        const a = unitArr[i];
+        const b = unitArr[j];
+        const minD = (UNIT_RADIUS[a.unitType] || 12) + (UNIT_RADIUS[b.unitType] || 12);
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < minD && d > 0.1) {
+          const overlap = (minD - d) / 2;
+          const nx = dx / d;
+          const ny = dy / d;
+          a.x -= nx * overlap * 0.5;
+          a.y -= ny * overlap * 0.5;
+          b.x += nx * overlap * 0.5;
+          b.y += ny * overlap * 0.5;
+          a.x = clamp(a.x, 20, GC.MAP_WIDTH - 20);
+          a.y = clamp(a.y, 20, GC.MAP_HEIGHT - 20);
+          b.x = clamp(b.x, 20, GC.MAP_WIDTH - 20);
+          b.y = clamp(b.y, 20, GC.MAP_HEIGHT - 20);
+        }
+      }
+    }
 
     // ─── Clean up ────────────────────────────────────────────────
     room.projectiles = room.projectiles.filter(p => now - p.time < 400);
@@ -1019,6 +1056,7 @@ io.on('connection', (socket) => {
     if (hero && hero.hp > 0) {
       hero.moveTargetX = clamp(data.x, 20, GC.MAP_WIDTH - 20);
       hero.moveTargetY = clamp(data.y, 20, GC.MAP_HEIGHT - 20);
+      hero.activated = true;
     }
   });
 

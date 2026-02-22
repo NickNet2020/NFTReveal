@@ -493,10 +493,14 @@
     if (mouse.y < edgePanThreshold) camera.targetY -= edgePanSpeed * dt;
     if (mouse.y > camera.screenH - edgePanThreshold) camera.targetY += edgePanSpeed * dt;
 
-    // Clamp camera to map bounds
+    // Clamp camera so game fills ~90% of screen (limit black edges)
     const GC = GAME_CONSTANTS;
-    camera.targetX = Math.max(0, Math.min(GC.MAP_WIDTH, camera.targetX));
-    camera.targetY = Math.max(0, Math.min(GC.MAP_HEIGHT, camera.targetY));
+    const halfViewW = camera.screenW / (2 * camera.zoom);
+    const halfViewH = camera.screenH / (2 * camera.zoom);
+    const marginW = halfViewW * 0.1;
+    const marginH = halfViewH * 0.1;
+    camera.targetX = Math.max(halfViewW - marginW, Math.min(GC.MAP_WIDTH - halfViewW + marginW, camera.targetX));
+    camera.targetY = Math.max(halfViewH - marginH, Math.min(GC.MAP_HEIGHT - halfViewH + marginH, camera.targetY));
 
     // Smooth follow
     camera.x += (camera.targetX - camera.x) * Math.min(1, 8 * dt);

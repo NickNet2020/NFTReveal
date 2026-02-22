@@ -45,27 +45,27 @@ const CHARACTERS = {
     buildings: [
       {
         id: 'barracks', name: 'Barracks', cost: 100, hp: 500, income: 2,
-        spawnInterval: 10000, unit: 'shieldwall',
+        spawnInterval: 7000, unit: 'shieldwall',
         description: 'Trains hardened shield infantry to hold the front line.'
       },
       {
         id: 'archery_range', name: 'Archery Range', cost: 130, hp: 400, income: 2,
-        spawnInterval: 12000, unit: 'longbow',
+        spawnInterval: 8400, unit: 'longbow',
         description: 'Produces expert longbowmen with devastating range.'
       },
       {
         id: 'stables', name: 'War Stables', cost: 180, hp: 480, income: 3,
-        spawnInterval: 15000, unit: 'warhorse',
+        spawnInterval: 10500, unit: 'warhorse',
         description: 'Breeds mighty warhorses and trains their riders.'
       },
       {
         id: 'siege_workshop', name: 'Siege Workshop', cost: 260, hp: 600, income: 3,
-        spawnInterval: 22000, unit: 'siege_tower',
+        spawnInterval: 15400, unit: 'siege_tower',
         description: 'Constructs massive siege towers to breach enemy walls.'
       },
       {
         id: 'falconry', name: 'Falconry', cost: 200, hp: 380, income: 2,
-        spawnInterval: 18000, unit: 'snow_hawk',
+        spawnInterval: 12600, unit: 'snow_hawk',
         description: 'Trains fierce snow hawks to strike from above.'
       },
       {
@@ -82,12 +82,12 @@ const CHARACTERS = {
       },
       {
         id: 'longbow', name: 'Longbowman', type: 'ranged',
-        hp: 38, damage: 14, speed: 34, range: 220, attackSpeed: 2000,
+        hp: 38, damage: 12, speed: 34, range: 220, attackSpeed: 2600,
         description: 'Expert archers with deadly range and precision'
       },
       {
         id: 'warhorse', name: 'Warhorse Rider', type: 'cavalry',
-        hp: 95, damage: 16, speed: 75, range: 32, attackSpeed: 1100,
+        hp: 95, damage: 13, speed: 75, range: 32, attackSpeed: 1100,
         description: 'Mounted knights charging through enemy lines'
       },
       {
@@ -129,27 +129,27 @@ const CHARACTERS = {
     buildings: [
       {
         id: 'spear_hall', name: 'Spear Hall', cost: 100, hp: 420, income: 2,
-        spawnInterval: 10000, unit: 'unsullied',
+        spawnInterval: 7000, unit: 'unsullied',
         description: 'Trains disciplined spearmen who never break formation.'
       },
       {
         id: 'fire_temple', name: 'Fire Temple', cost: 160, hp: 380, income: 2,
-        spawnInterval: 14000, unit: 'fire_mage',
+        spawnInterval: 9800, unit: 'fire_mage',
         description: 'Channels dark fire magic into devastating mages.'
       },
       {
         id: 'flame_stables', name: 'Flame Stables', cost: 170, hp: 440, income: 3,
-        spawnInterval: 14000, unit: 'flame_rider',
+        spawnInterval: 9800, unit: 'flame_rider',
         description: 'Breeds fire-touched steeds for mounted assault.'
       },
       {
         id: 'scorpion_foundry', name: 'Scorpion Foundry', cost: 240, hp: 520, income: 3,
-        spawnInterval: 20000, unit: 'scorpion',
+        spawnInterval: 14000, unit: 'scorpion',
         description: 'Forges massive scorpion ballistas to shatter defenses.'
       },
       {
         id: 'dragon_roost', name: 'Dragon Roost', cost: 300, hp: 450, income: 4,
-        spawnInterval: 28000, unit: 'young_dragon',
+        spawnInterval: 19600, unit: 'young_dragon',
         description: 'Nurtures young dragons into terrifying war beasts.'
       },
       {
@@ -166,12 +166,12 @@ const CHARACTERS = {
       },
       {
         id: 'fire_mage', name: 'Fire Mage', type: 'ranged',
-        hp: 32, damage: 20, speed: 30, range: 190, attackSpeed: 2200,
+        hp: 32, damage: 18, speed: 30, range: 190, attackSpeed: 2860,
         description: 'Channelers of devastating dragonfire magic'
       },
       {
         id: 'flame_rider', name: 'Flame Rider', type: 'cavalry',
-        hp: 80, damage: 15, speed: 72, range: 30, attackSpeed: 1000,
+        hp: 80, damage: 13, speed: 72, range: 30, attackSpeed: 1000,
         description: 'Cavalry wreathed in flame, charging fearlessly'
       },
       {
@@ -213,27 +213,27 @@ const CHARACTERS = {
     buildings: [
       {
         id: 'raider_camp', name: 'Raider Camp', cost: 90, hp: 400, income: 2,
-        spawnInterval: 9000, unit: 'reaver',
+        spawnInterval: 6300, unit: 'reaver',
         description: 'Musters hardened ironborn reavers for the front.'
       },
       {
         id: 'crossbow_tower', name: 'Crossbow Tower', cost: 130, hp: 420, income: 2,
-        spawnInterval: 12000, unit: 'crossbowman',
+        spawnInterval: 8400, unit: 'crossbowman',
         description: 'Trains marksmen with armor-piercing crossbows.'
       },
       {
         id: 'chariot_works', name: 'Chariot Works', cost: 170, hp: 460, income: 3,
-        spawnInterval: 14000, unit: 'war_chariot',
+        spawnInterval: 9800, unit: 'war_chariot',
         description: 'Builds devastating war chariots that trample foes.'
       },
       {
         id: 'ram_forge', name: 'Ram Forge', cost: 220, hp: 580, income: 3,
-        spawnInterval: 18000, unit: 'battering_ram',
+        spawnInterval: 12600, unit: 'battering_ram',
         description: 'Forges iron-shod battering rams to break any gate.'
       },
       {
         id: 'storm_rookery', name: 'Storm Rookery', cost: 190, hp: 360, income: 2,
-        spawnInterval: 16000, unit: 'storm_petrel',
+        spawnInterval: 11200, unit: 'storm_petrel',
         description: 'Breeds fierce storm birds for aerial harassment.'
       },
       {
@@ -250,12 +250,12 @@ const CHARACTERS = {
       },
       {
         id: 'crossbowman', name: 'Salted Crossbowman', type: 'ranged',
-        hp: 42, damage: 15, speed: 32, range: 200, attackSpeed: 2000,
+        hp: 42, damage: 13, speed: 32, range: 200, attackSpeed: 2600,
         description: 'Crossbowmen with armor-piercing bolts'
       },
       {
         id: 'war_chariot', name: 'War Chariot', type: 'cavalry',
-        hp: 85, damage: 14, speed: 68, range: 34, attackSpeed: 1100,
+        hp: 85, damage: 13, speed: 68, range: 34, attackSpeed: 1100,
         description: 'Iron-plated chariots that crush everything in their path'
       },
       {
@@ -285,9 +285,9 @@ const CHARACTERS = {
     darkColor: '#7d6010',
     passive: {
       name: 'Gilded Coffers',
-      description: 'All buildings generate +50% more gold income',
+      description: 'All buildings generate +15% more gold income',
       type: 'building_income',
-      value: 0.50
+      value: 0.15
     },
     hero: {
       id: 'golden_champion', name: 'The Golden Champion', type: 'cavalry',
@@ -297,27 +297,27 @@ const CHARACTERS = {
     buildings: [
       {
         id: 'sellsword_camp', name: 'Sellsword Camp', cost: 90, hp: 380, income: 3,
-        spawnInterval: 10000, unit: 'sellsword',
+        spawnInterval: 7000, unit: 'sellsword',
         description: 'Hires cheap but effective mercenary soldiers.'
       },
       {
         id: 'guild_hall', name: 'Arbalist Guild', cost: 140, hp: 400, income: 3,
-        spawnInterval: 13000, unit: 'arbalist',
+        spawnInterval: 9100, unit: 'arbalist',
         description: 'Trains guild arbalists with devastating heavy crossbows.'
       },
       {
         id: 'champions_arena', name: "Champion's Arena", cost: 200, hp: 480, income: 4,
-        spawnInterval: 16000, unit: 'mounted_champion',
+        spawnInterval: 11200, unit: 'mounted_champion',
         description: 'Produces elite mounted champions of the realm.'
       },
       {
         id: 'golden_foundry', name: 'Golden Foundry', cost: 270, hp: 520, income: 4,
-        spawnInterval: 22000, unit: 'golden_trebuchet',
+        spawnInterval: 15400, unit: 'golden_trebuchet',
         description: 'Constructs ornate but deadly golden trebuchets.'
       },
       {
         id: 'eagle_spire', name: 'Eagle Spire', cost: 210, hp: 360, income: 3,
-        spawnInterval: 17000, unit: 'war_eagle',
+        spawnInterval: 11900, unit: 'war_eagle',
         description: 'Houses trained war eagles for aerial superiority.'
       },
       {
@@ -334,12 +334,12 @@ const CHARACTERS = {
       },
       {
         id: 'arbalist', name: 'Guild Arbalist', type: 'ranged',
-        hp: 36, damage: 17, speed: 33, range: 210, attackSpeed: 2100,
+        hp: 36, damage: 15, speed: 33, range: 210, attackSpeed: 2730,
         description: 'Elite crossbow specialists with piercing bolts'
       },
       {
         id: 'mounted_champion', name: 'Mounted Champion', type: 'cavalry',
-        hp: 100, damage: 17, speed: 70, range: 33, attackSpeed: 1100,
+        hp: 100, damage: 13, speed: 70, range: 33, attackSpeed: 1100,
         description: 'Heavily armored champion riders of the realm'
       },
       {
@@ -381,27 +381,27 @@ const CHARACTERS = {
     buildings: [
       {
         id: 'crypt', name: 'Crypt', cost: 80, hp: 360, income: 2,
-        spawnInterval: 8000, unit: 'skeleton',
+        spawnInterval: 5600, unit: 'skeleton',
         description: 'Raises skeleton warriors from the earth below.'
       },
       {
         id: 'dark_altar', name: 'Dark Altar', cost: 120, hp: 340, income: 2,
-        spawnInterval: 11000, unit: 'plague_archer',
+        spawnInterval: 7700, unit: 'plague_archer',
         description: 'Corrupts souls into plague-bearing archers.'
       },
       {
         id: 'doom_stable', name: 'Doom Stables', cost: 190, hp: 440, income: 3,
-        spawnInterval: 16000, unit: 'death_knight',
+        spawnInterval: 11200, unit: 'death_knight',
         description: 'Summons dread knights upon undead steeds.'
       },
       {
         id: 'bone_forge', name: 'Bone Forge', cost: 230, hp: 500, income: 3,
-        spawnInterval: 20000, unit: 'bone_colossus',
+        spawnInterval: 14000, unit: 'bone_colossus',
         description: 'Assembles colossal constructs from the bones of the fallen.'
       },
       {
         id: 'shadow_aerie', name: 'Shadow Aerie', cost: 180, hp: 320, income: 2,
-        spawnInterval: 15000, unit: 'wraith',
+        spawnInterval: 10500, unit: 'wraith',
         description: 'Unleashes incorporeal wraiths that haunt the skies.'
       },
       {
@@ -418,12 +418,12 @@ const CHARACTERS = {
       },
       {
         id: 'plague_archer', name: 'Plague Archer', type: 'ranged',
-        hp: 28, damage: 12, speed: 35, range: 190, attackSpeed: 1800,
+        hp: 28, damage: 10, speed: 35, range: 190, attackSpeed: 2340,
         description: 'Undead archer whose arrows carry deadly plague'
       },
       {
         id: 'death_knight', name: 'Death Knight', type: 'cavalry',
-        hp: 110, damage: 18, speed: 65, range: 32, attackSpeed: 1200,
+        hp: 110, damage: 13, speed: 65, range: 32, attackSpeed: 1200,
         description: 'Fearsome undead knight on a spectral steed'
       },
       {
@@ -465,27 +465,27 @@ const CHARACTERS = {
     buildings: [
       {
         id: 'grove', name: 'Sentinel Grove', cost: 100, hp: 450, income: 2,
-        spawnInterval: 10000, unit: 'sentinel',
+        spawnInterval: 7000, unit: 'sentinel',
         description: 'Grows woodland sentinels from the heart of the forest.'
       },
       {
         id: 'glade', name: 'Enchanted Glade', cost: 130, hp: 380, income: 2,
-        spawnInterval: 12000, unit: 'elven_archer',
+        spawnInterval: 8400, unit: 'elven_archer',
         description: 'A mystical clearing where elven archers train.'
       },
       {
         id: 'beastiary', name: 'Beastiary', cost: 180, hp: 460, income: 3,
-        spawnInterval: 15000, unit: 'stag_rider',
+        spawnInterval: 10500, unit: 'stag_rider',
         description: 'Tames great stags as mounts for swift riders.'
       },
       {
         id: 'ancient_oak', name: 'Ancient Oak', cost: 250, hp: 650, income: 3,
-        spawnInterval: 24000, unit: 'treant',
+        spawnInterval: 16800, unit: 'treant',
         description: 'Awakens ancient treants from slumbering oaks.'
       },
       {
         id: 'eagle_nest', name: 'Eagle Nest', cost: 200, hp: 370, income: 2,
-        spawnInterval: 17000, unit: 'great_eagle',
+        spawnInterval: 11900, unit: 'great_eagle',
         description: 'Home to great eagles that patrol the forest canopy.'
       },
       {
@@ -502,12 +502,12 @@ const CHARACTERS = {
       },
       {
         id: 'elven_archer', name: 'Elven Archer', type: 'ranged',
-        hp: 34, damage: 16, speed: 36, range: 230, attackSpeed: 1900,
+        hp: 34, damage: 14, speed: 36, range: 230, attackSpeed: 2470,
         description: 'Graceful archers with supernaturally accurate aim'
       },
       {
         id: 'stag_rider', name: 'Stag Rider', type: 'cavalry',
-        hp: 88, damage: 15, speed: 78, range: 30, attackSpeed: 1050,
+        hp: 88, damage: 13, speed: 78, range: 30, attackSpeed: 1050,
         description: 'Swift riders atop great forest stags'
       },
       {
