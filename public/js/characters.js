@@ -1,8 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════
-// Castle Fight - Character, Unit & Building Definitions
+// Castle Fight - Character, Unit, Building, Tower & Hero Definitions
 // ═══════════════════════════════════════════════════════════════════════
 
-// Unit type combat multipliers: attacker type → defender type → damage multiplier
 const COMBAT_MODIFIERS = {
   infantry: { infantry: 1.0, ranged: 0.9, cavalry: 0.7, siege: 1.5, flying: 0.8, building: 0.8, castle: 0.6 },
   ranged:   { infantry: 1.3, ranged: 1.0, cavalry: 0.6, siege: 0.9, flying: 1.2, building: 0.7, castle: 0.5 },
@@ -11,7 +10,6 @@ const COMBAT_MODIFIERS = {
   flying:   { infantry: 0.8, ranged: 1.3, cavalry: 1.1, siege: 1.2, flying: 1.0, building: 0.6, castle: 0.4 }
 };
 
-// Which unit types can target flying units
 const CAN_HIT_FLYING = {
   infantry: true,
   ranged: true,
@@ -29,7 +27,7 @@ const CHARACTERS = {
     name: 'The Northern Lord',
     title: 'Warden of the Frostlands',
     description: 'A stalwart defender of the frozen north. His troops are hardy and resilient, built to hold the line against any assault. Buildings are reinforced with ancient northern stonework.',
-    lore: 'For a thousand years, the Northern Lords have held the frost wall against the darkness. Their soldiers are forged in bitter cold and unyielding honor.',
+    lore: 'For a thousand years, the Northern Lords have held the frost wall against the darkness.',
     color: '#4a6fa5',
     accentColor: '#8fb8de',
     darkColor: '#2a3f65',
@@ -38,6 +36,11 @@ const CHARACTERS = {
       description: 'All buildings have +25% HP',
       type: 'building_hp',
       value: 0.25
+    },
+    hero: {
+      id: 'lord_commander', name: 'Lord Commander', type: 'infantry',
+      hp: 800, damage: 35, speed: 50, range: 40, attackSpeed: 1000,
+      description: 'A battle-hardened commander wielding a Valyrian steel greatsword'
     },
     buildings: [
       {
@@ -64,6 +67,11 @@ const CHARACTERS = {
         id: 'falconry', name: 'Falconry', cost: 200, hp: 380, income: 2,
         spawnInterval: 18000, unit: 'snow_hawk',
         description: 'Trains fierce snow hawks to strike from above.'
+      },
+      {
+        id: 'frost_tower', name: 'Frost Tower', cost: 150, hp: 600, income: 1,
+        isTower: true, towerDamage: 20, towerRange: 280, towerAttackSpeed: 1800,
+        description: 'Defensive tower that fires ice bolts at approaching enemies.'
       }
     ],
     units: [
@@ -103,7 +111,7 @@ const CHARACTERS = {
     name: 'The Dragon Empress',
     title: 'Mother of Flames',
     description: 'Commands the fury of dragonfire. Her forces grow fearsome in the later stages of battle, with powerful fire mages and dragons that dominate the skies.',
-    lore: 'Born amid salt and smoke, the Dragon Empress rose from exile to command the last dragons. Her armies march beneath wings of shadow and flame.',
+    lore: 'Born amid salt and smoke, the Dragon Empress rose from exile to command the last dragons.',
     color: '#c0392b',
     accentColor: '#e74c3c',
     darkColor: '#7b241c',
@@ -112,6 +120,11 @@ const CHARACTERS = {
       description: 'All units deal +12% damage',
       type: 'unit_damage',
       value: 0.12
+    },
+    hero: {
+      id: 'dragon_queen', name: 'Dragon Queen', type: 'ranged',
+      hp: 600, damage: 45, speed: 45, range: 250, attackSpeed: 1800,
+      description: 'Commands dragonfire from afar with devastating magical power'
     },
     buildings: [
       {
@@ -138,6 +151,11 @@ const CHARACTERS = {
         id: 'dragon_roost', name: 'Dragon Roost', cost: 300, hp: 450, income: 4,
         spawnInterval: 28000, unit: 'young_dragon',
         description: 'Nurtures young dragons into terrifying war beasts.'
+      },
+      {
+        id: 'flame_spire', name: 'Flame Spire', cost: 160, hp: 500, income: 1,
+        isTower: true, towerDamage: 28, towerRange: 250, towerAttackSpeed: 2200,
+        description: 'Launches fireballs that scorch enemies from afar.'
       }
     ],
     units: [
@@ -177,7 +195,7 @@ const CHARACTERS = {
     name: 'The Iron Admiral',
     title: 'Lord of the Salted Shores',
     description: 'A brutal warlord from the iron coasts. His forces specialize in destroying structures with powerful siege weapons and overwhelming raider tactics.',
-    lore: 'What is dead may never die. The Iron Admiral pays the iron price for all he takes, leading his reavers in raids that leave nothing but ash and ruin.',
+    lore: 'What is dead may never die. The Iron Admiral pays the iron price for all he takes.',
     color: '#1a8a7a',
     accentColor: '#2ecc71',
     darkColor: '#0e524a',
@@ -186,6 +204,11 @@ const CHARACTERS = {
       description: 'Siege units deal +30% damage to buildings & castle',
       type: 'siege_building_damage',
       value: 0.30
+    },
+    hero: {
+      id: 'admiral_ironhand', name: 'Admiral Ironhand', type: 'infantry',
+      hp: 750, damage: 40, speed: 55, range: 38, attackSpeed: 900,
+      description: 'A relentless sea warrior wielding a massive iron axe'
     },
     buildings: [
       {
@@ -212,6 +235,11 @@ const CHARACTERS = {
         id: 'storm_rookery', name: 'Storm Rookery', cost: 190, hp: 360, income: 2,
         spawnInterval: 16000, unit: 'storm_petrel',
         description: 'Breeds fierce storm birds for aerial harassment.'
+      },
+      {
+        id: 'harpoon_tower', name: 'Harpoon Tower', cost: 140, hp: 550, income: 1,
+        isTower: true, towerDamage: 22, towerRange: 270, towerAttackSpeed: 2000,
+        description: 'Fires iron harpoons at enemies within range.'
       }
     ],
     units: [
@@ -251,7 +279,7 @@ const CHARACTERS = {
     name: 'The Golden Lord',
     title: 'Keeper of the Gilded Vault',
     description: 'Wealth is the ultimate weapon. The Golden Lord\'s buildings generate more income, allowing him to field an ever-growing army of elite mercenaries.',
-    lore: 'A Lannister always pays his debts. The Golden Lord\'s coffers run deeper than any mine, buying loyalty, swords, and dominion over all who oppose him.',
+    lore: 'A Lannister always pays his debts. The Golden Lord\'s coffers run deeper than any mine.',
     color: '#d4a017',
     accentColor: '#f1c40f',
     darkColor: '#7d6010',
@@ -260,6 +288,11 @@ const CHARACTERS = {
       description: 'All buildings generate +50% more gold income',
       type: 'building_income',
       value: 0.50
+    },
+    hero: {
+      id: 'golden_champion', name: 'The Golden Champion', type: 'cavalry',
+      hp: 700, damage: 38, speed: 70, range: 35, attackSpeed: 1000,
+      description: 'An elite mounted knight clad in gilded armor'
     },
     buildings: [
       {
@@ -286,6 +319,11 @@ const CHARACTERS = {
         id: 'eagle_spire', name: 'Eagle Spire', cost: 210, hp: 360, income: 3,
         spawnInterval: 17000, unit: 'war_eagle',
         description: 'Houses trained war eagles for aerial superiority.'
+      },
+      {
+        id: 'gilded_bastion', name: 'Gilded Bastion', cost: 170, hp: 520, income: 1,
+        isTower: true, towerDamage: 24, towerRange: 260, towerAttackSpeed: 1900,
+        description: 'An ornate tower that defends with golden bolts.'
       }
     ],
     units: [
@@ -325,7 +363,7 @@ const CHARACTERS = {
     name: 'The Shadow Priest',
     title: 'Herald of the Endless Night',
     description: 'Commands the forces of darkness and death. Cheap undead units swarm the battlefield in overwhelming numbers, wearing down even the mightiest defenses.',
-    lore: 'The night is dark and full of terrors. The Shadow Priest draws power from beyond the veil, raising legions of the dead to serve an insatiable hunger for conquest.',
+    lore: 'The night is dark and full of terrors. The Shadow Priest draws power from beyond the veil.',
     color: '#8e44ad',
     accentColor: '#bb6bd9',
     darkColor: '#5b2c6f',
@@ -334,6 +372,11 @@ const CHARACTERS = {
       description: 'All buildings spawn units 20% faster',
       type: 'spawn_speed',
       value: 0.20
+    },
+    hero: {
+      id: 'necromancer', name: 'The Necromancer', type: 'ranged',
+      hp: 550, damage: 50, speed: 40, range: 220, attackSpeed: 2000,
+      description: 'A dark sorcerer who drains life with shadowy magic'
     },
     buildings: [
       {
@@ -360,6 +403,11 @@ const CHARACTERS = {
         id: 'shadow_aerie', name: 'Shadow Aerie', cost: 180, hp: 320, income: 2,
         spawnInterval: 15000, unit: 'wraith',
         description: 'Unleashes incorporeal wraiths that haunt the skies.'
+      },
+      {
+        id: 'dark_obelisk', name: 'Dark Obelisk', cost: 130, hp: 450, income: 1,
+        isTower: true, towerDamage: 30, towerRange: 240, towerAttackSpeed: 2400,
+        description: 'Channels dark energy to blast nearby enemies.'
       }
     ],
     units: [
@@ -399,7 +447,7 @@ const CHARACTERS = {
     name: 'The Forest Warden',
     title: 'Guardian of the Ancient Grove',
     description: 'Protector of the old forests. Nature magic heals and sustains troops over time, making them difficult to wear down. A balanced force with excellent staying power.',
-    lore: 'In the heart of the ancient wood, the Forest Warden commands root and branch, beast and bird. The forest itself rises to defend against those who threaten its sacred groves.',
+    lore: 'In the heart of the ancient wood, the Forest Warden commands root and branch, beast and bird.',
     color: '#27ae60',
     accentColor: '#58d68d',
     darkColor: '#1a7a42',
@@ -408,6 +456,11 @@ const CHARACTERS = {
       description: 'All units regenerate 2 HP per second',
       type: 'unit_regen',
       value: 2
+    },
+    hero: {
+      id: 'ancient_guardian', name: 'The Ancient Guardian', type: 'infantry',
+      hp: 900, damage: 30, speed: 45, range: 45, attackSpeed: 1200,
+      description: 'A massive treant spirit that regenerates in battle'
     },
     buildings: [
       {
@@ -434,6 +487,11 @@ const CHARACTERS = {
         id: 'eagle_nest', name: 'Eagle Nest', cost: 200, hp: 370, income: 2,
         spawnInterval: 17000, unit: 'great_eagle',
         description: 'Home to great eagles that patrol the forest canopy.'
+      },
+      {
+        id: 'thornwood_tower', name: 'Thornwood Tower', cost: 150, hp: 580, income: 1,
+        isTower: true, towerDamage: 18, towerRange: 290, towerAttackSpeed: 1600,
+        description: 'Living tower that fires enchanted thorns rapidly.'
       }
     ],
     units: [
@@ -466,7 +524,6 @@ const CHARACTERS = {
   }
 };
 
-// Castle definition (same for all characters)
 const CASTLE_DEF = {
   hp: 8000,
   maxHp: 8000,
@@ -474,12 +531,12 @@ const CASTLE_DEF = {
   height: 140
 };
 
-// Game constants
 const GAME_CONSTANTS = {
   MAP_WIDTH: 3200,
   MAP_HEIGHT: 1600,
-  BASE_INCOME: 8,          // Gold per income tick
-  INCOME_INTERVAL: 5000,   // 5 seconds between income ticks
+  BASE_INCOME: 8,
+  INCOME_INTERVAL: 5000,
+  INTEREST_RATE: 0.02,
   STARTING_GOLD: 200,
   CASTLE_HP: 8000,
   RESCUE_STRIKE_RADIUS: 500,
@@ -496,11 +553,14 @@ const GAME_CONSTANTS = {
   BASE_MIN_Y: 100,
   BASE_MAX_Y: 1500,
   BUILDING_GRID_SIZE: 80,
-  UNIT_DETECTION_RANGE: 200,
+  UNIT_DETECTION_RANGE: 300,
+  FOG_CASTLE_RANGE: 450,
+  FOG_BUILDING_RANGE: 300,
+  FOG_UNIT_RANGE: 250,
+  FOG_HERO_RANGE: 400,
   TICK_RATE: 20
 };
 
-// Export for Node.js (server) or make available globally (browser)
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { CHARACTERS, COMBAT_MODIFIERS, CAN_HIT_FLYING, CASTLE_DEF, GAME_CONSTANTS };
 }

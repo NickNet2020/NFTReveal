@@ -419,7 +419,19 @@ body {
   min-width: 100px;
 }
 
+.castle-faction {
+  font-family: 'Cinzel', serif;
+  font-size: 10px;
+  color: var(--gold-light);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-style: italic;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
 .castle-hp-display.enemy .castle-label { text-align: right; }
+.castle-hp-display.enemy .castle-faction { text-align: right; }
 
 .hp-bar-container {
   position: relative;

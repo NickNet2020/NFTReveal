@@ -9,20 +9,14 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
 
-// ═══════════════════════════════════════════════════════════════════════
-// Game Constants
-// ═══════════════════════════════════════════════════════════════════════
 const GC = GAME_CONSTANTS;
 const TICK_MS = 1000 / GC.TICK_RATE;
-const BOT_MATCH_DELAY = 4000; // Wait 4s before matching with bot
+const BOT_MATCH_DELAY = 4000;
 
-// ═══════════════════════════════════════════════════════════════════════
-// Game State
-// ═══════════════════════════════════════════════════════════════════════
 let nextId = 1;
-const matchQueue = [];        // Players waiting for a match
-const gameRooms = new Map();  // roomId -> GameRoom
-const playerRooms = new Map(); // socketId -> roomId
+const matchQueue = [];
+const gameRooms = new Map();
+const playerRooms = new Map();
 
 function genId() { return nextId++; }
 function dist(a, b) { return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2); }
@@ -30,43 +24,27 @@ function angleTo(a, b) { return Math.atan2(b.y - a.y, b.x - a.x); }
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Map Decorations (trees, rocks for visual richness)
+// Map Decorations
 // ═══════════════════════════════════════════════════════════════════════
 function generateDecorations() {
   const decorations = [];
-  // Trees along borders and between lanes
   for (let i = 0; i < 80; i++) {
     let x, y;
     const zone = Math.random();
     if (zone < 0.3) {
-      // Top border
       x = Math.random() * GC.MAP_WIDTH;
       y = Math.random() * 120 + 20;
     } else if (zone < 0.6) {
-      // Bottom border
       x = Math.random() * GC.MAP_WIDTH;
       y = GC.MAP_HEIGHT - Math.random() * 120 - 20;
     } else {
-      // Middle area between lanes
       x = 700 + Math.random() * 1800;
       y = GC.LANE_TOP_Y + 120 + Math.random() * (GC.LANE_BOT_Y - GC.LANE_TOP_Y - 240);
     }
-    decorations.push({
-      type: 'tree',
-      x, y,
-      variant: Math.floor(Math.random() * 4),
-      scale: 0.7 + Math.random() * 0.6
-    });
+    decorations.push({ type: 'tree', x, y, variant: Math.floor(Math.random() * 4), scale: 0.7 + Math.random() * 0.6 });
   }
-  // Rocks scattered around
   for (let i = 0; i < 40; i++) {
-    decorations.push({
-      type: 'rock',
-      x: Math.random() * GC.MAP_WIDTH,
-      y: Math.random() * GC.MAP_HEIGHT,
-      variant: Math.floor(Math.random() * 3),
-      scale: 0.5 + Math.random() * 0.5
-    });
+    decorations.push({ type: 'rock', x: Math.random() * GC.MAP_WIDTH, y: Math.random() * GC.MAP_HEIGHT, variant: Math.floor(Math.random() * 3), scale: 0.5 + Math.random() * 0.5 });
   }
   return decorations;
 }
@@ -74,48 +52,73 @@ function generateDecorations() {
 const sharedDecorations = generateDecorations();
 
 // ═══════════════════════════════════════════════════════════════════════
+// Fog of War
+// ═══════════════════════════════════════════════════════════════════════
+function isVisibleTo(room, side, wx, wy) {
+  const castle = getCastle(room, side);
+  if (dist({ x: wx, y: wy }, castle) < GC.FOG_CASTLE_RANGE) return true;
+
+  for (const [, b] of room.buildings) {
+    if (b.side !== side || b.hp <= 0) continue;
+    if (dist({ x: wx, y: wy }, b) < GC.FOG_BUILDING_RANGE) return true;
+  }
+
+  for (const [, u] of room.units) {
+    if (u.side !== side) continue;
+    if (dist({ x: wx, y: wy }, u) < GC.FOG_UNIT_RANGE) return true;
+  }
+
+  const hero = side === 'left' ? room.hero1 : room.hero2;
+  if (hero && hero.hp > 0 && dist({ x: wx, y: wy }, hero) < GC.FOG_HERO_RANGE) return true;
+
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Game Room
 // ═══════════════════════════════════════════════════════════════════════
 function createGameRoom(p1Socket, p1Char, p2Socket, p2Char, p2IsBot = false) {
   const roomId = 'room_' + genId();
+  const charData1 = CHARACTERS[p1Char];
+  const charData2 = CHARACTERS[p2Char];
 
   const room = {
     id: roomId,
-    state: 'playing', // playing, finished
+    state: 'playing',
     startTime: Date.now(),
     lastIncomeTime: Date.now(),
 
     player1: {
       socketId: p1Socket ? p1Socket.id : null,
       characterId: p1Char,
-      character: CHARACTERS[p1Char],
+      character: charData1,
       gold: GC.STARTING_GOLD,
       income: GC.BASE_INCOME,
       side: 'left',
       rescueStrikeUsed: false,
       isBot: false,
-      name: p1Socket ? (p1Socket.playerName || 'Player 1') : 'Player 1'
+      name: p1Socket ? (p1Socket.playerName || 'Player 1') : 'Player 1',
+      kills: 0
     },
     player2: {
       socketId: p2Socket ? p2Socket.id : null,
       characterId: p2Char,
-      character: CHARACTERS[p2Char],
+      character: charData2,
       gold: GC.STARTING_GOLD,
       income: GC.BASE_INCOME,
       side: 'right',
       rescueStrikeUsed: false,
       isBot: p2IsBot,
-      name: p2IsBot ? 'AI Commander' : (p2Socket ? (p2Socket.playerName || 'Player 2') : 'Player 2')
+      name: p2IsBot ? 'AI Commander' : (p2Socket ? (p2Socket.playerName || 'Player 2') : 'Player 2'),
+      kills: 0
     },
 
-    castle1: {
-      id: genId(), x: GC.P1_CASTLE_X, y: GC.CASTLE_Y,
-      hp: GC.CASTLE_HP, maxHp: GC.CASTLE_HP, side: 'left'
-    },
-    castle2: {
-      id: genId(), x: GC.P2_CASTLE_X, y: GC.CASTLE_Y,
-      hp: GC.CASTLE_HP, maxHp: GC.CASTLE_HP, side: 'right'
-    },
+    castle1: { id: genId(), x: GC.P1_CASTLE_X, y: GC.CASTLE_Y, hp: GC.CASTLE_HP, maxHp: GC.CASTLE_HP, side: 'left' },
+    castle2: { id: genId(), x: GC.P2_CASTLE_X, y: GC.CASTLE_Y, hp: GC.CASTLE_HP, maxHp: GC.CASTLE_HP, side: 'right' },
+
+    // Heroes
+    hero1: createHero(charData1, 'left', GC.P1_CASTLE_X + 60, GC.CASTLE_Y),
+    hero2: createHero(charData2, 'right', GC.P2_CASTLE_X - 60, GC.CASTLE_Y),
 
     units: new Map(),
     buildings: new Map(),
@@ -123,174 +126,134 @@ function createGameRoom(p1Socket, p1Char, p2Socket, p2Char, p2IsBot = false) {
     damageNumbers: [],
     effects: [],
 
-    // Bot AI state
-    botState: p2IsBot ? {
-      nextBuildTime: Date.now() + 3000,
-      buildOrder: [],
-      phase: 'early' // early, mid, late
-    } : null,
-
+    botState: p2IsBot ? { nextBuildTime: Date.now() + 3000, phase: 'early', heroMoveTime: 0 } : null,
     winner: null,
     winTime: null
   };
 
-  // Apply character passives
   applyPassives(room);
-
   gameRooms.set(roomId, room);
 
-  if (p1Socket) {
-    playerRooms.set(p1Socket.id, roomId);
-    p1Socket.join(roomId);
-  }
-  if (p2Socket && !p2IsBot) {
-    playerRooms.set(p2Socket.id, roomId);
-    p2Socket.join(roomId);
-  }
+  if (p1Socket) { playerRooms.set(p1Socket.id, roomId); p1Socket.join(roomId); }
+  if (p2Socket && !p2IsBot) { playerRooms.set(p2Socket.id, roomId); p2Socket.join(roomId); }
 
-  // Send game start to both players
   const startData = {
-    roomId,
-    mapWidth: GC.MAP_WIDTH,
-    mapHeight: GC.MAP_HEIGHT,
-    decorations: sharedDecorations,
-    characters: CHARACTERS,
-    constants: GC
+    roomId, mapWidth: GC.MAP_WIDTH, mapHeight: GC.MAP_HEIGHT,
+    decorations: sharedDecorations, characters: CHARACTERS, constants: GC
   };
 
   if (p1Socket) {
     p1Socket.emit('gameStart', {
-      ...startData,
-      side: 'left',
-      yourCharacter: p1Char,
-      opponentCharacter: p2Char,
+      ...startData, side: 'left', yourCharacter: p1Char, opponentCharacter: p2Char,
       opponentName: room.player2.name
     });
   }
   if (p2Socket && !p2IsBot) {
     p2Socket.emit('gameStart', {
-      ...startData,
-      side: 'right',
-      yourCharacter: p2Char,
-      opponentCharacter: p1Char,
+      ...startData, side: 'right', yourCharacter: p2Char, opponentCharacter: p1Char,
       opponentName: room.player1.name
     });
   }
 
-  console.log(`Game room ${roomId} created: ${room.player1.name} (${p1Char}) vs ${room.player2.name} (${p2Char})`);
+  console.log(`Game room ${roomId}: ${room.player1.name} (${p1Char}) vs ${room.player2.name} (${p2Char})`);
   return room;
 }
 
-function applyPassives(room) {
-  // Passives are applied during gameplay calculations, not stored permanently
+function createHero(charData, side, x, y) {
+  if (!charData || !charData.hero) return null;
+  const h = charData.hero;
+  return {
+    id: genId(),
+    typeId: h.id,
+    unitType: h.type,
+    side,
+    characterId: charData.id,
+    x, y,
+    hp: h.hp, maxHp: h.hp,
+    damage: h.damage,
+    speed: h.speed,
+    range: h.range,
+    attackSpeed: h.attackSpeed,
+    lastAttackTime: 0,
+    targetId: null,
+    targetType: null,
+    moveTargetX: null,
+    moveTargetY: null,
+    state: 'idle',
+    isHero: true,
+    name: h.name
+  };
 }
 
-function getPlayerData(room, side) {
-  return side === 'left' ? room.player1 : room.player2;
-}
+function applyPassives(room) {}
 
-function getEnemyData(room, side) {
-  return side === 'left' ? room.player2 : room.player1;
-}
-
-function getCastle(room, side) {
-  return side === 'left' ? room.castle1 : room.castle2;
-}
-
-function getEnemyCastle(room, side) {
-  return side === 'left' ? room.castle2 : room.castle1;
-}
+function getPlayerData(room, side) { return side === 'left' ? room.player1 : room.player2; }
+function getEnemyData(room, side) { return side === 'left' ? room.player2 : room.player1; }
+function getCastle(room, side) { return side === 'left' ? room.castle1 : room.castle2; }
+function getEnemyCastle(room, side) { return side === 'left' ? room.castle2 : room.castle1; }
+function getHero(room, side) { return side === 'left' ? room.hero1 : room.hero2; }
 
 // ═══════════════════════════════════════════════════════════════════════
 // Building Placement
 // ═══════════════════════════════════════════════════════════════════════
 function canPlaceBuilding(room, side, x, y) {
-  // Check if within base area
   if (side === 'left') {
     if (x < GC.P1_BASE_MIN_X || x > GC.P1_BASE_MAX_X) return false;
   } else {
     if (x < GC.P2_BASE_MIN_X || x > GC.P2_BASE_MAX_X) return false;
   }
   if (y < GC.BASE_MIN_Y || y > GC.BASE_MAX_Y) return false;
-
-  // Check collision with existing buildings
   for (const [, b] of room.buildings) {
     if (dist({ x, y }, b) < GC.BUILDING_GRID_SIZE) return false;
   }
-
-  // Check collision with castles
-  const castle = getCastle(room, side);
-  if (dist({ x, y }, castle) < 120) return false;
-
+  if (dist({ x, y }, getCastle(room, side)) < 120) return false;
   return true;
 }
 
 function placeBuilding(room, side, buildingTypeId, x, y) {
   const playerData = getPlayerData(room, side);
   const charData = playerData.character;
-
-  // Find the building definition
   const buildingDef = charData.buildings.find(b => b.id === buildingTypeId);
   if (!buildingDef) return { success: false, reason: 'Invalid building type' };
+  if (playerData.gold < buildingDef.cost) return { success: false, reason: 'Not enough gold' };
 
-  if (playerData.gold < buildingDef.cost) {
-    return { success: false, reason: 'Not enough gold' };
-  }
-
-  // Snap to grid
   const gx = Math.round(x / GC.BUILDING_GRID_SIZE) * GC.BUILDING_GRID_SIZE;
   const gy = Math.round(y / GC.BUILDING_GRID_SIZE) * GC.BUILDING_GRID_SIZE;
+  if (!canPlaceBuilding(room, side, gx, gy)) return { success: false, reason: 'Cannot build here' };
 
-  if (!canPlaceBuilding(room, side, gx, gy)) {
-    return { success: false, reason: 'Cannot build here' };
-  }
-
-  // Apply building HP passive
   let hp = buildingDef.hp;
-  if (charData.passive.type === 'building_hp') {
-    hp = Math.floor(hp * (1 + charData.passive.value));
-  }
+  if (charData.passive.type === 'building_hp') hp = Math.floor(hp * (1 + charData.passive.value));
 
   const building = {
-    id: genId(),
-    typeId: buildingTypeId,
-    side,
-    x: gx, y: gy,
+    id: genId(), typeId: buildingTypeId, side, x: gx, y: gy,
     hp, maxHp: hp,
     income: buildingDef.income,
-    spawnInterval: buildingDef.spawnInterval,
-    unitType: buildingDef.unit,
+    isTower: buildingDef.isTower || false,
+    towerDamage: buildingDef.towerDamage || 0,
+    towerRange: buildingDef.towerRange || 0,
+    towerAttackSpeed: buildingDef.towerAttackSpeed || 0,
+    lastTowerAttack: 0,
+    spawnInterval: buildingDef.spawnInterval || 0,
+    unitType: buildingDef.unit || null,
     lastSpawnTime: Date.now(),
     constructionTime: Date.now(),
     constructed: false,
-    constructionDuration: 2000, // 2 seconds to build
+    constructionDuration: 2000,
     characterId: playerData.characterId
   };
 
-  // Apply spawn speed passive
-  if (charData.passive.type === 'spawn_speed') {
+  if (!building.isTower && charData.passive.type === 'spawn_speed') {
     building.spawnInterval = Math.floor(building.spawnInterval * (1 - charData.passive.value));
   }
 
   playerData.gold -= buildingDef.cost;
 
-  // Apply income passive
   let incomeBonus = buildingDef.income;
-  if (charData.passive.type === 'building_income') {
-    incomeBonus = Math.floor(incomeBonus * (1 + charData.passive.value));
-  }
+  if (charData.passive.type === 'building_income') incomeBonus = Math.floor(incomeBonus * (1 + charData.passive.value));
   playerData.income += incomeBonus;
 
   room.buildings.set(building.id, building);
-
-  // Add construction effect
-  room.effects.push({
-    type: 'construction',
-    x: gx, y: gy,
-    time: Date.now(),
-    duration: 2000
-  });
-
+  room.effects.push({ type: 'construction', x: gx, y: gy, time: Date.now(), duration: 2000 });
   return { success: true, building };
 }
 
@@ -303,39 +266,21 @@ function spawnUnitFromBuilding(room, building) {
   const unitDef = charData.units.find(u => u.id === building.unitType);
   if (!unitDef) return;
 
-  // Determine lane based on building Y position
   const midY = (GC.LANE_TOP_Y + GC.LANE_BOT_Y) / 2;
   const lane = building.y < midY ? 'top' : 'bottom';
   const laneY = lane === 'top' ? GC.LANE_TOP_Y : GC.LANE_BOT_Y;
 
-  // Apply damage passive
   let damage = unitDef.damage;
-  if (charData.passive.type === 'unit_damage') {
-    damage = Math.floor(damage * (1 + charData.passive.value));
-  }
+  if (charData.passive.type === 'unit_damage') damage = Math.floor(damage * (1 + charData.passive.value));
 
   const unit = {
-    id: genId(),
-    typeId: unitDef.id,
-    unitType: unitDef.type, // infantry, ranged, cavalry, siege, flying
-    side: building.side,
+    id: genId(), typeId: unitDef.id, unitType: unitDef.type, side: building.side,
     characterId: playerData.characterId,
-    x: building.x + (building.side === 'left' ? 30 : -30),
-    y: building.y,
-    hp: unitDef.hp,
-    maxHp: unitDef.hp,
-    damage,
-    speed: unitDef.speed,
-    range: unitDef.range,
-    attackSpeed: unitDef.attackSpeed,
-    lastAttackTime: 0,
-    targetId: null,
-    targetType: null, // 'unit', 'building', 'castle'
-    state: 'marching', // marching, fighting, moving_to_lane
-    lane,
-    laneY,
-    reachedLane: false,
-    spawnTime: Date.now()
+    x: building.x + (building.side === 'left' ? 30 : -30), y: building.y,
+    hp: unitDef.hp, maxHp: unitDef.hp, damage, speed: unitDef.speed,
+    range: unitDef.range, attackSpeed: unitDef.attackSpeed, lastAttackTime: 0,
+    targetId: null, targetType: null,
+    state: 'marching', lane, laneY, reachedLane: false, spawnTime: Date.now()
   };
 
   room.units.set(unit.id, unit);
@@ -352,149 +297,263 @@ function getDamageMultiplier(attackerType, defenderType) {
 }
 
 function canAttackTarget(attackerUnitType, targetUnitType) {
-  if (targetUnitType === 'flying') {
-    return CAN_HIT_FLYING[attackerUnitType] || false;
-  }
+  if (targetUnitType === 'flying') return CAN_HIT_FLYING[attackerUnitType] || false;
   return true;
 }
 
+// Fixed targeting: units always have the enemy castle as ultimate goal
 function findTarget(room, unit) {
   let nearest = null;
   let nearestDist = GC.UNIT_DETECTION_RANGE;
   const enemySide = unit.side === 'left' ? 'right' : 'left';
 
-  // Check enemy units
+  // 1. Check nearby enemy units
   for (const [, other] of room.units) {
-    if (other.side === unit.side) continue;
-    if (other.hp <= 0) continue;
+    if (other.side === unit.side || other.hp <= 0) continue;
     if (!canAttackTarget(unit.unitType, other.unitType)) continue;
-
     const d = dist(unit, other);
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearest = { id: other.id, type: 'unit', x: other.x, y: other.y };
-    }
+    if (d < nearestDist) { nearestDist = d; nearest = { id: other.id, type: 'unit' }; }
   }
 
-  // Check enemy buildings
+  // 2. Check enemy hero
+  const enemyHero = getHero(room, enemySide);
+  if (enemyHero && enemyHero.hp > 0) {
+    const d = dist(unit, enemyHero);
+    if (d < nearestDist) { nearestDist = d; nearest = { id: enemyHero.id, type: 'hero' }; }
+  }
+
+  if (nearest) return nearest;
+
+  // 3. Check nearby enemy buildings
   for (const [, b] of room.buildings) {
-    if (b.side === unit.side) continue;
-    if (b.hp <= 0) continue;
-
+    if (b.side === unit.side || b.hp <= 0) continue;
     const d = dist(unit, b);
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearest = { id: b.id, type: 'building', x: b.x, y: b.y };
-    }
+    if (d < nearestDist) { nearestDist = d; nearest = { id: b.id, type: 'building' }; }
   }
 
-  // Check enemy castle (always a valid target if in range)
+  if (nearest) return nearest;
+
+  // 4. ALWAYS fall back to enemy castle (no range limit)
   const enemyCastle = getEnemyCastle(room, unit.side);
   if (enemyCastle.hp > 0) {
-    const d = dist(unit, enemyCastle);
-    if (d < nearestDist + 60) { // Slightly larger detection for castle
-      nearestDist = d;
-      nearest = { id: enemyCastle.id, type: 'castle', x: enemyCastle.x, y: enemyCastle.y };
-    }
+    return { id: enemyCastle.id, type: 'castle' };
   }
 
-  return nearest;
+  return null;
 }
 
-function dealUnitDamage(room, unit, targetInfo) {
-  const playerData = getPlayerData(room, unit.side);
-  const charData = playerData.character;
-
-  let target;
-  let defenderType = 'building';
-
-  if (targetInfo.type === 'unit') {
-    target = room.units.get(targetInfo.id);
-    if (target) defenderType = target.unitType;
-  } else if (targetInfo.type === 'building') {
-    target = room.buildings.get(targetInfo.id);
-    defenderType = 'building';
-  } else if (targetInfo.type === 'castle') {
-    target = targetInfo.id === room.castle1.id ? room.castle1 : room.castle2;
-    defenderType = 'castle';
+function getTargetPos(room, targetInfo) {
+  if (targetInfo.type === 'unit') return room.units.get(targetInfo.id);
+  if (targetInfo.type === 'building') return room.buildings.get(targetInfo.id);
+  if (targetInfo.type === 'hero') {
+    if (room.hero1 && room.hero1.id === targetInfo.id) return room.hero1;
+    if (room.hero2 && room.hero2.id === targetInfo.id) return room.hero2;
   }
+  if (targetInfo.type === 'castle') {
+    return targetInfo.id === room.castle1.id ? room.castle1 : room.castle2;
+  }
+  return null;
+}
 
+function dealDamage(room, attacker, targetInfo, isHero) {
+  const playerData = getPlayerData(room, attacker.side);
+  const charData = playerData.character;
+  let target = getTargetPos(room, targetInfo);
   if (!target || target.hp <= 0) return;
 
-  // Calculate damage with combat modifiers
-  let dmg = unit.damage * getDamageMultiplier(unit.unitType, defenderType);
+  let defenderType = 'building';
+  if (targetInfo.type === 'unit') defenderType = target.unitType;
+  else if (targetInfo.type === 'hero') defenderType = target.unitType;
+  else if (targetInfo.type === 'castle') defenderType = 'castle';
 
-  // Apply siege building damage passive for Iron Admiral
-  if (charData.passive.type === 'siege_building_damage' && unit.unitType === 'siege' &&
-      (defenderType === 'building' || defenderType === 'castle')) {
-    dmg *= (1 + charData.passive.value);
+  let dmg = attacker.damage;
+  if (!isHero) {
+    dmg *= getDamageMultiplier(attacker.unitType, defenderType);
+    if (charData.passive.type === 'siege_building_damage' && attacker.unitType === 'siege' &&
+        (defenderType === 'building' || defenderType === 'castle')) {
+      dmg *= (1 + charData.passive.value);
+    }
+  } else {
+    // Heroes deal full damage to everything
+    dmg *= 1.5;
   }
 
   dmg = Math.max(1, Math.floor(dmg));
   target.hp -= dmg;
 
-  // Create damage number
-  room.damageNumbers.push({
-    x: target.x, y: target.y - 20,
-    value: dmg, time: Date.now(), side: unit.side
-  });
+  room.damageNumbers.push({ x: target.x, y: target.y - 20, value: dmg, time: Date.now(), side: attacker.side });
 
-  // Create projectile for ranged units
-  if (unit.unitType === 'ranged' || unit.unitType === 'flying') {
+  // Projectile for ranged
+  if (attacker.unitType === 'ranged' || attacker.unitType === 'flying') {
     room.projectiles.push({
-      x: unit.x, y: unit.y,
-      tx: target.x, ty: target.y,
-      time: Date.now(),
-      side: unit.side,
-      characterId: unit.characterId
+      x: attacker.x, y: attacker.y, tx: target.x, ty: target.y,
+      time: Date.now(), side: attacker.side, characterId: attacker.characterId
     });
   }
 
-  // Handle death
   if (target.hp <= 0) {
-    if (targetInfo.type === 'unit') {
-      // Remove dead unit
-      room.units.delete(targetInfo.id);
-      room.effects.push({
-        type: 'death', x: target.x, y: target.y,
-        unitType: target.unitType, time: Date.now(), duration: 1000
-      });
-    } else if (targetInfo.type === 'building') {
-      // Remove building and reduce income
-      const buildingOwner = getPlayerData(room, target.side);
-      const bDef = buildingOwner.character.buildings.find(b => b.id === target.typeId);
-      if (bDef) {
-        let incomeReduction = bDef.income;
-        if (buildingOwner.character.passive.type === 'building_income') {
-          incomeReduction = Math.floor(incomeReduction * (1 + buildingOwner.character.passive.value));
-        }
-        buildingOwner.income = Math.max(GC.BASE_INCOME, buildingOwner.income - incomeReduction);
+    handleDeath(room, targetInfo, target, attacker);
+  }
+}
+
+function handleDeath(room, targetInfo, target, attacker) {
+  const attackerOwner = getPlayerData(room, attacker.side);
+
+  if (targetInfo.type === 'unit') {
+    attackerOwner.kills++;
+    room.units.delete(targetInfo.id);
+    room.effects.push({ type: 'death', x: target.x, y: target.y, unitType: target.unitType, time: Date.now(), duration: 1000 });
+  } else if (targetInfo.type === 'hero') {
+    attackerOwner.kills++;
+    room.effects.push({ type: 'hero_death', x: target.x, y: target.y, time: Date.now(), duration: 2000 });
+    // Hero stays dead - set hp to 0
+  } else if (targetInfo.type === 'building') {
+    const buildingOwner = getPlayerData(room, target.side);
+    const bDef = buildingOwner.character.buildings.find(b => b.id === target.typeId);
+    if (bDef) {
+      let incomeReduction = bDef.income;
+      if (buildingOwner.character.passive.type === 'building_income') {
+        incomeReduction = Math.floor(incomeReduction * (1 + buildingOwner.character.passive.value));
       }
-      room.buildings.delete(targetInfo.id);
-      room.effects.push({
-        type: 'building_destroy', x: target.x, y: target.y,
-        time: Date.now(), duration: 1500
+      buildingOwner.income = Math.max(GC.BASE_INCOME, buildingOwner.income - incomeReduction);
+    }
+    room.buildings.delete(targetInfo.id);
+    room.effects.push({ type: 'building_destroy', x: target.x, y: target.y, time: Date.now(), duration: 1500 });
+  } else if (targetInfo.type === 'castle') {
+    room.winner = attacker.side;
+    room.winTime = Date.now();
+    room.state = 'finished';
+    const winnerData = getPlayerData(room, attacker.side);
+    const loserData = getEnemyData(room, attacker.side);
+    io.to(room.id).emit('gameOver', {
+      winner: attacker.side, winnerName: winnerData.name, winnerCharacter: winnerData.characterId,
+      loserName: loserData.name, loserCharacter: loserData.characterId,
+      duration: Date.now() - room.startTime, winnerKills: winnerData.kills, loserKills: loserData.kills
+    });
+    console.log(`Game ${room.id} over! ${winnerData.name} wins!`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Tower Attack Logic
+// ═══════════════════════════════════════════════════════════════════════
+function updateTowers(room, now) {
+  for (const [, building] of room.buildings) {
+    if (!building.isTower || !building.constructed || building.hp <= 0) continue;
+    if (now - building.lastTowerAttack < building.towerAttackSpeed) continue;
+
+    // Find nearest enemy in range
+    let nearestEnemy = null;
+    let nearestDist = building.towerRange;
+    const enemySide = building.side === 'left' ? 'right' : 'left';
+
+    for (const [, u] of room.units) {
+      if (u.side === building.side || u.hp <= 0) continue;
+      const d = dist(building, u);
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = u; }
+    }
+
+    // Check enemy hero
+    const enemyHero = getHero(room, enemySide);
+    if (enemyHero && enemyHero.hp > 0) {
+      const d = dist(building, enemyHero);
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = enemyHero; }
+    }
+
+    if (nearestEnemy) {
+      building.lastTowerAttack = now;
+      const dmg = Math.max(1, Math.floor(building.towerDamage));
+      nearestEnemy.hp -= dmg;
+
+      room.damageNumbers.push({ x: nearestEnemy.x, y: nearestEnemy.y - 20, value: dmg, time: now, side: building.side });
+      room.projectiles.push({
+        x: building.x, y: building.y - 20, tx: nearestEnemy.x, ty: nearestEnemy.y,
+        time: now, side: building.side, characterId: building.characterId, isTower: true
       });
-    } else if (targetInfo.type === 'castle') {
-      // Castle destroyed - game over!
-      const winnerSide = unit.side;
-      room.winner = winnerSide;
-      room.winTime = Date.now();
-      room.state = 'finished';
 
-      const winnerData = getPlayerData(room, winnerSide);
-      const loserData = getEnemyData(room, winnerSide);
+      if (nearestEnemy.hp <= 0) {
+        if (nearestEnemy.isHero) {
+          room.effects.push({ type: 'hero_death', x: nearestEnemy.x, y: nearestEnemy.y, time: now, duration: 2000 });
+        } else {
+          const attackerOwner = getPlayerData(room, building.side);
+          attackerOwner.kills++;
+          room.units.delete(nearestEnemy.id);
+          room.effects.push({ type: 'death', x: nearestEnemy.x, y: nearestEnemy.y, unitType: nearestEnemy.unitType, time: now, duration: 1000 });
+        }
+      }
+    }
+  }
+}
 
-      io.to(room.id).emit('gameOver', {
-        winner: winnerSide,
-        winnerName: winnerData.name,
-        winnerCharacter: winnerData.characterId,
-        loserName: loserData.name,
-        loserCharacter: loserData.characterId,
-        duration: Date.now() - room.startTime
-      });
+// ═══════════════════════════════════════════════════════════════════════
+// Hero Update
+// ═══════════════════════════════════════════════════════════════════════
+function updateHero(room, hero, now, dt) {
+  if (!hero || hero.hp <= 0) return;
 
-      console.log(`Game ${room.id} over! ${winnerData.name} wins!`);
+  const playerData = getPlayerData(room, hero.side);
+  const charData = playerData.character;
+
+  // Regeneration passive for Forest Warden hero
+  if (charData.passive.type === 'unit_regen' && hero.hp < hero.maxHp) {
+    hero.hp = Math.min(hero.maxHp, hero.hp + charData.passive.value * dt);
+  }
+
+  // Move toward move target
+  if (hero.moveTargetX !== null && hero.moveTargetY !== null) {
+    const dx = hero.moveTargetX - hero.x;
+    const dy = hero.moveTargetY - hero.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d > 10) {
+      hero.x += (dx / d) * hero.speed * dt;
+      hero.y += (dy / d) * hero.speed * dt;
+      hero.x = clamp(hero.x, 20, GC.MAP_WIDTH - 20);
+      hero.y = clamp(hero.y, 20, GC.MAP_HEIGHT - 20);
+      hero.state = 'moving';
+    } else {
+      hero.moveTargetX = null;
+      hero.moveTargetY = null;
+      hero.state = 'idle';
+    }
+  }
+
+  // Auto-attack nearest enemy in range
+  let nearestEnemy = null;
+  let nearestDist = hero.range + 50;
+  const enemySide = hero.side === 'left' ? 'right' : 'left';
+
+  for (const [, u] of room.units) {
+    if (u.side === hero.side || u.hp <= 0) continue;
+    const d = dist(hero, u);
+    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: u.id, type: 'unit', target: u }; }
+  }
+
+  // Check enemy hero
+  const enemyHero = getHero(room, enemySide);
+  if (enemyHero && enemyHero.hp > 0) {
+    const d = dist(hero, enemyHero);
+    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: enemyHero.id, type: 'hero', target: enemyHero }; }
+  }
+
+  // Check enemy buildings
+  for (const [, b] of room.buildings) {
+    if (b.side === hero.side || b.hp <= 0) continue;
+    const d = dist(hero, b);
+    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: b.id, type: 'building', target: b }; }
+  }
+
+  // Check enemy castle
+  const eCastle = getEnemyCastle(room, hero.side);
+  if (eCastle.hp > 0) {
+    const d = dist(hero, eCastle);
+    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: eCastle.id, type: 'castle', target: eCastle }; }
+  }
+
+  if (nearestEnemy && nearestDist <= hero.range + 10) {
+    if (now - hero.lastAttackTime >= hero.attackSpeed) {
+      hero.lastAttackTime = now;
+      hero.state = 'fighting';
+      dealDamage(room, hero, nearestEnemy, true);
     }
   }
 }
@@ -505,36 +564,17 @@ function dealUnitDamage(room, unit, targetInfo) {
 function executeRescueStrike(room, side) {
   const playerData = getPlayerData(room, side);
   if (playerData.rescueStrikeUsed) return false;
-
   playerData.rescueStrikeUsed = true;
   const castle = getCastle(room, side);
 
-  // Kill all enemy units near the castle
-  const killed = [];
   for (const [id, unit] of room.units) {
     if (unit.side !== side && dist(unit, castle) < GC.RESCUE_STRIKE_RADIUS) {
-      killed.push({ x: unit.x, y: unit.y, unitType: unit.unitType });
       room.units.delete(id);
     }
   }
 
-  // Big visual effect
-  room.effects.push({
-    type: 'rescue_strike',
-    x: castle.x, y: castle.y,
-    radius: GC.RESCUE_STRIKE_RADIUS,
-    time: Date.now(),
-    duration: 2000,
-    killed: killed.length
-  });
-
-  io.to(room.id).emit('rescueStrike', {
-    side,
-    x: castle.x, y: castle.y,
-    radius: GC.RESCUE_STRIKE_RADIUS,
-    killed: killed.length
-  });
-
+  room.effects.push({ type: 'rescue_strike', x: castle.x, y: castle.y, radius: GC.RESCUE_STRIKE_RADIUS, time: Date.now(), duration: 2000 });
+  io.to(room.id).emit('rescueStrike', { side, x: castle.x, y: castle.y, radius: GC.RESCUE_STRIKE_RADIUS });
   return true;
 }
 
@@ -543,85 +583,65 @@ function executeRescueStrike(room, side) {
 // ═══════════════════════════════════════════════════════════════════════
 function botThink(room) {
   if (room.state !== 'playing' || !room.botState) return;
-
   const bot = room.player2;
   const botChar = bot.character;
   const now = Date.now();
   const elapsed = now - room.startTime;
 
-  // Determine phase
   if (elapsed > 300000) room.botState.phase = 'late';
   else if (elapsed > 120000) room.botState.phase = 'mid';
 
-  if (now < room.botState.nextBuildTime) return;
-
-  // Count buildings by type
-  const myBuildings = {};
-  let totalBuildings = 0;
-  for (const [, b] of room.buildings) {
-    if (b.side === 'right') {
-      myBuildings[b.typeId] = (myBuildings[b.typeId] || 0) + 1;
-      totalBuildings++;
-    }
+  // Bot hero movement
+  const botHero = room.hero2;
+  if (botHero && botHero.hp > 0 && now - room.botState.heroMoveTime > 5000) {
+    room.botState.heroMoveTime = now;
+    // Send hero to fight along a random lane
+    const laneY = Math.random() < 0.5 ? GC.LANE_TOP_Y : GC.LANE_BOT_Y;
+    const targetX = GC.P2_CASTLE_X - 200 - Math.random() * 800;
+    botHero.moveTargetX = targetX;
+    botHero.moveTargetY = laneY + (Math.random() - 0.5) * 100;
   }
 
-  // Bot building strategy
-  let buildingToBuild = null;
+  if (now < room.botState.nextBuildTime) return;
+
+  let totalBuildings = 0;
+  for (const [, b] of room.buildings) {
+    if (b.side === 'right') totalBuildings++;
+  }
+
   const buildOrder = botChar.buildings;
+  let buildingToBuild = null;
 
   if (room.botState.phase === 'early') {
-    // Early: focus on cheap infantry and ranged buildings
-    if (!myBuildings[buildOrder[0].id] || myBuildings[buildOrder[0].id] < 2) {
-      buildingToBuild = buildOrder[0];
-    } else if (!myBuildings[buildOrder[1].id]) {
-      buildingToBuild = buildOrder[1];
-    } else if (myBuildings[buildOrder[0].id] < 3) {
-      buildingToBuild = buildOrder[0];
-    } else {
-      buildingToBuild = buildOrder[Math.floor(Math.random() * 3)];
-    }
+    if (totalBuildings < 2) buildingToBuild = buildOrder[0];
+    else if (totalBuildings < 4) buildingToBuild = buildOrder[Math.floor(Math.random() * 2)];
+    else buildingToBuild = buildOrder[Math.floor(Math.random() * 3)];
   } else if (room.botState.phase === 'mid') {
-    // Mid: diversify with cavalry and more ranged
-    const idx = Math.floor(Math.random() * 4);
-    buildingToBuild = buildOrder[idx];
+    // Sometimes build towers
+    buildingToBuild = buildOrder[Math.floor(Math.random() * Math.min(5, buildOrder.length))];
   } else {
-    // Late: go for expensive buildings
-    const idx = Math.floor(Math.random() * 5);
-    buildingToBuild = buildOrder[idx];
+    buildingToBuild = buildOrder[Math.floor(Math.random() * buildOrder.length)];
   }
 
   if (buildingToBuild && bot.gold >= buildingToBuild.cost) {
-    // Find a valid position in the bot's base
-    let placed = false;
     for (let attempt = 0; attempt < 20; attempt++) {
       const bx = GC.P2_BASE_MIN_X + 40 + Math.random() * (GC.P2_BASE_MAX_X - GC.P2_BASE_MIN_X - 80);
       const by = GC.BASE_MIN_Y + 40 + Math.random() * (GC.BASE_MAX_Y - GC.BASE_MIN_Y - 80);
-      const result = placeBuilding(room, 'right', buildingToBuild.id, bx, by);
-      if (result.success) {
-        placed = true;
-        break;
-      }
+      if (placeBuilding(room, 'right', buildingToBuild.id, bx, by).success) break;
     }
   }
 
-  // Vary build timing based on phase
-  const baseDelay = room.botState.phase === 'early' ? 5000 :
-                    room.botState.phase === 'mid' ? 4000 : 3000;
+  const baseDelay = room.botState.phase === 'early' ? 5000 : room.botState.phase === 'mid' ? 4000 : 3000;
   room.botState.nextBuildTime = now + baseDelay + Math.random() * 3000;
 
-  // Bot rescue strike: use when castle below 30% HP
+  // Bot rescue strike
   const botCastle = room.castle2;
   if (!bot.rescueStrikeUsed && botCastle.hp < botCastle.maxHp * 0.3) {
-    // Check if there are enemy units near castle
-    let enemyNearCastle = 0;
+    let enemyNear = 0;
     for (const [, unit] of room.units) {
-      if (unit.side === 'left' && dist(unit, botCastle) < GC.RESCUE_STRIKE_RADIUS) {
-        enemyNearCastle++;
-      }
+      if (unit.side === 'left' && dist(unit, botCastle) < GC.RESCUE_STRIKE_RADIUS) enemyNear++;
     }
-    if (enemyNearCastle >= 3) {
-      executeRescueStrike(room, 'right');
-    }
+    if (enemyNear >= 3) executeRescueStrike(room, 'right');
   }
 }
 
@@ -634,57 +654,59 @@ function gameTick() {
 
   for (const [roomId, room] of gameRooms) {
     if (room.state !== 'playing') {
-      // Clean up finished games after 15 seconds
-      if (room.winTime && now - room.winTime > 15000) {
-        gameRooms.delete(roomId);
-      }
+      if (room.winTime && now - room.winTime > 15000) gameRooms.delete(roomId);
       continue;
     }
 
-    // ─── Gold Income ─────────────────────────────────────────────
+    // ─── Gold Income + Interest ──────────────────────────────────
     if (now - room.lastIncomeTime >= GC.INCOME_INTERVAL) {
+      // Base income
       room.player1.gold += room.player1.income;
       room.player2.gold += room.player2.income;
+      // Interest: +2% of current gold
+      room.player1.gold += Math.floor(room.player1.gold * GC.INTEREST_RATE);
+      room.player2.gold += Math.floor(room.player2.gold * GC.INTEREST_RATE);
       room.lastIncomeTime = now;
     }
 
     // ─── Building Spawning ───────────────────────────────────────
     for (const [, building] of room.buildings) {
-      // Check construction completion
       if (!building.constructed) {
         if (now - building.constructionTime >= building.constructionDuration) {
           building.constructed = true;
-          building.lastSpawnTime = now; // Reset spawn timer on completion
+          building.lastSpawnTime = now;
         }
         continue;
       }
+      if (building.hp <= 0 || building.isTower) continue;
 
-      if (building.hp <= 0) continue;
-
-      // Spawn units
       if (now - building.lastSpawnTime >= building.spawnInterval) {
         building.lastSpawnTime = now;
         spawnUnitFromBuilding(room, building);
       }
     }
 
+    // ─── Tower Attacks ────────────────────────────────────────────
+    updateTowers(room, now);
+
+    // ─── Hero Updates ─────────────────────────────────────────────
+    updateHero(room, room.hero1, now, dt);
+    updateHero(room, room.hero2, now, dt);
+
     // ─── Unit Updates ────────────────────────────────────────────
     const unitsToRemove = [];
 
     for (const [unitId, unit] of room.units) {
-      if (unit.hp <= 0) {
-        unitsToRemove.push(unitId);
-        continue;
-      }
+      if (unit.hp <= 0) { unitsToRemove.push(unitId); continue; }
 
       const charData = getPlayerData(room, unit.side).character;
 
-      // Apply regeneration passive (Forest Warden)
+      // Regeneration passive
       if (charData.passive.type === 'unit_regen' && unit.hp < unit.maxHp) {
         unit.hp = Math.min(unit.maxHp, unit.hp + charData.passive.value * dt);
       }
 
-      // Move to lane first if not there yet
+      // Move to lane first
       if (!unit.reachedLane) {
         const dy = unit.laneY - unit.y;
         if (Math.abs(dy) > 5) {
@@ -696,16 +718,10 @@ function gameTick() {
         }
       }
 
-      // Find target
+      // Find/validate target
       let target = null;
       if (unit.targetId) {
-        if (unit.targetType === 'unit') {
-          target = room.units.get(unit.targetId);
-        } else if (unit.targetType === 'building') {
-          target = room.buildings.get(unit.targetId);
-        } else if (unit.targetType === 'castle') {
-          target = unit.targetId === room.castle1.id ? room.castle1 : room.castle2;
-        }
+        target = getTargetPos(room, { id: unit.targetId, type: unit.targetType });
         if (target && target.hp <= 0) target = null;
       }
 
@@ -723,12 +739,7 @@ function gameTick() {
       }
 
       if (unit.state === 'fighting' && unit.targetId) {
-        let targetPos;
-        if (unit.targetType === 'unit') targetPos = room.units.get(unit.targetId);
-        else if (unit.targetType === 'building') targetPos = room.buildings.get(unit.targetId);
-        else if (unit.targetType === 'castle') {
-          targetPos = unit.targetId === room.castle1.id ? room.castle1 : room.castle2;
-        }
+        const targetPos = getTargetPos(room, { id: unit.targetId, type: unit.targetType });
 
         if (targetPos && targetPos.hp > 0) {
           const d = dist(unit, targetPos);
@@ -741,9 +752,7 @@ function gameTick() {
             // Attack
             if (now - unit.lastAttackTime >= unit.attackSpeed) {
               unit.lastAttackTime = now;
-              dealUnitDamage(room, unit, {
-                id: unit.targetId, type: unit.targetType
-              });
+              dealDamage(room, unit, { id: unit.targetId, type: unit.targetType }, false);
             }
           }
         } else {
@@ -754,35 +763,27 @@ function gameTick() {
       }
 
       if (unit.state === 'marching') {
-        // March toward enemy castle along the lane
-        const direction = unit.side === 'left' ? 1 : -1;
-        unit.x += direction * unit.speed * dt;
-
-        // Keep on lane (with slight variation for visual interest)
+        // March toward enemy castle
+        const enemyCastle = getEnemyCastle(room, unit.side);
         const laneDeviation = Math.sin(unit.id * 1.7 + now * 0.001) * 15;
         const targetY = unit.laneY + laneDeviation;
-        unit.y += (targetY - unit.y) * 0.05;
-
-        // Clamp to map bounds
+        const a = angleTo(unit, { x: enemyCastle.x, y: targetY });
+        unit.x += Math.cos(a) * unit.speed * dt;
+        unit.y += Math.sin(a) * unit.speed * dt;
         unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
         unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
       }
     }
 
-    // Remove dead units
-    for (const id of unitsToRemove) {
-      room.units.delete(id);
-    }
+    for (const id of unitsToRemove) room.units.delete(id);
 
-    // ─── Clean up effects ────────────────────────────────────────
+    // ─── Clean up ────────────────────────────────────────────────
     room.projectiles = room.projectiles.filter(p => now - p.time < 400);
     room.damageNumbers = room.damageNumbers.filter(d => now - d.time < 1200);
     room.effects = room.effects.filter(e => now - e.time < e.duration);
 
     // ─── Bot AI ──────────────────────────────────────────────────
-    if (room.botState) {
-      botThink(room);
-    }
+    if (room.botState) botThink(room);
 
     // ─── Send State ──────────────────────────────────────────────
     broadcastState(room, now);
@@ -790,96 +791,94 @@ function gameTick() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// State Broadcasting
+// State Broadcasting (with Fog of War)
 // ═══════════════════════════════════════════════════════════════════════
-function broadcastState(room, now) {
+function serializeState(room, now, playerSide) {
   const unitArray = [];
   for (const [, u] of room.units) {
+    // Fog of war: hide enemy units not visible
+    if (u.side !== playerSide && !isVisibleTo(room, playerSide, u.x, u.y)) continue;
     unitArray.push({
-      id: u.id, typeId: u.typeId, unitType: u.unitType,
-      side: u.side, characterId: u.characterId,
-      x: Math.round(u.x * 10) / 10,
-      y: Math.round(u.y * 10) / 10,
-      hp: Math.round(u.hp), maxHp: u.maxHp,
-      state: u.state, lane: u.lane
+      id: u.id, typeId: u.typeId, unitType: u.unitType, side: u.side,
+      characterId: u.characterId,
+      x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10,
+      hp: Math.round(u.hp), maxHp: u.maxHp, state: u.state, lane: u.lane
     });
   }
 
   const buildingArray = [];
   for (const [, b] of room.buildings) {
+    if (b.side !== playerSide && !isVisibleTo(room, playerSide, b.x, b.y)) continue;
     buildingArray.push({
-      id: b.id, typeId: b.typeId, side: b.side,
-      characterId: b.characterId,
-      x: b.x, y: b.y,
-      hp: Math.round(b.hp), maxHp: b.maxHp,
-      constructed: b.constructed,
-      constructionProgress: b.constructed ? 1 :
-        Math.min(1, (now - b.constructionTime) / b.constructionDuration)
+      id: b.id, typeId: b.typeId, side: b.side, characterId: b.characterId,
+      x: b.x, y: b.y, hp: Math.round(b.hp), maxHp: b.maxHp,
+      constructed: b.constructed, isTower: b.isTower,
+      constructionProgress: b.constructed ? 1 : Math.min(1, (now - b.constructionTime) / b.constructionDuration),
+      spawnProgress: (b.constructed && !b.isTower && b.spawnInterval > 0)
+        ? Math.min(1, (now - b.lastSpawnTime) / b.spawnInterval) : 0
     });
   }
 
-  const state = {
-    time: now,
-    gameTime: now - room.startTime,
-    castle1: {
-      hp: Math.round(room.castle1.hp),
-      maxHp: room.castle1.maxHp,
-      x: room.castle1.x, y: room.castle1.y
-    },
-    castle2: {
-      hp: Math.round(room.castle2.hp),
-      maxHp: room.castle2.maxHp,
-      x: room.castle2.x, y: room.castle2.y
-    },
-    units: unitArray,
-    buildings: buildingArray,
-    projectiles: room.projectiles.map(p => ({
-      x: Math.round(p.x), y: Math.round(p.y),
-      tx: Math.round(p.tx), ty: Math.round(p.ty),
-      time: p.time, side: p.side, characterId: p.characterId
-    })),
-    damageNumbers: room.damageNumbers.map(d => ({
-      x: d.x, y: d.y, value: d.value, time: d.time
-    })),
-    effects: room.effects
+  // Heroes
+  const serializeHero = (hero) => {
+    if (!hero) return null;
+    return {
+      id: hero.id, typeId: hero.typeId, unitType: hero.unitType, side: hero.side,
+      characterId: hero.characterId, name: hero.name,
+      x: Math.round(hero.x * 10) / 10, y: Math.round(hero.y * 10) / 10,
+      hp: Math.round(hero.hp), maxHp: hero.maxHp, state: hero.state, isHero: true
+    };
   };
 
-  // Send to player 1
+  let hero1Data = serializeHero(room.hero1);
+  let hero2Data = serializeHero(room.hero2);
+
+  // Fog: hide enemy hero if not visible
+  if (playerSide === 'left' && hero2Data && hero2Data.hp > 0 && !isVisibleTo(room, 'left', hero2Data.x, hero2Data.y)) {
+    hero2Data = null;
+  }
+  if (playerSide === 'right' && hero1Data && hero1Data.hp > 0 && !isVisibleTo(room, 'right', hero1Data.x, hero1Data.y)) {
+    hero1Data = null;
+  }
+
+  return {
+    time: now, gameTime: now - room.startTime,
+    castle1: { hp: Math.round(room.castle1.hp), maxHp: room.castle1.maxHp, x: room.castle1.x, y: room.castle1.y },
+    castle2: { hp: Math.round(room.castle2.hp), maxHp: room.castle2.maxHp, x: room.castle2.x, y: room.castle2.y },
+    units: unitArray, buildings: buildingArray,
+    hero1: hero1Data, hero2: hero2Data,
+    projectiles: room.projectiles.map(p => ({
+      x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(p.tx), ty: Math.round(p.ty),
+      time: p.time, side: p.side, characterId: p.characterId, isTower: p.isTower || false
+    })),
+    damageNumbers: room.damageNumbers.map(d => ({ x: d.x, y: d.y, value: d.value, time: d.time })),
+    effects: room.effects
+  };
+}
+
+function broadcastState(room, now) {
+  // Player 1
   if (room.player1.socketId) {
     const socket = io.sockets.sockets.get(room.player1.socketId);
     if (socket) {
+      const state = serializeState(room, now, 'left');
       socket.emit('state', {
         ...state,
-        self: {
-          gold: Math.floor(room.player1.gold),
-          income: room.player1.income,
-          rescueStrikeUsed: room.player1.rescueStrikeUsed
-        },
-        opponent: {
-          gold: Math.floor(room.player2.gold),
-          income: room.player2.income,
-          rescueStrikeUsed: room.player2.rescueStrikeUsed
-        }
+        self: { gold: Math.floor(room.player1.gold), income: room.player1.income, rescueStrikeUsed: room.player1.rescueStrikeUsed, kills: room.player1.kills },
+        opponent: { gold: Math.floor(room.player2.gold), income: room.player2.income, rescueStrikeUsed: room.player2.rescueStrikeUsed, kills: room.player2.kills }
       });
     }
   }
 
-  // Send to player 2 (if not bot)
+  // Player 2
   if (room.player2.socketId && !room.player2.isBot) {
     const socket = io.sockets.sockets.get(room.player2.socketId);
     if (socket) {
+      const state = serializeState(room, now, 'right');
       socket.emit('state', {
         ...state,
-        self: {
-          gold: Math.floor(room.player2.gold),
-          income: room.player2.income,
-          rescueStrikeUsed: room.player2.rescueStrikeUsed
-        },
-        opponent: {
-          gold: Math.floor(room.player1.gold),
-          income: room.player1.income,
-          rescueStrikeUsed: room.player1.rescueStrikeUsed
-        }
+        self: { gold: Math.floor(room.player2.gold), income: room.player2.income, rescueStrikeUsed: room.player2.rescueStrikeUsed, kills: room.player2.kills },
+        opponent: { gold: Math.floor(room.player1.gold), income: room.player1.income, rescueStrikeUsed: room.player1.rescueStrikeUsed, kills: room.player1.kills }
       });
     }
   }
@@ -889,21 +888,16 @@ function broadcastState(room, now) {
 // Matchmaking
 // ═══════════════════════════════════════════════════════════════════════
 function tryMatchmaking() {
-  // Match two players from queue
   while (matchQueue.length >= 2) {
     const p1 = matchQueue.shift();
     const p2 = matchQueue.shift();
-
     const p1Socket = io.sockets.sockets.get(p1.socketId);
     const p2Socket = io.sockets.sockets.get(p2.socketId);
-
     if (!p1Socket) { matchQueue.unshift(p2); continue; }
     if (!p2Socket) { matchQueue.unshift(p1); continue; }
-
     createGameRoom(p1Socket, p1.characterId, p2Socket, p2.characterId);
   }
 
-  // Check for players waiting too long - match with bot
   const now = Date.now();
   for (let i = matchQueue.length - 1; i >= 0; i--) {
     const entry = matchQueue[i];
@@ -911,7 +905,6 @@ function tryMatchmaking() {
       matchQueue.splice(i, 1);
       const socket = io.sockets.sockets.get(entry.socketId);
       if (socket) {
-        // Pick random bot character (different from player's)
         const charIds = Object.keys(CHARACTERS).filter(c => c !== entry.characterId);
         const botChar = charIds[Math.floor(Math.random() * charIds.length)];
         createGameRoom(socket, entry.characterId, null, botChar, true);
@@ -921,32 +914,20 @@ function tryMatchmaking() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Socket.IO Connection Handler
+// Socket.IO
 // ═══════════════════════════════════════════════════════════════════════
 io.on('connection', (socket) => {
   console.log(`Connected: ${socket.id}`);
 
   socket.on('findMatch', (data) => {
     const charId = data.characterId;
-    if (!CHARACTERS[charId]) {
-      socket.emit('error', { message: 'Invalid character' });
-      return;
-    }
-
+    if (!CHARACTERS[charId]) return socket.emit('error', { message: 'Invalid character' });
     socket.playerName = data.name || 'Unnamed Lord';
-
-    // Remove from queue if already there
     const idx = matchQueue.findIndex(e => e.socketId === socket.id);
     if (idx >= 0) matchQueue.splice(idx, 1);
-
-    matchQueue.push({
-      socketId: socket.id,
-      characterId: charId,
-      joinTime: Date.now()
-    });
-
+    matchQueue.push({ socketId: socket.id, characterId: charId, joinTime: Date.now() });
     socket.emit('matchmaking', { status: 'searching' });
-    console.log(`${socket.playerName} searching for match as ${CHARACTERS[charId].name}`);
+    console.log(`${socket.playerName} searching as ${CHARACTERS[charId].name}`);
   });
 
   socket.on('build', (data) => {
@@ -954,12 +935,21 @@ io.on('connection', (socket) => {
     if (!roomId) return;
     const room = gameRooms.get(roomId);
     if (!room || room.state !== 'playing') return;
-
-    // Determine player side
     const side = room.player1.socketId === socket.id ? 'left' : 'right';
-    const result = placeBuilding(room, side, data.buildingTypeId, data.x, data.y);
+    socket.emit('buildResult', placeBuilding(room, side, data.buildingTypeId, data.x, data.y));
+  });
 
-    socket.emit('buildResult', result);
+  socket.on('heroMove', (data) => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+    const room = gameRooms.get(roomId);
+    if (!room || room.state !== 'playing') return;
+    const side = room.player1.socketId === socket.id ? 'left' : 'right';
+    const hero = getHero(room, side);
+    if (hero && hero.hp > 0) {
+      hero.moveTargetX = clamp(data.x, 20, GC.MAP_WIDTH - 20);
+      hero.moveTargetY = clamp(data.y, 20, GC.MAP_HEIGHT - 20);
+    }
   });
 
   socket.on('rescueStrike', () => {
@@ -967,46 +957,33 @@ io.on('connection', (socket) => {
     if (!roomId) return;
     const room = gameRooms.get(roomId);
     if (!room || room.state !== 'playing') return;
-
     const side = room.player1.socketId === socket.id ? 'left' : 'right';
-    const success = executeRescueStrike(room, side);
-    socket.emit('rescueStrikeResult', { success });
+    socket.emit('rescueStrikeResult', { success: executeRescueStrike(room, side) });
   });
 
   socket.on('disconnect', () => {
-    // Remove from match queue
     const idx = matchQueue.findIndex(e => e.socketId === socket.id);
     if (idx >= 0) matchQueue.splice(idx, 1);
-
-    // Handle active game
     const roomId = playerRooms.get(socket.id);
     if (roomId) {
       const room = gameRooms.get(roomId);
       if (room && room.state === 'playing') {
-        // Player disconnected - other player wins
         const winnerSide = room.player1.socketId === socket.id ? 'right' : 'left';
         room.winner = winnerSide;
         room.winTime = Date.now();
         room.state = 'finished';
-
         const winnerData = getPlayerData(room, winnerSide);
         io.to(roomId).emit('gameOver', {
-          winner: winnerSide,
-          winnerName: winnerData.name,
-          reason: 'disconnect',
+          winner: winnerSide, winnerName: winnerData.name, reason: 'disconnect',
           duration: Date.now() - room.startTime
         });
       }
       playerRooms.delete(socket.id);
     }
-
     console.log(`Disconnected: ${socket.id}`);
   });
 });
 
-// ═══════════════════════════════════════════════════════════════════════
-// Start Game Loop
-// ═══════════════════════════════════════════════════════════════════════
 setInterval(gameTick, TICK_MS);
 setInterval(tryMatchmaking, 1000);
 

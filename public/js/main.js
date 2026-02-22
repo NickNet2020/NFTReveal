@@ -27,6 +27,8 @@
   const enemyCastleHpText = document.getElementById('enemyCastleHpText');
   const myCastleLabel = document.getElementById('myCastleLabel');
   const enemyCastleLabel = document.getElementById('enemyCastleLabel');
+  const myCastleFaction = document.getElementById('myCastleFaction');
+  const enemyCastleFaction = document.getElementById('enemyCastleFaction');
   const passiveText = document.getElementById('passiveText');
   const gameOverTitle = document.getElementById('gameOverTitle');
   const gameOverSub = document.getElementById('gameOverSub');
@@ -313,13 +315,19 @@
       const oppChar = CHARACTERS[opponentCharacterId];
       myCastleLabel.textContent = myChar ? myChar.name : 'Your Castle';
       myCastleLabel.style.color = myChar ? myChar.color : '#fff';
+      myCastleFaction.textContent = myChar ? myChar.title : '';
       enemyCastleLabel.textContent = data.opponentName || (oppChar ? oppChar.name : 'Enemy');
       enemyCastleLabel.style.color = oppChar ? oppChar.color : '#fff';
+      enemyCastleFaction.textContent = oppChar ? oppChar.title : '';
 
       // Set passive display
       if (myChar) {
         passiveText.textContent = `${myChar.passive.name}: ${myChar.passive.description}`;
       }
+
+      // Initialize audio
+      AudioManager.init();
+      AudioManager.startMusic();
 
       console.log(`Game started! Playing as ${myChar.name} (${mySide})`);
     });

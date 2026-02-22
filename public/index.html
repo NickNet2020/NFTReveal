@@ -66,7 +66,10 @@
     <div id="topHud">
       <div class="hud-left">
         <div class="castle-hp-display" id="myCastleHp">
-          <div class="castle-label" id="myCastleLabel">Your Castle</div>
+          <div>
+            <div class="castle-label" id="myCastleLabel">Your Castle</div>
+            <div class="castle-faction" id="myCastleFaction"></div>
+          </div>
           <div class="hp-bar-container">
             <div class="hp-bar-fill" id="myCastleHpBar"></div>
             <span class="hp-text" id="myCastleHpText">8000 / 8000</span>
@@ -80,7 +83,10 @@
 
       <div class="hud-right">
         <div class="castle-hp-display enemy" id="enemyCastleHp">
-          <div class="castle-label" id="enemyCastleLabel">Enemy Castle</div>
+          <div>
+            <div class="castle-label" id="enemyCastleLabel">Enemy Castle</div>
+            <div class="castle-faction" id="enemyCastleFaction"></div>
+          </div>
           <div class="hp-bar-container">
             <div class="hp-bar-fill enemy" id="enemyCastleHpBar"></div>
             <span class="hp-text" id="enemyCastleHpText">8000 / 8000</span>
@@ -155,6 +161,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/characters.js"></script>
   <script src="js/particles.js"></script>
+  <script src="js/audio.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/main.js"></script>
 </body>
