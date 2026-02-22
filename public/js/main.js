@@ -730,15 +730,15 @@
     bannerEl.id = 'infoBanner';
     bannerEl.style.cssText = `
       position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
-      width: 300px; height: 200px; display: none; z-index: 100;
+      width: 380px; height: 220px; display: none; z-index: 100;
       pointer-events: auto; font-family: 'Cinzel', serif; cursor: default;
     `;
     // We draw the banner on a canvas for the medieval sword-themed look
     const c = document.createElement('canvas');
     c.id = 'bannerCanvas';
-    c.width = 300;
-    c.height = 200;
-    c.style.cssText = 'width: 300px; height: 200px; cursor: pointer;';
+    c.width = 380;
+    c.height = 220;
+    c.style.cssText = 'width: 380px; height: 220px; cursor: pointer;';
     bannerEl.appendChild(c);
 
     // Click handler for upgrade button on banner
@@ -767,11 +767,20 @@
     renderBanner(data, selType);
   }
 
+  // Seeded random for deterministic unit variation based on ID
+  function seededRng(seed) {
+    let s = Math.abs(seed * 2654435761 | 0) || 1;
+    return function() {
+      s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+      return ((s >>> 0) % 10000) / 10000;
+    };
+  }
+
   function renderBanner(data, selType) {
     const canvas = document.getElementById('bannerCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const W = 300, H = 200;
+    const W = 380, H = 220;
 
     pendingUpgradeBtn = null;
     ctx.clearRect(0, 0, W, H);
@@ -817,142 +826,147 @@
   }
 
   function renderUnitBanner(ctx, unit, charData, primary, W, H, selType) {
-    // Portrait area (56x56, drawn from 48x48 source)
-    const px = 20, py = 22;
-    ctx.fillStyle = '#0a0806';
-    ctx.fillRect(px, py, 56, 56);
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(px, py, 56, 56);
+    // === Full-height portrait on the left side ===
+    const PW = 120, PH = H - 20; // portrait area
+    const PX = 10, PY = 10;
 
-    // Draw portrait on sub-region
-    drawBannerPortrait(ctx, unit, px, py, 56, 56);
+    // Portrait background (dark vignette)
+    const pbg = ctx.createRadialGradient(PX + PW / 2, PY + PH / 2, 10, PX + PW / 2, PY + PH / 2, PH * 0.7);
+    pbg.addColorStop(0, '#1a1510');
+    pbg.addColorStop(1, '#0a0806');
+    ctx.fillStyle = pbg;
+    ctx.fillRect(PX, PY, PW, PH);
 
-    // Name + type + rank stars
-    const nameX = 84;
-    ctx.font = 'bold 13px Cinzel, serif';
+    // Draw detailed portrait
+    drawBannerPortrait(ctx, unit, PX, PY, PW, PH);
+
+    // Portrait gold border
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(PX, PY, PW, PH);
+    // Inner glow
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PX + 2, PY + 2, PW - 4, PH - 4);
+
+    // === Info panel on the right ===
+    const IX = PX + PW + 10; // info start x
+    const IW = W - IX - 12; // info width
+
+    // Name
+    ctx.font = 'bold 14px Cinzel, serif';
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
     const displayName = unit.isHero ? unit.name : (selectedUnitName || 'Unit');
-    ctx.fillText(displayName, nameX, 38, W - nameX - 16);
+    ctx.fillText(displayName, IX, 30, IW);
 
-    // Type label
+    // Type label + level badge
     ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = primary;
     const typeLabel = unit.isHero ? 'HERO' : (unit.unitType || '').toUpperCase();
-    ctx.fillText(typeLabel, nameX, 52);
+    const lvl = unit.unitLevel || 1;
+    const lvlStr = lvl >= 2 ? ` — Lv.${lvl}` : '';
+    ctx.fillText(typeLabel + lvlStr, IX, 44);
 
-    // Rank stars (only for non-heroes)
+    // Rank stars
     if (!unit.isHero && unit.rank > 0) {
       const starColors = ['', '#cd7f32', '#c0c0c0', '#ffd700'];
-      const starColor = starColors[Math.min(unit.rank, 3)];
       ctx.font = '12px serif';
-      ctx.fillStyle = starColor;
+      ctx.fillStyle = starColors[Math.min(unit.rank, 3)];
       let stars = '';
       for (let i = 0; i < unit.rank; i++) stars += '\u2605';
-      ctx.fillText(stars, nameX, 66);
+      ctx.fillText(stars, IX, 58);
     }
 
-    // Separator line
+    // Separator
     ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
-    ctx.fillRect(20, 84, W - 40, 1);
+    ctx.fillRect(IX, 64, IW, 1);
 
-    // Stats grid
-    const statsY = 98;
-    const col1 = 24, col2 = 158;
-    ctx.font = '11px Cinzel, serif';
+    // Stats
+    const sY = 80;
+    const col1 = IX, col2 = IX + IW / 2 + 6;
 
     // HP
+    ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#888';
-    ctx.fillText('HP', col1, statsY);
+    ctx.fillText('HP', col1, sY);
     ctx.fillStyle = '#4a8c3f';
     ctx.font = 'bold 11px Cinzel, serif';
-    ctx.fillText(`${Math.ceil(unit.hp)} / ${unit.maxHp}`, col1 + 40, statsY);
+    ctx.fillText(`${Math.ceil(unit.hp)} / ${unit.maxHp}`, col1 + 26, sY);
 
     // DMG
-    ctx.font = '11px Cinzel, serif';
+    ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#888';
-    ctx.fillText('DMG', col2, statsY);
+    ctx.fillText('DMG', col2, sY);
     ctx.fillStyle = '#c0392b';
     ctx.font = 'bold 11px Cinzel, serif';
-    ctx.fillText(`${unit.damage || '?'}`, col2 + 40, statsY);
+    ctx.fillText(`${unit.damage || '?'}`, col2 + 32, sY);
 
     // ATK SPD
-    const statsY2 = statsY + 18;
-    ctx.font = '11px Cinzel, serif';
+    const sY2 = sY + 18;
+    ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#888';
-    ctx.fillText('ATK SPD', col1, statsY2);
+    ctx.fillText('ATK', col1, sY2);
     ctx.fillStyle = '#d4a017';
     ctx.font = 'bold 11px Cinzel, serif';
-    ctx.fillText(`${unit.attackSpeed || '?'}ms`, col1 + 58, statsY2);
+    ctx.fillText(`${unit.attackSpeed || '?'}ms`, col1 + 26, sY2);
 
     // MOVE
-    ctx.font = '11px Cinzel, serif';
+    ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#888';
-    ctx.fillText('MOVE', col2, statsY2);
+    ctx.fillText('SPD', col2, sY2);
     ctx.fillStyle = '#4a6fa5';
     ctx.font = 'bold 11px Cinzel, serif';
-    ctx.fillText(`${unit.speed || '?'}`, col2 + 40, statsY2);
+    ctx.fillText(`${unit.speed || '?'}`, col2 + 32, sY2);
 
     // Lane
     if (unit.lane) {
-      const statsY3 = statsY2 + 18;
-      ctx.font = '11px Cinzel, serif';
+      const sY3 = sY2 + 18;
+      ctx.font = '10px Cinzel, serif';
       ctx.fillStyle = '#888';
-      ctx.fillText('LANE', col1, statsY3);
+      ctx.fillText('LANE', col1, sY3);
       ctx.fillStyle = '#c9a84c';
       ctx.font = 'bold 11px Cinzel, serif';
-      ctx.fillText(unit.lane.toUpperCase(), col1 + 40, statsY3);
+      ctx.fillText(unit.lane.toUpperCase(), col1 + 38, sY3);
+
+      // Side
+      ctx.font = '10px Cinzel, serif';
+      ctx.fillStyle = unit.side === mySide ? '#4a8c3f' : '#b22222';
+      ctx.fillText(unit.side === mySide ? 'ALLY' : 'FOE', col2, sY3);
     }
 
     // XP bar (only for non-heroes)
     if (!unit.isHero) {
-      const xpBarY = H - 30;
-      const xpBarX = 20;
-      const xpBarW = W - 40;
+      const xpBarY = H - 32;
+      const xpBarX = IX;
+      const xpBarW = IW;
       const xpBarH = 12;
       const xp = unit.xp || 0;
       const xpNeeded = unit.xpToNext || 30;
       const rank = unit.rank || 0;
 
-      // XP label
       ctx.font = '9px Cinzel, serif';
       ctx.fillStyle = '#888';
       ctx.textAlign = 'left';
       ctx.fillText('XP', xpBarX, xpBarY - 3);
-
-      // Rank label on right
       ctx.textAlign = 'right';
       ctx.fillStyle = rank >= 3 ? '#ffd700' : '#888';
       ctx.fillText(rank >= 3 ? 'MAX RANK' : `Rank ${rank}`, xpBarX + xpBarW, xpBarY - 3);
 
-      // XP bar bg
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(xpBarX, xpBarY, xpBarW, xpBarH);
-
-      // XP bar fill
       const xpPct = rank >= 3 ? 1 : Math.min(1, xp / xpNeeded);
       const xpGrad = ctx.createLinearGradient(xpBarX, 0, xpBarX + xpBarW * xpPct, 0);
       xpGrad.addColorStop(0, '#6a5acd');
       xpGrad.addColorStop(1, '#9370db');
       ctx.fillStyle = xpGrad;
       ctx.fillRect(xpBarX, xpBarY, xpBarW * xpPct, xpBarH);
-
-      // XP bar shine
       ctx.fillStyle = 'rgba(255,255,255,0.1)';
       ctx.fillRect(xpBarX, xpBarY, xpBarW * xpPct, xpBarH / 2);
-
-      // XP text
       ctx.font = 'bold 9px Cinzel, serif';
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
-      if (rank >= 3) {
-        ctx.fillText('MAX', xpBarX + xpBarW / 2, xpBarY + 9);
-      } else {
-        ctx.fillText(`${xp} / ${xpNeeded}`, xpBarX + xpBarW / 2, xpBarY + 9);
-      }
-
-      // XP bar border
+      ctx.fillText(rank >= 3 ? 'MAX' : `${xp} / ${xpNeeded}`, xpBarX + xpBarW / 2, xpBarY + 9);
       ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
       ctx.lineWidth = 1;
       ctx.strokeRect(xpBarX, xpBarY, xpBarW, xpBarH);
@@ -962,97 +976,91 @@
   }
 
   function renderBuildingBanner(ctx, building, charData, primary, W, H) {
-    // Building icon area
-    const px = 20, py = 22;
+    // Full-height building illustration on left
+    const PW = 120, PH = H - 20;
+    const PX = 10, PY = 10;
+
     ctx.fillStyle = '#0a0806';
-    ctx.fillRect(px, py, 56, 56);
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(px, py, 56, 56);
+    ctx.fillRect(PX, PY, PW, PH);
+    drawBuildingIcon(ctx, building, PX, PY, PW, PH);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(PX, PY, PW, PH);
 
-    // Simple building icon
-    drawBuildingIcon(ctx, building, px, py, 56, 56);
-
-    // Level badge on icon
+    // Level badge
     const bLevel = building.level || 1;
     if (bLevel >= 2) {
       const badgeColor = bLevel === 3 ? '#ffd700' : '#c0c0c0';
       ctx.fillStyle = badgeColor;
       ctx.beginPath();
-      ctx.arc(px + 48, py + 8, 8, 0, Math.PI * 2);
+      ctx.arc(PX + PW - 14, PY + 14, 10, 0, Math.PI * 2);
       ctx.fill();
-      ctx.font = 'bold 9px Cinzel, serif';
+      ctx.font = 'bold 10px Cinzel, serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#222';
-      ctx.fillText(`L${bLevel}`, px + 48, py + 11);
+      ctx.fillText(`L${bLevel}`, PX + PW - 14, PY + 18);
       ctx.textAlign = 'left';
     }
 
-    // Building name
-    const nameX = 84;
+    // Info panel
+    const IX = PX + PW + 10;
+    const IW = W - IX - 12;
     const bDef = charData ? charData.buildings.find(b => b.id === building.typeId) : null;
-    ctx.font = 'bold 13px Cinzel, serif';
+
+    ctx.font = 'bold 14px Cinzel, serif';
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
     const nameStr = bDef ? bDef.name : 'Building';
     const levelStr = bLevel >= 2 ? ` (Lv.${bLevel})` : '';
-    ctx.fillText(nameStr + levelStr, nameX, 38, W - nameX - 16);
+    ctx.fillText(nameStr + levelStr, IX, 30, IW);
 
-    // Type (tower or barracks)
     ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = primary;
-    ctx.fillText(building.isTower ? 'DEFENSE TOWER' : 'BARRACKS', nameX, 52);
+    ctx.fillText(building.isTower ? 'DEFENSE TOWER' : 'BARRACKS', IX, 44);
 
-    // Side
-    ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = building.side === mySide ? '#4a8c3f' : '#b22222';
-    ctx.fillText(building.side === mySide ? 'FRIENDLY' : 'ENEMY', nameX, 66);
+    ctx.fillText(building.side === mySide ? 'FRIENDLY' : 'ENEMY', IX, 58);
 
-    // Separator line
+    // Separator
     ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
-    ctx.fillRect(20, 84, W - 40, 1);
+    ctx.fillRect(IX, 66, IW, 1);
 
     // Stats
-    const statsY = 100;
-    const col1 = 24, col2 = 158;
-
-    // HP
-    ctx.font = '11px Cinzel, serif';
+    const sY = 82;
+    ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#888';
-    ctx.fillText('HP', col1, statsY);
+    ctx.fillText('HP', IX, sY);
     ctx.fillStyle = '#4a8c3f';
     ctx.font = 'bold 11px Cinzel, serif';
-    ctx.fillText(`${Math.ceil(building.hp)} / ${building.maxHp}`, col1 + 40, statsY);
+    ctx.fillText(`${Math.ceil(building.hp)} / ${building.maxHp}`, IX + 26, sY);
 
-    // Income
     if (bDef) {
-      ctx.font = '11px Cinzel, serif';
+      const sY2 = sY + 18;
+      ctx.font = '10px Cinzel, serif';
       ctx.fillStyle = '#888';
-      ctx.fillText('INCOME', col2, statsY);
+      ctx.fillText('INCOME', IX, sY2);
       ctx.fillStyle = '#d4a017';
       ctx.font = 'bold 11px Cinzel, serif';
-      ctx.fillText(`+${bDef.income}g`, col2 + 52, statsY);
+      ctx.fillText(`+${bDef.income}g`, IX + 52, sY2);
     }
 
     if (building.isTower) {
-      // Tower stats
-      const statsY2 = statsY + 20;
-      ctx.font = '11px Cinzel, serif';
+      const sY3 = sY + 36;
+      ctx.font = '10px Cinzel, serif';
       ctx.fillStyle = '#888';
-      ctx.fillText('STATUS', col1, statsY2);
+      ctx.fillText('STATUS', IX, sY3);
       ctx.fillStyle = '#c9a84c';
       ctx.font = 'bold 11px Cinzel, serif';
-      ctx.fillText(building.constructed ? 'ACTIVE' : 'BUILDING...', col1 + 52, statsY2);
+      ctx.fillText(building.constructed ? 'ACTIVE' : 'BUILDING...', IX + 48, sY3);
     } else {
-      // Show upgrade info for own non-tower buildings
+      // Upgrade button for own non-tower buildings
       if (building.side === mySide && building.constructed && bLevel < 3 && bDef) {
-        const upgY = statsY + 18;
+        const upgY = sY + 38;
         const nextLevel = bLevel + 1;
         const upgCost = nextLevel === 2
           ? Math.floor(bDef.cost * GAME_CONSTANTS.L2_COST_MULT)
           : Math.floor(bDef.cost * GAME_CONSTANTS.L3_COST_MULT);
 
-        // Check L3 eligibility
         let canUpgrade = true;
         let upgradeNote = '';
         if (nextLevel === 3) {
@@ -1061,70 +1069,57 @@
             upgradeNote = 'Not L3 eligible';
           } else {
             const foundations = gameState && gameState.self ? gameState.self.coreFoundations : 0;
-            if (foundations <= 0) {
-              upgradeNote = 'Need Core Foundation';
-            }
+            if (foundations <= 0) upgradeNote = 'Need Foundation';
           }
         }
 
         if (canUpgrade) {
-          // Draw upgrade button area
           ctx.fillStyle = 'rgba(201, 168, 76, 0.15)';
-          ctx.fillRect(20, upgY - 4, W - 40, 18);
+          ctx.fillRect(IX, upgY - 4, IW, 20);
           ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
           ctx.lineWidth = 1;
-          ctx.strokeRect(20, upgY - 4, W - 40, 18);
+          ctx.strokeRect(IX, upgY - 4, IW, 20);
 
           ctx.font = 'bold 10px Cinzel, serif';
           ctx.fillStyle = '#e6c766';
           ctx.textAlign = 'left';
-          ctx.fillText(`\u2B06 Upgrade to L${nextLevel} — ${upgCost}g`, 28, upgY + 8);
+          ctx.fillText(`\u2B06 Upgrade to L${nextLevel} — ${upgCost}g`, IX + 6, upgY + 9);
 
           if (upgradeNote) {
             ctx.font = '8px Cinzel, serif';
             ctx.fillStyle = '#c0392b';
             ctx.textAlign = 'right';
-            ctx.fillText(upgradeNote, W - 28, upgY + 8);
+            ctx.fillText(upgradeNote, IX + IW - 4, upgY + 9);
           }
 
-          // Store upgrade button bounds for click handling
-          pendingUpgradeBtn = { x: 20, y: upgY - 4, w: W - 40, h: 18, buildingId: building.id };
+          pendingUpgradeBtn = { x: IX, y: upgY - 4, w: IW, h: 20, buildingId: building.id };
         }
       }
 
       // Spawn progress bar
-      const barY = H - 30;
-      const barX = 20;
-      const barW = W - 40;
+      const barY = H - 32;
+      const barX = IX;
+      const barW = IW;
       const barH = 12;
 
       ctx.font = '9px Cinzel, serif';
       ctx.fillStyle = '#888';
       ctx.textAlign = 'left';
       ctx.fillText('SPAWN', barX, barY - 3);
-
       ctx.textAlign = 'right';
-      ctx.fillStyle = '#888';
       const pct = Math.round((building.spawnProgress || 0) * 100);
       ctx.fillText(building.constructed ? `${pct}%` : 'Building...', barX + barW, barY - 3);
 
-      // Bar bg
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(barX, barY, barW, barH);
-
-      // Bar fill
       const fillPct = building.constructed ? (building.spawnProgress || 0) : (building.constructionProgress || 0);
       const barGrad = ctx.createLinearGradient(barX, 0, barX + barW * fillPct, 0);
       barGrad.addColorStop(0, building.constructed ? '#4a8c3f' : '#d4a017');
       barGrad.addColorStop(1, building.constructed ? '#6aac5f' : '#e6c766');
       ctx.fillStyle = barGrad;
       ctx.fillRect(barX, barY, barW * fillPct, barH);
-
-      // Bar shine
       ctx.fillStyle = 'rgba(255,255,255,0.1)';
       ctx.fillRect(barX, barY, barW * fillPct, barH / 2);
-
-      // Bar border
       ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barW, barH);
@@ -1134,49 +1129,76 @@
   }
 
   function renderOutpostBanner(ctx, outpost, W, H) {
-    const nameX = 84;
-    // Outpost icon
-    const px = 20, py = 22;
+    // Large outpost illustration on the left
+    const PW = 120, PH = H - 20;
+    const PX = 10, PY = 10;
+
     ctx.fillStyle = '#0a0806';
-    ctx.fillRect(px, py, 56, 56);
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(px, py, 56, 56);
+    ctx.fillRect(PX, PY, PW, PH);
 
-    // Tower icon
+    // Draw a detailed outpost tower
+    const cx = PX + PW / 2, cy = PY + PH / 2;
+    // Base
+    ctx.fillStyle = '#3a3530';
+    ctx.fillRect(cx - 30, cy + 30, 60, 40);
+    // Tower body
     ctx.fillStyle = '#5a5550';
-    ctx.fillRect(px + 20, py + 8, 16, 32);
-    ctx.fillRect(px + 16, py + 4, 24, 6);
-    ctx.fillStyle = outpost.controlledBy === 'left' ? '#4a8c3f' : outpost.controlledBy === 'right' ? '#b22222' : '#888';
-    ctx.fillRect(px + 26, py + 2, 10, 6);
+    ctx.fillRect(cx - 20, cy - 40, 40, 70);
+    // Crenellations
+    ctx.fillStyle = '#6a6560';
+    for (let i = -18; i <= 14; i += 8) {
+      ctx.fillRect(cx + i, cy - 48, 6, 10);
+    }
+    // Flag
+    const flagColor = outpost.controlledBy === 'left' ? '#4a8c3f' : outpost.controlledBy === 'right' ? '#b22222' : '#888';
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(cx, cy - 70, 2, 30);
+    ctx.fillStyle = flagColor;
+    ctx.beginPath();
+    ctx.moveTo(cx + 2, cy - 70);
+    ctx.lineTo(cx + 22, cy - 62);
+    ctx.lineTo(cx + 2, cy - 54);
+    ctx.fill();
+    // Windows
+    ctx.fillStyle = '#d4a017';
+    ctx.fillRect(cx - 8, cy - 20, 6, 8);
+    ctx.fillRect(cx + 4, cy - 20, 6, 8);
+    // Gate
+    ctx.fillStyle = '#2a2520';
+    ctx.fillRect(cx - 8, cy + 10, 16, 20);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(cx - 1, cy + 10, 2, 20);
 
-    // Name
-    ctx.font = 'bold 13px Cinzel, serif';
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(PX, PY, PW, PH);
+
+    // Info
+    const IX = PX + PW + 10;
+    const IW = W - IX - 12;
+
+    ctx.font = 'bold 14px Cinzel, serif';
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText('Command Outpost', nameX, 38, W - nameX - 16);
+    ctx.fillText('Command Outpost', IX, 30, IW);
 
-    // Control status
     ctx.font = '10px Cinzel, serif';
     const controlled = outpost.controlledBy;
     ctx.fillStyle = controlled === mySide ? '#4a8c3f' : controlled ? '#b22222' : '#888';
-    ctx.fillText(controlled === mySide ? 'CONTROLLED BY YOU' : controlled ? 'ENEMY CONTROLLED' : 'NEUTRAL', nameX, 52);
+    ctx.fillText(controlled === mySide ? 'CONTROLLED BY YOU' : controlled ? 'ENEMY CONTROLLED' : 'NEUTRAL', IX, 46);
 
-    // Separator
     ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
-    ctx.fillRect(20, 72, W - 40, 1);
+    ctx.fillRect(IX, 54, IW, 1);
 
-    // Bonuses section
     ctx.font = 'bold 11px Cinzel, serif';
     ctx.fillStyle = '#c9a84c';
-    ctx.fillText('Outpost Bonuses:', 24, 90);
+    ctx.fillText('Outpost Bonuses:', IX, 72);
 
     ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#aaa';
-    ctx.fillText('1 Outpost: -10% Attack Speed for your units', 24, 108);
-    ctx.fillText('2 Outposts: +10% Damage Reduction for your units', 24, 124);
+    ctx.fillText('1 Outpost: -10% Attack Speed', IX, 92);
+    ctx.fillText('2 Outposts: +10% Dmg Reduction', IX, 110);
 
-    // Current bonus
     ctx.font = 'bold 10px Cinzel, serif';
     ctx.fillStyle = '#e6c766';
     let ownedCount = 0;
@@ -1184,42 +1206,44 @@
       if (gameState.outposts.north && gameState.outposts.north.controlledBy === mySide) ownedCount++;
       if (gameState.outposts.south && gameState.outposts.south.controlledBy === mySide) ownedCount++;
     }
-    ctx.fillText(`You control: ${ownedCount} outpost(s)`, 24, 148);
+    ctx.fillText(`You control: ${ownedCount} outpost(s)`, IX, 136);
 
     ctx.textAlign = 'left';
   }
 
   function renderGeneralBanner(ctx, gen, charData, primary, W, H) {
-    // Portrait
-    const px = 20, py = 22;
-    ctx.fillStyle = '#0a0806';
-    ctx.fillRect(px, py, 56, 56);
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(px, py, 56, 56);
+    // Full-height portrait
+    const PW = 120, PH = H - 20;
+    const PX = 10, PY = 10;
+    const pbg = ctx.createRadialGradient(PX + PW / 2, PY + PH / 2, 10, PX + PW / 2, PY + PH / 2, PH * 0.7);
+    pbg.addColorStop(0, '#1a1510');
+    pbg.addColorStop(1, '#0a0806');
+    ctx.fillStyle = pbg;
+    ctx.fillRect(PX, PY, PW, PH);
 
-    // General portrait (large armored figure with crown)
-    ctx.fillStyle = primary || '#888';
-    ctx.fillRect(px + 12, py + 16, 32, 28);
-    ctx.fillStyle = '#d4a574';
-    ctx.beginPath(); ctx.arc(px + 28, py + 14, 10, 0, Math.PI * 2); ctx.fill();
-    // Crown
-    ctx.fillStyle = primary || '#ffd700';
-    ctx.fillRect(px + 18, py + 2, 20, 6);
-    ctx.fillRect(px + 20, py, 4, 4);
-    ctx.fillRect(px + 26, py, 4, 4);
-    ctx.fillRect(px + 32, py, 4, 4);
+    // Draw general portrait using the unit portrait system with general flag
+    const genData = { ...gen, unitType: 'general', characterId: gen.characterId, id: gen.id };
+    drawBannerPortrait(ctx, genData, PX, PY, PW, PH);
 
-    // Name + type + rank
-    const nameX = 84;
-    ctx.font = 'bold 13px Cinzel, serif';
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(PX, PY, PW, PH);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PX + 2, PY + 2, PW - 4, PH - 4);
+
+    // Info
+    const IX = PX + PW + 10;
+    const IW = W - IX - 12;
+
+    ctx.font = 'bold 14px Cinzel, serif';
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText(gen.name || 'General', nameX, 38, W - nameX - 16);
+    ctx.fillText(gen.name || 'General', IX, 30, IW);
 
     ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = primary;
-    ctx.fillText('GENERAL', nameX, 52);
+    ctx.fillText('GENERAL', IX, 44);
 
     if (gen.rank > 0) {
       const starColors = ['', '#cd7f32', '#c0c0c0', '#ffd700'];
@@ -1227,40 +1251,46 @@
       ctx.fillStyle = starColors[Math.min(gen.rank, 3)];
       let stars = '';
       for (let i = 0; i < gen.rank; i++) stars += '\u2605';
-      ctx.fillText(stars, nameX, 66);
+      ctx.fillText(stars, IX, 58);
     }
 
-    // Separator
     ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
-    ctx.fillRect(20, 84, W - 40, 1);
+    ctx.fillRect(IX, 64, IW, 1);
 
     // Stats
-    const statsY = 98;
-    const col1 = 24, col2 = 158;
-    ctx.font = '11px Cinzel, serif';
+    const sY = 80;
+    ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#888';
-    ctx.fillText('HP', col1, statsY);
+    ctx.fillText('HP', IX, sY);
     ctx.fillStyle = '#4a8c3f';
     ctx.font = 'bold 11px Cinzel, serif';
-    ctx.fillText(`${Math.ceil(gen.hp)} / ${gen.maxHp}`, col1 + 40, statsY);
+    ctx.fillText(`${Math.ceil(gen.hp)} / ${gen.maxHp}`, IX + 26, sY);
 
-    ctx.font = '11px Cinzel, serif';
+    const sY2 = sY + 18;
+    ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#888';
-    ctx.fillText('DMG', col2, statsY);
+    ctx.fillText('DMG', IX, sY2);
     ctx.fillStyle = '#c0392b';
     ctx.font = 'bold 11px Cinzel, serif';
-    ctx.fillText(`${gen.damage}`, col2 + 40, statsY);
+    ctx.fillText(`${gen.damage}`, IX + 32, sY2);
 
-    const statsY2 = statsY + 18;
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('SPD', IX + IW / 2, sY2);
+    ctx.fillStyle = '#4a6fa5';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${gen.speed}`, IX + IW / 2 + 28, sY2);
+
+    const sY3 = sY2 + 18;
     ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = '#c9a84c';
     const auraText = gen.rank >= 3 ? 'Aura: Regen + Dmg + Dodge' :
                      gen.rank >= 2 ? 'Aura: Regen + Damage' :
                      gen.rank >= 1 ? 'Aura: HP Regen' : 'No Aura (Rank up!)';
-    ctx.fillText(auraText, col1, statsY2);
+    ctx.fillText(auraText, IX, sY3);
 
     // XP bar
-    const xpBarY = H - 30, xpBarX = 20, xpBarW = W - 40, xpBarH = 12;
+    const xpBarY = H - 32, xpBarX = IX, xpBarW = IW, xpBarH = 12;
     const xp = gen.xp || 0;
     const xpNeeded = gen.xpToNext || 30;
     const rank = gen.rank || 0;
@@ -1333,113 +1363,1158 @@
     const accent = charData ? charData.accentColor : '#888';
     const dark = charData ? charData.darkColor : '#444';
     const type = unit.unitType;
-    const s = pw / 48; // scale factor
+
+    // Seeded random for per-unit variation
+    const rng = seededRng(unit.id || 1);
+
+    // Random traits
+    const skinTones = ['#e8c4a0', '#d4a574', '#c49464', '#a0724e', '#7a5535'];
+    const skinIdx = Math.floor(rng() * skinTones.length);
+    const skin = skinTones[skinIdx];
+    const skinShadow = ['#d4a880', '#c09060', '#a87850', '#886040', '#5c3a20'][skinIdx];
+    const skinHighlight = ['#f0d4b8', '#e0b888', '#d4a474', '#b08058', '#8a6540'][skinIdx];
+
+    const hairColors = ['#2a1a0a', '#4a3018', '#6b4a2a', '#8b6a3a', '#aa8844', '#c0c0c0', '#881818'];
+    const hair = hairColors[Math.floor(rng() * hairColors.length)];
+    const hairStyle = Math.floor(rng() * 5); // 0=bald, 1=short, 2=medium, 3=long, 4=mohawk
+    const hasBeard = rng() > 0.5;
+    const beardStyle = Math.floor(rng() * 3); // 0=stubble, 1=short, 2=full
+    const hasScar = rng() > 0.65;
+    const scarSide = rng() > 0.5 ? 1 : -1;
+    const eyeColors = ['#3a2510', '#2244aa', '#228833', '#666666', '#884400'];
+    const eyeColor = eyeColors[Math.floor(rng() * eyeColors.length)];
+    const noseWidth = 2 + Math.floor(rng() * 3);
+    const earSize = 3 + Math.floor(rng() * 3);
+    const browThickness = 1 + Math.floor(rng() * 2);
 
     ctx.save();
-    ctx.translate(px, py);
-    ctx.scale(s, s);
+    ctx.beginPath();
+    ctx.rect(px, py, pw, ph);
+    ctx.clip();
 
-    if (type === 'infantry') {
-      ctx.fillStyle = '#777'; ctx.fillRect(14, 4, 20, 14);
-      ctx.fillStyle = '#666'; ctx.fillRect(12, 12, 24, 4);
-      ctx.fillStyle = '#d4a574'; ctx.fillRect(16, 16, 16, 12);
-      ctx.fillStyle = '#222'; ctx.fillRect(18, 19, 4, 3); ctx.fillRect(26, 19, 4, 3);
-      ctx.fillStyle = '#fff'; ctx.fillRect(19, 19, 2, 2); ctx.fillRect(27, 19, 2, 2);
-      ctx.fillStyle = '#c49464'; ctx.fillRect(22, 22, 4, 4);
-      ctx.fillStyle = '#8a6040'; ctx.fillRect(20, 27, 8, 2);
-      ctx.fillStyle = primary; ctx.fillRect(12, 30, 24, 14);
-      ctx.fillStyle = dark; ctx.fillRect(22, 30, 4, 14);
-      ctx.fillStyle = accent; ctx.fillRect(20, 0, 8, 6);
-      ctx.fillStyle = dark; ctx.fillRect(2, 28, 10, 16);
-      ctx.fillStyle = primary; ctx.fillRect(3, 29, 8, 14);
-      ctx.fillStyle = accent; ctx.fillRect(5, 33, 4, 6);
-    } else if (type === 'ranged') {
-      ctx.fillStyle = dark; ctx.fillRect(10, 2, 28, 18); ctx.fillRect(8, 10, 32, 12);
-      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(14, 8, 20, 6);
-      ctx.fillStyle = '#d4a574'; ctx.fillRect(16, 14, 16, 12);
-      ctx.fillStyle = '#333'; ctx.fillRect(18, 18, 5, 2); ctx.fillRect(25, 18, 5, 2);
-      ctx.fillStyle = '#aad'; ctx.fillRect(20, 18, 2, 2); ctx.fillRect(27, 18, 2, 2);
-      ctx.fillStyle = '#c49464'; ctx.fillRect(22, 21, 4, 3);
-      ctx.fillStyle = dark; ctx.fillRect(8, 28, 32, 20);
-      ctx.fillStyle = primary; ctx.fillRect(10, 30, 28, 16);
-      ctx.fillStyle = '#5c4033'; ctx.fillRect(38, 8, 6, 20);
-    } else if (type === 'cavalry') {
-      ctx.fillStyle = '#999'; ctx.fillRect(14, 2, 20, 18);
-      ctx.fillStyle = '#777'; ctx.fillRect(14, 12, 20, 4);
-      ctx.fillStyle = '#111'; ctx.fillRect(16, 13, 16, 2);
-      ctx.fillStyle = primary; ctx.fillRect(16, 0, 16, 4); ctx.fillRect(12, 22, 24, 10);
-      ctx.fillStyle = accent; ctx.fillRect(20, 0, 8, 2);
-      ctx.fillStyle = '#5c3a1e'; ctx.fillRect(10, 34, 20, 14);
-      ctx.fillStyle = '#4a2e15'; ctx.fillRect(6, 38, 10, 10);
-      ctx.fillStyle = '#fff'; ctx.fillRect(10, 41, 3, 2);
-      ctx.fillStyle = '#111'; ctx.fillRect(11, 41, 2, 2);
-      ctx.fillStyle = '#3a2010'; ctx.fillRect(22, 34, 8, 4);
-      ctx.fillStyle = dark; ctx.fillRect(10, 34, 20, 3);
-    } else if (type === 'siege') {
-      ctx.fillStyle = '#5c4033'; ctx.fillRect(6, 16, 36, 18);
-      ctx.fillStyle = '#6B4226'; ctx.fillRect(8, 6, 6, 28);
-      ctx.fillStyle = '#4a3520'; ctx.fillRect(4, 22, 40, 4);
-      ctx.fillStyle = '#4a3520';
-      ctx.beginPath(); ctx.arc(12, 40, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(36, 40, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#555'; ctx.fillRect(6, 18, 36, 2); ctx.fillRect(6, 32, 36, 2);
-      ctx.fillStyle = '#888'; ctx.fillRect(10, 0, 2, 8);
-      ctx.fillStyle = primary; ctx.fillRect(12, 0, 10, 6);
-      ctx.fillStyle = accent; ctx.fillRect(14, 2, 6, 2);
-    } else if (type === 'flying') {
-      ctx.fillStyle = primary;
-      ctx.beginPath(); ctx.arc(22, 22, 14, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = accent; ctx.fillRect(14, 12, 12, 8);
-      ctx.fillStyle = '#d4a017'; ctx.fillRect(34, 18, 12, 4); ctx.fillRect(36, 16, 8, 8);
-      ctx.fillStyle = '#ffd700'; ctx.fillRect(28, 16, 6, 5);
-      ctx.fillStyle = '#111'; ctx.fillRect(30, 17, 3, 3);
-      ctx.fillStyle = '#fff'; ctx.fillRect(31, 17, 1, 1);
-      ctx.fillStyle = dark; ctx.fillRect(2, 6, 18, 6); ctx.fillRect(2, 34, 18, 6);
+    // Background atmosphere - subtle color tint based on faction
+    const atmGrad = ctx.createLinearGradient(px, py, px, py + ph);
+    atmGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    atmGrad.addColorStop(0.6, 'rgba(0,0,0,0)');
+    atmGrad.addColorStop(1, primary.replace('#', 'rgba(') ? `rgba(${parseInt(primary.slice(1,3),16)},${parseInt(primary.slice(3,5),16)},${parseInt(primary.slice(5,7),16)},0.15)` : 'rgba(0,0,0,0)');
+    ctx.fillStyle = atmGrad;
+    ctx.fillRect(px, py, pw, ph);
+
+    const cx = px + pw / 2;  // center x
+    const scale = pw / 120;  // scale based on portrait width
+
+    // Helper to scale values
+    function s(v) { return v * scale; }
+
+    if (type === 'infantry' || type === 'general') {
+      // --- INFANTRY / GENERAL: Armored warrior bust portrait ---
+      const headY = py + s(28);
+      const bodyY = headY + s(52);
+
+      // Shoulders & armor (lower part)
+      const shoulderW = s(52);
+      const armorGrad = ctx.createLinearGradient(cx - shoulderW, bodyY, cx + shoulderW, bodyY + s(80));
+      armorGrad.addColorStop(0, primary);
+      armorGrad.addColorStop(0.5, dark);
+      armorGrad.addColorStop(1, '#111');
+      ctx.fillStyle = armorGrad;
+      ctx.beginPath();
+      ctx.moveTo(cx - shoulderW, bodyY + s(10));
+      ctx.quadraticCurveTo(cx - shoulderW - s(6), bodyY + s(40), cx - shoulderW + s(4), py + ph);
+      ctx.lineTo(cx + shoulderW - s(4), py + ph);
+      ctx.quadraticCurveTo(cx + shoulderW + s(6), bodyY + s(40), cx + shoulderW, bodyY + s(10));
+      ctx.quadraticCurveTo(cx, bodyY - s(4), cx - shoulderW, bodyY + s(10));
+      ctx.fill();
+
+      // Pauldrons (shoulder armor)
       ctx.fillStyle = accent;
-      ctx.fillRect(4, 8, 4, 2); ctx.fillRect(10, 8, 4, 2);
-      ctx.fillRect(4, 36, 4, 2); ctx.fillRect(10, 36, 4, 2);
+      ctx.beginPath();
+      ctx.ellipse(cx - shoulderW + s(8), bodyY + s(12), s(14), s(10), -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + shoulderW - s(8), bodyY + s(12), s(14), s(10), 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      // Pauldron rivets
+      ctx.fillStyle = '#d4a017';
+      for (let side = -1; side <= 1; side += 2) {
+        const psx = cx + side * (shoulderW - s(8));
+        ctx.beginPath(); ctx.arc(psx, bodyY + s(8), s(2), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(psx, bodyY + s(16), s(2), 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Chest plate detail
+      ctx.fillStyle = accent;
+      ctx.fillRect(cx - s(6), bodyY + s(4), s(12), s(20));
+      // Center line on chest
+      ctx.fillStyle = dark;
+      ctx.fillRect(cx - s(1), bodyY + s(2), s(2), s(26));
+      // Belt
+      ctx.fillStyle = '#5c4033';
+      ctx.fillRect(cx - shoulderW + s(10), bodyY + s(28), shoulderW * 2 - s(20), s(6));
+      ctx.fillStyle = '#d4a017';
+      ctx.fillRect(cx - s(4), bodyY + s(27), s(8), s(8)); // buckle
+
+      // Gorget (neck armor)
+      ctx.fillStyle = '#777';
+      ctx.beginPath();
+      ctx.ellipse(cx, bodyY + s(2), s(18), s(8), 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#999';
+      ctx.fillRect(cx - s(16), bodyY - s(2), s(32), s(4));
+
+      // Neck
+      ctx.fillStyle = skin;
+      ctx.fillRect(cx - s(10), bodyY - s(10), s(20), s(14));
+      ctx.fillStyle = skinShadow;
+      ctx.fillRect(cx - s(10), bodyY - s(2), s(20), s(4));
+
+      // Head - oval shape
+      const headCY = headY + s(22);
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.ellipse(cx, headCY, s(22), s(26), 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ears
+      ctx.fillStyle = skinShadow;
+      ctx.beginPath(); ctx.ellipse(cx - s(22), headCY + s(2), s(earSize), s(earSize + 2), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + s(22), headCY + s(2), s(earSize), s(earSize + 2), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = skin;
+      ctx.beginPath(); ctx.ellipse(cx - s(21), headCY + s(2), s(earSize - 1), s(earSize + 1), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + s(21), headCY + s(2), s(earSize - 1), s(earSize + 1), 0, 0, Math.PI * 2); ctx.fill();
+
+      // Eyes
+      const eyeY = headCY - s(2);
+      const eyeSpacing = s(9);
+      for (let side = -1; side <= 1; side += 2) {
+        const ex = cx + side * eyeSpacing;
+        // Eye white
+        ctx.fillStyle = '#eee';
+        ctx.beginPath(); ctx.ellipse(ex, eyeY, s(6), s(3.5), 0, 0, Math.PI * 2); ctx.fill();
+        // Iris
+        ctx.fillStyle = eyeColor;
+        ctx.beginPath(); ctx.arc(ex + side * s(1), eyeY, s(2.5), 0, Math.PI * 2); ctx.fill();
+        // Pupil
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(ex + side * s(1), eyeY, s(1.2), 0, Math.PI * 2); ctx.fill();
+        // Highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.beginPath(); ctx.arc(ex + side * s(1) + s(0.8), eyeY - s(0.8), s(0.7), 0, Math.PI * 2); ctx.fill();
+        // Upper eyelid / brow
+        ctx.fillStyle = skinShadow;
+        ctx.fillRect(ex - s(6), eyeY - s(4), s(12), s(browThickness + 1));
+      }
+
+      // Eyebrows
+      ctx.fillStyle = hair;
+      for (let side = -1; side <= 1; side += 2) {
+        const bx = cx + side * eyeSpacing;
+        ctx.fillRect(bx - s(6), eyeY - s(7), s(12), s(browThickness + 1));
+      }
+
+      // Nose
+      ctx.fillStyle = skinShadow;
+      ctx.beginPath();
+      ctx.moveTo(cx - s(1), headCY - s(4));
+      ctx.lineTo(cx - s(noseWidth), headCY + s(8));
+      ctx.lineTo(cx + s(noseWidth), headCY + s(8));
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = skinHighlight;
+      ctx.fillRect(cx - s(0.5), headCY - s(3), s(1), s(8));
+
+      // Mouth
+      ctx.fillStyle = '#7a3030';
+      ctx.fillRect(cx - s(5), headCY + s(12), s(10), s(2));
+      ctx.fillStyle = skinShadow;
+      ctx.fillRect(cx - s(4), headCY + s(14), s(8), s(1));
+
+      // Beard (if applicable)
+      if (hasBeard) {
+        ctx.fillStyle = hair;
+        if (beardStyle === 0) {
+          // Stubble dots
+          ctx.globalAlpha = 0.3;
+          for (let bx = -8; bx <= 8; bx += 2) {
+            for (let by = 10; by <= 18; by += 2) {
+              if (rng() > 0.4) {
+                ctx.fillRect(cx + s(bx), headCY + s(by), s(1), s(1));
+              }
+            }
+          }
+          ctx.globalAlpha = 1;
+        } else if (beardStyle === 1) {
+          // Short beard
+          ctx.beginPath();
+          ctx.moveTo(cx - s(14), headCY + s(10));
+          ctx.quadraticCurveTo(cx, headCY + s(24), cx + s(14), headCY + s(10));
+          ctx.fill();
+        } else {
+          // Full beard
+          ctx.beginPath();
+          ctx.moveTo(cx - s(16), headCY + s(6));
+          ctx.quadraticCurveTo(cx - s(18), headCY + s(20), cx, headCY + s(30));
+          ctx.quadraticCurveTo(cx + s(18), headCY + s(20), cx + s(16), headCY + s(6));
+          ctx.fill();
+        }
+      }
+
+      // Scar
+      if (hasScar) {
+        ctx.strokeStyle = 'rgba(180,60,60,0.5)';
+        ctx.lineWidth = s(1.5);
+        ctx.beginPath();
+        ctx.moveTo(cx + scarSide * s(4), headCY - s(10));
+        ctx.lineTo(cx + scarSide * s(8), headCY + s(6));
+        ctx.stroke();
+      }
+
+      // Hair / Helmet
+      if (type === 'general') {
+        // General gets a crown/ornate helm
+        ctx.fillStyle = '#888';
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(10), s(24), s(18), 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#999';
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(12), s(26), s(10), 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Crown
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(cx - s(20), headY - s(2), s(40), s(8));
+        // Crown points
+        for (let i = -2; i <= 2; i++) {
+          ctx.fillRect(cx + i * s(8) - s(3), headY - s(10 + Math.abs(i) * 2), s(6), s(10 + Math.abs(i) * 2));
+        }
+        // Gems
+        ctx.fillStyle = '#cc2222';
+        ctx.beginPath(); ctx.arc(cx, headY, s(3), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2244cc';
+        ctx.beginPath(); ctx.arc(cx - s(8), headY + s(1), s(2), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + s(8), headY + s(1), s(2), 0, Math.PI * 2); ctx.fill();
+        // Cape/cloak behind
+        ctx.fillStyle = primary;
+        ctx.globalAlpha = 0.4;
+        ctx.fillRect(cx - shoulderW - s(4), bodyY + s(14), s(12), py + ph - bodyY - s(14));
+        ctx.fillRect(cx + shoulderW - s(8), bodyY + s(14), s(12), py + ph - bodyY - s(14));
+        ctx.globalAlpha = 1;
+      } else {
+        // Infantry - helmet or hair
+        const helmType = Math.floor(rng() * 3);
+        if (helmType === 0) {
+          // Open-face helm
+          ctx.fillStyle = '#888';
+          ctx.beginPath();
+          ctx.ellipse(cx, headY + s(8), s(24), s(20), 0, Math.PI + 0.3, -0.3);
+          ctx.fill();
+          // Nose guard
+          ctx.fillStyle = '#777';
+          ctx.fillRect(cx - s(2), headY + s(4), s(4), s(20));
+          // Helm crest
+          ctx.fillStyle = primary;
+          ctx.fillRect(cx - s(2), headY - s(6), s(4), s(16));
+        } else if (helmType === 1) {
+          // Kettle helm
+          ctx.fillStyle = '#888';
+          ctx.beginPath();
+          ctx.ellipse(cx, headY + s(10), s(26), s(14), 0, Math.PI, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#999';
+          ctx.fillRect(cx - s(28), headY + s(8), s(56), s(4));
+          // Hair showing below
+          if (hairStyle > 0) {
+            ctx.fillStyle = hair;
+            ctx.fillRect(cx - s(20), headCY - s(6), s(40), s(4));
+          }
+        } else {
+          // Hair only (no helm)
+          ctx.fillStyle = hair;
+          if (hairStyle === 0) {
+            // Bald - just a subtle shadow
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.ellipse(cx, headY + s(8), s(22), s(16), 0, Math.PI, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          } else if (hairStyle === 1) {
+            // Short crop
+            ctx.beginPath();
+            ctx.ellipse(cx, headY + s(6), s(23), s(18), 0, Math.PI + 0.5, -0.5);
+            ctx.fill();
+          } else if (hairStyle === 2) {
+            // Medium
+            ctx.beginPath();
+            ctx.ellipse(cx, headY + s(6), s(24), s(20), 0, Math.PI + 0.3, -0.3);
+            ctx.fill();
+            ctx.fillRect(cx - s(24), headCY - s(4), s(4), s(16));
+            ctx.fillRect(cx + s(20), headCY - s(4), s(4), s(16));
+          } else if (hairStyle === 3) {
+            // Long flowing
+            ctx.beginPath();
+            ctx.ellipse(cx, headY + s(6), s(24), s(20), 0, Math.PI + 0.2, -0.2);
+            ctx.fill();
+            ctx.fillRect(cx - s(24), headCY - s(8), s(6), s(40));
+            ctx.fillRect(cx + s(18), headCY - s(8), s(6), s(40));
+          } else {
+            // Mohawk
+            ctx.beginPath();
+            ctx.ellipse(cx, headY + s(6), s(22), s(16), 0, Math.PI, Math.PI * 2);
+            ctx.fill();
+            ctx.fillRect(cx - s(3), headY - s(10), s(6), s(22));
+          }
+        }
+      }
+
+      // Weapon in hand (infantry)
+      if (type === 'infantry') {
+        const weapType = Math.floor(rng() * 3);
+        if (weapType === 0) {
+          // Sword
+          ctx.fillStyle = '#aaa';
+          ctx.fillRect(cx + s(36), bodyY - s(10), s(4), s(50));
+          ctx.fillStyle = '#ccc';
+          ctx.fillRect(cx + s(35), bodyY - s(12), s(6), s(4));
+          ctx.fillStyle = '#5c4033';
+          ctx.fillRect(cx + s(34), bodyY - s(8), s(8), s(10));
+          ctx.fillStyle = '#d4a017';
+          ctx.fillRect(cx + s(34), bodyY - s(8), s(8), s(2));
+          ctx.fillRect(cx + s(34), bodyY, s(8), s(2));
+        } else if (weapType === 1) {
+          // Axe
+          ctx.fillStyle = '#5c4033';
+          ctx.fillRect(cx + s(38), bodyY - s(16), s(3), s(56));
+          ctx.fillStyle = '#aaa';
+          ctx.beginPath();
+          ctx.moveTo(cx + s(38), bodyY - s(14));
+          ctx.lineTo(cx + s(30), bodyY - s(6));
+          ctx.lineTo(cx + s(38), bodyY + s(2));
+          ctx.fill();
+        } else {
+          // Mace
+          ctx.fillStyle = '#5c4033';
+          ctx.fillRect(cx + s(38), bodyY - s(10), s(3), s(50));
+          ctx.fillStyle = '#888';
+          ctx.beginPath();
+          ctx.arc(cx + s(39), bodyY - s(8), s(6), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#666';
+          for (let a = 0; a < 6; a++) {
+            const ang = a * Math.PI / 3;
+            ctx.fillRect(cx + s(39) + Math.cos(ang) * s(5) - s(2), bodyY - s(8) + Math.sin(ang) * s(5) - s(2), s(4), s(4));
+          }
+        }
+        // Shield on other side
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.moveTo(cx - s(40), bodyY);
+        ctx.lineTo(cx - s(50), bodyY + s(10));
+        ctx.lineTo(cx - s(46), bodyY + s(40));
+        ctx.lineTo(cx - s(36), bodyY + s(46));
+        ctx.lineTo(cx - s(26), bodyY + s(40));
+        ctx.lineTo(cx - s(22), bodyY + s(10));
+        ctx.lineTo(cx - s(32), bodyY);
+        ctx.fill();
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.moveTo(cx - s(38), bodyY + s(10));
+        ctx.lineTo(cx - s(42), bodyY + s(18));
+        ctx.lineTo(cx - s(36), bodyY + s(32));
+        ctx.lineTo(cx - s(30), bodyY + s(18));
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#d4a017';
+        ctx.beginPath(); ctx.arc(cx - s(36), bodyY + s(20), s(3), 0, Math.PI * 2); ctx.fill();
+      }
+
+    } else if (type === 'ranged') {
+      // --- RANGED: Hooded archer bust ---
+      const headY = py + s(28);
+      const bodyY = headY + s(52);
+      const headCY = headY + s(22);
+
+      // Shoulders & cloak
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.moveTo(cx - s(48), bodyY + s(8));
+      ctx.quadraticCurveTo(cx - s(52), bodyY + s(40), cx - s(44), py + ph);
+      ctx.lineTo(cx + s(44), py + ph);
+      ctx.quadraticCurveTo(cx + s(52), bodyY + s(40), cx + s(48), bodyY + s(8));
+      ctx.quadraticCurveTo(cx, bodyY - s(6), cx - s(48), bodyY + s(8));
+      ctx.fill();
+
+      // Inner tunic
+      ctx.fillStyle = primary;
+      ctx.beginPath();
+      ctx.moveTo(cx - s(20), bodyY + s(2));
+      ctx.lineTo(cx - s(24), py + ph);
+      ctx.lineTo(cx + s(24), py + ph);
+      ctx.lineTo(cx + s(20), bodyY + s(2));
+      ctx.fill();
+      // Belt
+      ctx.fillStyle = '#5c4033';
+      ctx.fillRect(cx - s(24), bodyY + s(24), s(48), s(5));
+      ctx.fillStyle = '#888';
+      ctx.fillRect(cx - s(3), bodyY + s(23), s(6), s(7));
+
+      // Quiver strap
+      ctx.strokeStyle = '#5c4033';
+      ctx.lineWidth = s(3);
+      ctx.beginPath();
+      ctx.moveTo(cx + s(18), bodyY);
+      ctx.lineTo(cx - s(14), bodyY + s(36));
+      ctx.stroke();
+      // Arrow tips poking out
+      ctx.fillStyle = '#aaa';
+      for (let i = 0; i < 3; i++) {
+        ctx.fillRect(cx + s(30 + i * 4), bodyY - s(10 + i * 3), s(2), s(8));
+        ctx.fillStyle = '#ccc';
+        ctx.beginPath();
+        ctx.moveTo(cx + s(31 + i * 4), bodyY - s(12 + i * 3));
+        ctx.lineTo(cx + s(28 + i * 4), bodyY - s(10 + i * 3));
+        ctx.lineTo(cx + s(34 + i * 4), bodyY - s(10 + i * 3));
+        ctx.fill();
+        ctx.fillStyle = '#aaa';
+      }
+
+      // Neck
+      ctx.fillStyle = skin;
+      ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+
+      // Head
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Hood (always for ranged)
+      const hoodUp = rng() > 0.3;
+      ctx.fillStyle = dark;
+      if (hoodUp) {
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(6), s(28), s(22), 0, Math.PI + 0.3, -0.3);
+        ctx.fill();
+        // Hood shadow over face
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(14), s(22), s(10), 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Hood drape sides
+        ctx.fillStyle = dark;
+        ctx.fillRect(cx - s(26), headCY - s(2), s(6), s(28));
+        ctx.fillRect(cx + s(20), headCY - s(2), s(6), s(28));
+      } else {
+        // Hood down around shoulders
+        ctx.beginPath();
+        ctx.moveTo(cx - s(30), bodyY + s(14));
+        ctx.quadraticCurveTo(cx, bodyY + s(24), cx + s(30), bodyY + s(14));
+        ctx.fill();
+        // Show hair
+        ctx.fillStyle = hair;
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(8), s(21), s(18), 0, Math.PI + 0.4, -0.4);
+        ctx.fill();
+      }
+
+      // Eyes (narrower, more focused)
+      const eyeY = headCY - s(2);
+      for (let side = -1; side <= 1; side += 2) {
+        const ex = cx + side * s(8);
+        ctx.fillStyle = '#ddd';
+        ctx.beginPath(); ctx.ellipse(ex, eyeY, s(5), s(2.5), 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = eyeColor;
+        ctx.beginPath(); ctx.arc(ex + side * s(1), eyeY, s(2), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(ex + side * s(1), eyeY, s(1), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.beginPath(); ctx.arc(ex + side * s(1) + s(0.6), eyeY - s(0.6), s(0.5), 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Brows
+      ctx.fillStyle = hair;
+      ctx.fillRect(cx - s(14), eyeY - s(6), s(12), s(browThickness));
+      ctx.fillRect(cx + s(2), eyeY - s(6), s(12), s(browThickness));
+
+      // Nose
+      ctx.fillStyle = skinShadow;
+      ctx.beginPath();
+      ctx.moveTo(cx, headCY - s(2));
+      ctx.lineTo(cx - s(noseWidth), headCY + s(6));
+      ctx.lineTo(cx + s(noseWidth), headCY + s(6));
+      ctx.fill();
+
+      // Mouth
+      ctx.fillStyle = '#7a3030';
+      ctx.fillRect(cx - s(4), headCY + s(10), s(8), s(2));
+
+      if (hasScar) {
+        ctx.strokeStyle = 'rgba(180,60,60,0.4)';
+        ctx.lineWidth = s(1.2);
+        ctx.beginPath();
+        ctx.moveTo(cx + scarSide * s(6), headCY - s(8));
+        ctx.lineTo(cx + scarSide * s(10), headCY + s(4));
+        ctx.stroke();
+      }
+
+      // Bow in hand
+      ctx.strokeStyle = '#5c4033';
+      ctx.lineWidth = s(3);
+      ctx.beginPath();
+      ctx.arc(cx - s(44), bodyY + s(10), s(32), -Math.PI * 0.4, Math.PI * 0.4);
+      ctx.stroke();
+      // Bowstring
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = s(1);
+      ctx.beginPath();
+      ctx.moveTo(cx - s(44) + Math.cos(-Math.PI * 0.4) * s(32), bodyY + s(10) + Math.sin(-Math.PI * 0.4) * s(32));
+      ctx.lineTo(cx - s(44) + Math.cos(Math.PI * 0.4) * s(32), bodyY + s(10) + Math.sin(Math.PI * 0.4) * s(32));
+      ctx.stroke();
+
+    } else if (type === 'cavalry') {
+      // --- CAVALRY: Armored rider with horse visible ---
+      const headY = py + s(18);
+      const bodyY = headY + s(46);
+      const headCY = headY + s(20);
+
+      // Horse head/neck (lower portion)
+      const horseColors = ['#5c3a1e', '#3a2010', '#8b6a3a', '#2a1a0a', '#c0c0c0'];
+      const horseColor = horseColors[Math.floor(rng() * horseColors.length)];
+      const horseDark = '#2a1a0a';
+
+      // Horse body/neck visible below rider
+      ctx.fillStyle = horseColor;
+      ctx.beginPath();
+      ctx.moveTo(px, py + ph - s(10));
+      ctx.quadraticCurveTo(cx - s(20), bodyY + s(30), cx - s(10), bodyY + s(16));
+      ctx.lineTo(cx + s(10), bodyY + s(16));
+      ctx.quadraticCurveTo(cx + s(20), bodyY + s(30), px + pw, py + ph - s(10));
+      ctx.lineTo(px + pw, py + ph);
+      ctx.lineTo(px, py + ph);
+      ctx.fill();
+
+      // Horse mane
+      ctx.fillStyle = horseDark;
+      ctx.fillRect(cx - s(4), bodyY + s(16), s(8), s(30));
+
+      // Horse armor/barding
+      ctx.fillStyle = primary;
+      ctx.fillRect(cx - s(30), bodyY + s(30), s(60), s(6));
+      ctx.fillStyle = accent;
+      for (let i = -2; i <= 2; i++) {
+        ctx.fillRect(cx + i * s(12) - s(2), bodyY + s(29), s(4), s(8));
+      }
+
+      // Rider torso
+      const armorGrad = ctx.createLinearGradient(cx, bodyY - s(10), cx, bodyY + s(20));
+      armorGrad.addColorStop(0, '#999');
+      armorGrad.addColorStop(1, '#666');
+      ctx.fillStyle = armorGrad;
+      ctx.beginPath();
+      ctx.moveTo(cx - s(36), bodyY + s(6));
+      ctx.lineTo(cx - s(26), bodyY - s(4));
+      ctx.quadraticCurveTo(cx, bodyY - s(10), cx + s(26), bodyY - s(4));
+      ctx.lineTo(cx + s(36), bodyY + s(6));
+      ctx.lineTo(cx + s(30), bodyY + s(20));
+      ctx.lineTo(cx - s(30), bodyY + s(20));
+      ctx.fill();
+
+      // Tabard/surcoat over armor
+      ctx.fillStyle = primary;
+      ctx.beginPath();
+      ctx.moveTo(cx - s(14), bodyY);
+      ctx.lineTo(cx - s(18), bodyY + s(22));
+      ctx.lineTo(cx + s(18), bodyY + s(22));
+      ctx.lineTo(cx + s(14), bodyY);
+      ctx.fill();
+      ctx.fillStyle = accent;
+      ctx.fillRect(cx - s(2), bodyY + s(2), s(4), s(16));
+      ctx.fillRect(cx - s(8), bodyY + s(8), s(16), s(4));
+
+      // Pauldrons
+      ctx.fillStyle = '#aaa';
+      ctx.beginPath(); ctx.ellipse(cx - s(34), bodyY + s(2), s(10), s(8), -0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + s(34), bodyY + s(2), s(10), s(8), 0.3, 0, Math.PI * 2); ctx.fill();
+
+      // Neck
+      ctx.fillStyle = skin;
+      ctx.fillRect(cx - s(8), bodyY - s(12), s(16), s(12));
+
+      // Head
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.ellipse(cx, headCY, s(18), s(22), 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Full helm for cavalry
+      const cavalryHelm = Math.floor(rng() * 3);
+      ctx.fillStyle = '#999';
+      if (cavalryHelm === 0) {
+        // Great helm
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(8), s(22), s(18), 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(cx - s(22), headY + s(6), s(44), s(4));
+        // Visor slit
+        ctx.fillStyle = '#333';
+        ctx.fillRect(cx - s(14), headCY - s(4), s(28), s(3));
+        // Plume
+        ctx.fillStyle = primary;
+        ctx.fillRect(cx - s(2), headY - s(12), s(4), s(16));
+        ctx.fillStyle = accent;
+        ctx.fillRect(cx - s(1), headY - s(10), s(2), s(12));
+      } else if (cavalryHelm === 1) {
+        // Open face with cheek guards
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(6), s(22), s(18), 0, Math.PI + 0.4, -0.4);
+        ctx.fill();
+        ctx.fillStyle = '#888';
+        ctx.fillRect(cx - s(22), headCY - s(2), s(6), s(16));
+        ctx.fillRect(cx + s(16), headCY - s(2), s(6), s(16));
+        // Show eyes
+        const eyeY = headCY - s(2);
+        for (let side = -1; side <= 1; side += 2) {
+          const ex = cx + side * s(8);
+          ctx.fillStyle = '#eee';
+          ctx.beginPath(); ctx.ellipse(ex, eyeY, s(5), s(3), 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = eyeColor;
+          ctx.beginPath(); ctx.arc(ex, eyeY, s(2), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#111';
+          ctx.beginPath(); ctx.arc(ex, eyeY, s(1), 0, Math.PI * 2); ctx.fill();
+        }
+      } else {
+        // No helm, show hair and face
+        ctx.fillStyle = hair;
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(6), s(20), s(17), 0, Math.PI + 0.3, -0.3);
+        ctx.fill();
+        // Eyes
+        const eyeY = headCY - s(2);
+        for (let side = -1; side <= 1; side += 2) {
+          const ex = cx + side * s(8);
+          ctx.fillStyle = '#eee';
+          ctx.beginPath(); ctx.ellipse(ex, eyeY, s(5), s(3), 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = eyeColor;
+          ctx.beginPath(); ctx.arc(ex, eyeY, s(2), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#111';
+          ctx.beginPath(); ctx.arc(ex, eyeY, s(1), 0, Math.PI * 2); ctx.fill();
+        }
+        // Nose + mouth
+        ctx.fillStyle = skinShadow;
+        ctx.beginPath();
+        ctx.moveTo(cx, headCY - s(2));
+        ctx.lineTo(cx - s(noseWidth), headCY + s(5));
+        ctx.lineTo(cx + s(noseWidth), headCY + s(5));
+        ctx.fill();
+        ctx.fillStyle = '#7a3030';
+        ctx.fillRect(cx - s(4), headCY + s(8), s(8), s(2));
+      }
+
+      // Lance
+      ctx.fillStyle = '#5c4033';
+      ctx.save();
+      ctx.translate(cx + s(34), bodyY - s(8));
+      ctx.rotate(-0.15);
+      ctx.fillRect(-s(2), -s(60), s(4), s(80));
+      ctx.fillStyle = '#aaa';
+      ctx.beginPath();
+      ctx.moveTo(0, -s(62));
+      ctx.lineTo(-s(4), -s(52));
+      ctx.lineTo(s(4), -s(52));
+      ctx.fill();
+      ctx.fillStyle = primary;
+      ctx.fillRect(-s(6), -s(40), s(12), s(8));
+      ctx.restore();
+
+    } else if (type === 'siege') {
+      // --- SIEGE: Engineer with siege machine ---
+      const headY = py + s(30);
+      const bodyY = headY + s(42);
+      const headCY = headY + s(18);
+
+      // Siege machine background (catapult/trebuchet)
+      ctx.fillStyle = '#5c4033';
+      ctx.fillRect(px + s(10), py + ph - s(60), s(80), s(12));
+      // Frame
+      ctx.fillRect(px + s(20), py + ph - s(90), s(8), s(50));
+      ctx.fillRect(px + s(70), py + ph - s(90), s(8), s(50));
+      // Arm
+      ctx.save();
+      ctx.translate(px + s(50), py + ph - s(88));
+      ctx.rotate(-0.4);
+      ctx.fillStyle = '#4a3520';
+      ctx.fillRect(-s(4), -s(30), s(8), s(60));
+      ctx.fillStyle = '#888';
+      ctx.beginPath(); ctx.arc(0, -s(30), s(5), 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // Wheels
+      ctx.fillStyle = '#4a3520';
+      ctx.beginPath(); ctx.arc(px + s(24), py + ph - s(42), s(12), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + s(74), py + ph - s(42), s(12), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#333';
+      ctx.beginPath(); ctx.arc(px + s(24), py + ph - s(42), s(4), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + s(74), py + ph - s(42), s(4), 0, Math.PI * 2); ctx.fill();
+      // Spokes
+      ctx.strokeStyle = '#5c4033';
+      ctx.lineWidth = s(2);
+      for (let a = 0; a < 4; a++) {
+        const ang = a * Math.PI / 4;
+        for (const wx of [s(24), s(74)]) {
+          ctx.beginPath();
+          ctx.moveTo(px + wx + Math.cos(ang) * s(4), py + ph - s(42) + Math.sin(ang) * s(4));
+          ctx.lineTo(px + wx + Math.cos(ang) * s(11), py + ph - s(42) + Math.sin(ang) * s(11));
+          ctx.stroke();
+        }
+      }
+
+      // Engineer figure (smaller, in front of machine)
+      // Body
+      ctx.fillStyle = primary;
+      ctx.fillRect(cx - s(16), bodyY, s(32), s(30));
+      ctx.fillStyle = '#5c4033'; // leather apron
+      ctx.fillRect(cx - s(12), bodyY + s(4), s(24), s(24));
+      ctx.fillStyle = '#888';
+      ctx.fillRect(cx - s(14), bodyY + s(20), s(28), s(4)); // tool belt
+
+      // Arms
+      ctx.fillStyle = skin;
+      ctx.fillRect(cx - s(22), bodyY + s(2), s(8), s(20));
+      ctx.fillRect(cx + s(14), bodyY + s(2), s(8), s(20));
+      // Gloves
+      ctx.fillStyle = '#5c4033';
+      ctx.fillRect(cx - s(22), bodyY + s(18), s(8), s(8));
+      ctx.fillRect(cx + s(14), bodyY + s(18), s(8), s(8));
+
+      // Neck
+      ctx.fillStyle = skin;
+      ctx.fillRect(cx - s(7), bodyY - s(8), s(14), s(12));
+
+      // Head
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.ellipse(cx, headCY, s(16), s(20), 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Engineer cap or goggles
+      const engGear = Math.floor(rng() * 3);
+      if (engGear === 0) {
+        // Leather cap
+        ctx.fillStyle = '#5c4033';
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(6), s(18), s(14), 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(cx - s(18), headY + s(4), s(36), s(4));
+      } else if (engGear === 1) {
+        // Goggles on forehead
+        ctx.fillStyle = hair;
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(6), s(17), s(14), 0, Math.PI + 0.4, -0.4);
+        ctx.fill();
+        ctx.fillStyle = '#5c4033';
+        ctx.fillRect(cx - s(14), headY + s(6), s(28), s(3));
+        ctx.fillStyle = '#888';
+        ctx.beginPath(); ctx.arc(cx - s(7), headY + s(7), s(5), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + s(7), headY + s(7), s(5), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#aad';
+        ctx.beginPath(); ctx.arc(cx - s(7), headY + s(7), s(3.5), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + s(7), headY + s(7), s(3.5), 0, Math.PI * 2); ctx.fill();
+      } else {
+        // Bandana
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(8), s(18), s(12), 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = dark;
+        ctx.fillRect(cx - s(18), headY + s(6), s(36), s(3));
+        // Knot
+        ctx.fillStyle = primary;
+        ctx.fillRect(cx + s(14), headY + s(6), s(8), s(4));
+        ctx.fillRect(cx + s(18), headY + s(4), s(6), s(8));
+      }
+
+      // Eyes (determined, focused)
+      const eyeY = headCY - s(2);
+      for (let side = -1; side <= 1; side += 2) {
+        const ex = cx + side * s(7);
+        ctx.fillStyle = '#eee';
+        ctx.beginPath(); ctx.ellipse(ex, eyeY, s(4.5), s(3), 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = eyeColor;
+        ctx.beginPath(); ctx.arc(ex, eyeY, s(2), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(ex, eyeY, s(1), 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = hair;
+      ctx.fillRect(cx - s(12), eyeY - s(5), s(10), s(browThickness));
+      ctx.fillRect(cx + s(2), eyeY - s(5), s(10), s(browThickness));
+
+      // Nose + mouth
+      ctx.fillStyle = skinShadow;
+      ctx.beginPath();
+      ctx.moveTo(cx, headCY);
+      ctx.lineTo(cx - s(noseWidth), headCY + s(6));
+      ctx.lineTo(cx + s(noseWidth), headCY + s(6));
+      ctx.fill();
+      ctx.fillStyle = '#7a3030';
+      ctx.fillRect(cx - s(3), headCY + s(9), s(6), s(2));
+
+      if (hasBeard) {
+        ctx.fillStyle = hair;
+        ctx.globalAlpha = beardStyle === 0 ? 0.3 : 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - s(10), headCY + s(8));
+        ctx.quadraticCurveTo(cx, headCY + s(16 + beardStyle * 4), cx + s(10), headCY + s(8));
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // Tool in hand (hammer/wrench)
+      ctx.fillStyle = '#888';
+      ctx.fillRect(cx + s(18), bodyY + s(12), s(16), s(4));
+      ctx.fillRect(cx + s(18), bodyY + s(8), s(4), s(12));
+
+      // Faction banner on machine
+      ctx.fillStyle = primary;
+      ctx.fillRect(px + s(22), py + ph - s(100), s(2), s(18));
+      ctx.fillRect(px + s(24), py + ph - s(100), s(12), s(10));
+      ctx.fillStyle = accent;
+      ctx.fillRect(px + s(26), py + ph - s(98), s(8), s(6));
+
+    } else if (type === 'flying') {
+      // --- FLYING: Eagle/griffin with rider or winged creature ---
+      const creatureStyle = Math.floor(rng() * 2); // 0=eagle, 1=dragon
+
+      if (creatureStyle === 0) {
+        // Giant eagle with rider
+        const bodyY = py + s(50);
+        // Wings (spread wide)
+        ctx.fillStyle = dark;
+        // Left wing
+        ctx.beginPath();
+        ctx.moveTo(cx - s(10), bodyY);
+        ctx.quadraticCurveTo(px - s(10), bodyY - s(40), px + s(4), bodyY - s(30));
+        ctx.quadraticCurveTo(px + s(10), bodyY - s(10), cx - s(10), bodyY + s(10));
+        ctx.fill();
+        // Right wing
+        ctx.beginPath();
+        ctx.moveTo(cx + s(10), bodyY);
+        ctx.quadraticCurveTo(px + pw + s(10), bodyY - s(40), px + pw - s(4), bodyY - s(30));
+        ctx.quadraticCurveTo(px + pw - s(10), bodyY - s(10), cx + s(10), bodyY + s(10));
+        ctx.fill();
+
+        // Wing feather details
+        ctx.fillStyle = primary;
+        for (let i = 0; i < 5; i++) {
+          const t = i / 4;
+          // Left
+          const lx = cx - s(10) + (px - cx + s(10)) * t;
+          const ly = bodyY + (bodyY - s(30) - bodyY) * t;
+          ctx.beginPath();
+          ctx.ellipse(lx, ly, s(6), s(14), -0.3 - t * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          // Right
+          const rx = cx + s(10) + (px + pw - cx - s(10)) * t;
+          ctx.beginPath();
+          ctx.ellipse(rx, ly, s(6), s(14), 0.3 + t * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Eagle body
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.ellipse(cx, bodyY + s(20), s(24), s(30), 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tail
+        ctx.fillStyle = '#eee';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(8), bodyY + s(44));
+        ctx.lineTo(cx, py + ph);
+        ctx.lineTo(cx + s(8), bodyY + s(44));
+        ctx.fill();
+
+        // Eagle head
+        ctx.fillStyle = '#eee';
+        ctx.beginPath();
+        ctx.ellipse(cx, bodyY - s(10), s(14), s(16), 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eye
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.arc(cx + s(5), bodyY - s(14), s(4), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(cx + s(5), bodyY - s(14), s(2), 0, Math.PI * 2); ctx.fill();
+
+        // Beak
+        ctx.fillStyle = '#d4a017';
+        ctx.beginPath();
+        ctx.moveTo(cx + s(12), bodyY - s(12));
+        ctx.lineTo(cx + s(24), bodyY - s(6));
+        ctx.lineTo(cx + s(12), bodyY - s(4));
+        ctx.fill();
+
+        // Talons
+        ctx.fillStyle = '#d4a017';
+        for (let side = -1; side <= 1; side += 2) {
+          const tx = cx + side * s(12);
+          const ty = bodyY + s(46);
+          for (let t = -1; t <= 1; t++) {
+            ctx.fillRect(tx + t * s(3), ty, s(2), s(8));
+            ctx.beginPath();
+            ctx.moveTo(tx + t * s(3), ty + s(8));
+            ctx.lineTo(tx + t * s(3) + s(3), ty + s(12));
+            ctx.lineTo(tx + t * s(3) - s(1), ty + s(8));
+            ctx.fill();
+          }
+        }
+
+        // Rider (small on top)
+        ctx.fillStyle = skin;
+        ctx.beginPath();
+        ctx.ellipse(cx - s(4), bodyY - s(2), s(6), s(7), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = primary;
+        ctx.fillRect(cx - s(10), bodyY + s(4), s(12), s(14));
+
+      } else {
+        // Dragon-like creature
+        const bodyY = py + s(60);
+
+        // Wings
+        ctx.fillStyle = dark;
+        ctx.beginPath();
+        ctx.moveTo(cx, bodyY - s(10));
+        ctx.quadraticCurveTo(px - s(5), py + s(10), px + s(8), py + s(20));
+        ctx.lineTo(px + s(15), bodyY - s(15));
+        ctx.quadraticCurveTo(cx - s(20), bodyY - s(30), cx, bodyY - s(10));
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx, bodyY - s(10));
+        ctx.quadraticCurveTo(px + pw + s(5), py + s(10), px + pw - s(8), py + s(20));
+        ctx.lineTo(px + pw - s(15), bodyY - s(15));
+        ctx.quadraticCurveTo(cx + s(20), bodyY - s(30), cx, bodyY - s(10));
+        ctx.fill();
+
+        // Wing membrane veins
+        ctx.strokeStyle = primary;
+        ctx.lineWidth = s(1);
+        for (let i = 1; i <= 3; i++) {
+          ctx.beginPath();
+          ctx.moveTo(cx, bodyY - s(10));
+          ctx.quadraticCurveTo(cx - s(15 + i * 8), bodyY - s(20 + i * 5), px + s(10 + i * 4), py + s(16 + i * 8));
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(cx, bodyY - s(10));
+          ctx.quadraticCurveTo(cx + s(15 + i * 8), bodyY - s(20 + i * 5), px + pw - s(10 + i * 4), py + s(16 + i * 8));
+          ctx.stroke();
+        }
+
+        // Body
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.ellipse(cx, bodyY + s(10), s(22), s(28), 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Belly scales
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.ellipse(cx, bodyY + s(14), s(14), s(20), 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Scale pattern
+        for (let i = 0; i < 4; i++) {
+          ctx.strokeStyle = dark;
+          ctx.lineWidth = s(0.5);
+          ctx.beginPath();
+          ctx.ellipse(cx, bodyY + s(4 + i * 8), s(12 - i), s(3), 0, 0, Math.PI);
+          ctx.stroke();
+        }
+
+        // Head
+        ctx.fillStyle = primary;
+        ctx.beginPath();
+        ctx.ellipse(cx + s(2), bodyY - s(22), s(16), s(14), 0.1, 0, Math.PI * 2);
+        ctx.fill();
+        // Horns
+        ctx.fillStyle = '#555';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(8), bodyY - s(32));
+        ctx.lineTo(cx - s(16), bodyY - s(48));
+        ctx.lineTo(cx - s(4), bodyY - s(30));
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + s(12), bodyY - s(32));
+        ctx.lineTo(cx + s(20), bodyY - s(48));
+        ctx.lineTo(cx + s(8), bodyY - s(30));
+        ctx.fill();
+        // Eye
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.arc(cx + s(8), bodyY - s(24), s(4), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.fillRect(cx + s(7), bodyY - s(27), s(2), s(6));
+        // Snout
+        ctx.fillStyle = dark;
+        ctx.beginPath();
+        ctx.ellipse(cx + s(14), bodyY - s(18), s(8), s(6), 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        // Nostril
+        ctx.fillStyle = '#ffa500';
+        ctx.beginPath(); ctx.arc(cx + s(18), bodyY - s(19), s(2), 0, Math.PI * 2); ctx.fill();
+
+        // Tail
+        ctx.strokeStyle = primary;
+        ctx.lineWidth = s(6);
+        ctx.beginPath();
+        ctx.moveTo(cx, bodyY + s(34));
+        ctx.quadraticCurveTo(cx - s(20), py + ph - s(10), cx - s(10), py + ph);
+        ctx.stroke();
+        // Tail tip
+        ctx.fillStyle = dark;
+        ctx.beginPath();
+        ctx.moveTo(cx - s(10), py + ph);
+        ctx.lineTo(cx - s(20), py + ph - s(10));
+        ctx.lineTo(cx, py + ph - s(6));
+        ctx.fill();
+
+        // Claws
+        ctx.fillStyle = '#555';
+        for (let side = -1; side <= 1; side += 2) {
+          const clx = cx + side * s(18);
+          const cly = bodyY + s(32);
+          for (let t = -1; t <= 1; t++) {
+            ctx.beginPath();
+            ctx.moveTo(clx + t * s(4), cly);
+            ctx.lineTo(clx + t * s(4) + side * s(3), cly + s(8));
+            ctx.lineTo(clx + t * s(4) - side * s(1), cly + s(4));
+            ctx.fill();
+          }
+        }
+
+        // Fire breath particles
+        ctx.fillStyle = '#ff6600';
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath(); ctx.arc(cx + s(24), bodyY - s(14), s(4), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffaa00';
+        ctx.beginPath(); ctx.arc(cx + s(30), bodyY - s(10), s(3), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Ambient particle effects at bottom
+    ctx.fillStyle = 'rgba(201, 168, 76, 0.1)';
+    const particleRng = seededRng((unit.id || 1) + 999);
+    for (let i = 0; i < 8; i++) {
+      const ppx = px + particleRng() * pw;
+      const ppy = py + ph * 0.7 + particleRng() * ph * 0.3;
+      const pr = 1 + particleRng() * 3;
+      ctx.beginPath(); ctx.arc(ppx, ppy, pr, 0, Math.PI * 2); ctx.fill();
     }
 
     ctx.restore();
   }
 
   function drawBuildingIcon(ctx, building, px, py, pw, ph) {
-    ctx.save();
-    ctx.translate(px + pw / 2, py + ph / 2);
-    const s = pw / 56;
-    ctx.scale(s, s);
+    const charData = CHARACTERS[building.characterId];
+    const primary = charData ? charData.color : '#666';
+    const accent = charData ? charData.accentColor : '#888';
+    const dark = charData ? charData.darkColor : '#444';
+    const cx = px + pw / 2;
+    const scale = pw / 120;
+    function s(v) { return v * scale; }
 
     if (building.isTower) {
-      // Tower icon
+      // Detailed tower
+      const baseY = py + ph - s(20);
+      // Foundation
+      ctx.fillStyle = '#3a3530';
+      ctx.fillRect(cx - s(36), baseY, s(72), s(20));
+      // Tower body
       ctx.fillStyle = '#5a5550';
-      ctx.fillRect(-8, -4, 16, 20);
+      ctx.fillRect(cx - s(24), baseY - s(70), s(48), s(72));
+      // Stone texture
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+      ctx.lineWidth = s(1);
+      for (let row = 0; row < 8; row++) {
+        const ry = baseY - s(70) + row * s(9);
+        ctx.beginPath(); ctx.moveTo(cx - s(24), ry); ctx.lineTo(cx + s(24), ry); ctx.stroke();
+        const off = row % 2 === 0 ? 0 : s(10);
+        for (let col = 0; col < 3; col++) {
+          const rx = cx - s(24) + off + col * s(20);
+          ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx, ry + s(9)); ctx.stroke();
+        }
+      }
+      // Upper battlements
       ctx.fillStyle = '#666';
-      ctx.fillRect(-10, -20, 20, 18);
+      ctx.fillRect(cx - s(28), baseY - s(78), s(56), s(10));
       // Crenellations
-      ctx.fillRect(-12, -24, 6, 4);
-      ctx.fillRect(6, -24, 6, 4);
-      ctx.fillRect(-3, -24, 6, 4);
-      // Arrow slit
+      for (let i = -2; i <= 2; i++) {
+        ctx.fillRect(cx + i * s(10) - s(4), baseY - s(86), s(8), s(10));
+      }
+      // Arrow slits
       ctx.fillStyle = '#111';
-      ctx.fillRect(-1, -14, 2, 8);
-    } else {
-      // Barracks icon
-      ctx.fillStyle = '#5a5045';
-      ctx.fillRect(-16, -10, 32, 26);
-      // Roof
-      const charData = CHARACTERS[building.characterId];
-      ctx.fillStyle = charData ? charData.darkColor || '#333' : '#333';
+      ctx.fillRect(cx - s(2), baseY - s(55), s(4), s(12));
+      ctx.fillRect(cx - s(2), baseY - s(35), s(4), s(12));
+      // Window glow
+      ctx.fillStyle = '#d4a017';
+      ctx.globalAlpha = 0.4;
+      ctx.fillRect(cx - s(1), baseY - s(54), s(2), s(10));
+      ctx.fillRect(cx - s(1), baseY - s(34), s(2), s(10));
+      ctx.globalAlpha = 1;
+      // Flag
+      ctx.fillStyle = '#5c4033';
+      ctx.fillRect(cx, baseY - s(100), s(2), s(20));
+      ctx.fillStyle = primary;
       ctx.beginPath();
-      ctx.moveTo(-20, -10);
-      ctx.lineTo(0, -24);
-      ctx.lineTo(20, -10);
+      ctx.moveTo(cx + s(2), baseY - s(100));
+      ctx.lineTo(cx + s(18), baseY - s(94));
+      ctx.lineTo(cx + s(2), baseY - s(86));
       ctx.fill();
+    } else {
+      // Detailed barracks
+      const baseY = py + ph - s(20);
+      // Foundation
+      ctx.fillStyle = '#3a3530';
+      ctx.fillRect(cx - s(44), baseY, s(88), s(20));
+      // Walls
+      ctx.fillStyle = '#5a5045';
+      ctx.fillRect(cx - s(40), baseY - s(50), s(80), s(52));
+      // Roof
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.moveTo(cx - s(46), baseY - s(50));
+      ctx.lineTo(cx, baseY - s(78));
+      ctx.lineTo(cx + s(46), baseY - s(50));
+      ctx.fill();
+      // Roof ridge
+      ctx.fillStyle = accent;
+      ctx.fillRect(cx - s(2), baseY - s(76), s(4), s(28));
+      // Wooden beams
+      ctx.fillStyle = '#4a3520';
+      ctx.fillRect(cx - s(38), baseY - s(26), s(76), s(3));
+      ctx.fillRect(cx - s(38), baseY - s(48), s(76), s(3));
       // Door
       ctx.fillStyle = '#2a1f14';
-      ctx.fillRect(-4, 4, 8, 12);
+      ctx.fillRect(cx - s(8), baseY - s(22), s(16), s(24));
+      ctx.fillStyle = '#d4a017';
+      ctx.fillRect(cx + s(4), baseY - s(12), s(3), s(3));
+      // Windows
+      ctx.fillStyle = '#111';
+      ctx.fillRect(cx - s(28), baseY - s(42), s(10), s(10));
+      ctx.fillRect(cx + s(18), baseY - s(42), s(10), s(10));
+      ctx.fillStyle = '#d4a017';
+      ctx.globalAlpha = 0.3;
+      ctx.fillRect(cx - s(27), baseY - s(41), s(8), s(8));
+      ctx.fillRect(cx + s(19), baseY - s(41), s(8), s(8));
+      ctx.globalAlpha = 1;
+      // Banner
+      ctx.fillStyle = primary;
+      ctx.fillRect(cx - s(50), baseY - s(40), s(8), s(20));
+      ctx.fillStyle = accent;
+      ctx.fillRect(cx - s(49), baseY - s(38), s(6), s(4));
+      // Smoke from chimney
+      ctx.fillStyle = '#5a5045';
+      ctx.fillRect(cx + s(20), baseY - s(70), s(8), s(20));
+      ctx.fillStyle = 'rgba(150,150,150,0.3)';
+      ctx.beginPath(); ctx.arc(cx + s(24), baseY - s(76), s(5), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + s(22), baseY - s(84), s(4), 0, Math.PI * 2); ctx.fill();
     }
-
-    ctx.restore();
   }
 
   function updateSelectedUnit() {
