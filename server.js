@@ -402,11 +402,11 @@ function handleDeath(room, targetInfo, target, attacker) {
 
   if (targetInfo.type === 'unit') {
     attackerOwner.kills++;
-    // Give gold for kill: 2% of barracks cost rounded up
-    const buildingDef = attackerOwner.character.buildings.find(b => b.id === 'barracks' || b.id === 'spear_hall' || b.id === 'raider_camp' || b.id === 'sellsword_camp' || b.id === 'crypt' || b.id === 'grove');
-    if (buildingDef) {
-      const killGold = Math.ceil(buildingDef.cost * 0.02);
-      attackerOwner.gold += killGold;
+    // Gold reward: 2% of the slain unit's producing building cost, rounded up
+    const defenderOwner = getPlayerData(room, target.side);
+    const producingBuilding = defenderOwner.character.buildings.find(b => b.unit === target.typeId);
+    if (producingBuilding) {
+      attackerOwner.gold += Math.ceil(producingBuilding.cost * 0.02);
     }
     room.units.delete(targetInfo.id);
     room.effects.push({ type: 'death', x: target.x, y: target.y, unitType: target.unitType, time: Date.now(), duration: 1000 });
@@ -453,7 +453,7 @@ function updateCastleDefense(room, now) {
   for (const { castle, side, enemySide } of castles) {
     if (castle.hp <= 0) continue;
     if (!castle.lastAttackTime) castle.lastAttackTime = 0;
-    if (now - castle.lastAttackTime < 1200) continue; // 75% of 1600ms = 1200ms
+    if (now - castle.lastAttackTime < 2000) continue; // one arrow every 2s
 
     let nearestEnemy = null;
     let nearestDist = 350;
@@ -472,7 +472,7 @@ function updateCastleDefense(room, now) {
 
     if (nearestEnemy) {
       castle.lastAttackTime = now;
-      const dmg = 10; // Half of original (was ~20)
+      const dmg = 30;
       nearestEnemy.hp -= dmg;
       room.damageNumbers.push({ x: nearestEnemy.x, y: nearestEnemy.y - 20, value: dmg, time: now, side });
       room.projectiles.push({
@@ -486,8 +486,10 @@ function updateCastleDefense(room, now) {
         } else {
           const playerData = getPlayerData(room, side);
           playerData.kills++;
-          const buildingDef = playerData.character.buildings.find(b => b.id === 'barracks' || b.id === 'spear_hall' || b.id === 'raider_camp' || b.id === 'sellsword_camp' || b.id === 'crypt' || b.id === 'grove');
-          if (buildingDef) playerData.gold += Math.ceil(buildingDef.cost * 0.02);
+          // 2% of the slain unit's producing building cost
+          const defenderData = getPlayerData(room, enemySide);
+          const producingBuilding = defenderData.character.buildings.find(b => b.unit === nearestEnemy.typeId);
+          if (producingBuilding) playerData.gold += Math.ceil(producingBuilding.cost * 0.02);
           room.units.delete(nearestEnemy.id);
           room.effects.push({ type: 'death', x: nearestEnemy.x, y: nearestEnemy.y, unitType: nearestEnemy.unitType, time: now, duration: 1000 });
         }

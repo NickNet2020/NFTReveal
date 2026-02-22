@@ -333,21 +333,22 @@
     });
 
     socket.on('state', (data) => {
+      triggerAudio(data);
       gameState = data;
       updateHUD(data);
     });
 
     socket.on('buildResult', (data) => {
       if (data.success) {
-        // Keep placing mode for rapid building, but deselect if they want
+        AudioManager.playBuildingPlace();
       } else {
         showToast(data.reason || 'Cannot build there');
       }
     });
 
     socket.on('rescueStrike', (data) => {
-      // Trigger big visual effect
       particles.rescueStrikeEffect(data.x, data.y, data.radius);
+      AudioManager.playRescueStrike();
     });
 
     socket.on('rescueStrikeResult', (data) => {
@@ -362,6 +363,8 @@
       gameOverScreen.classList.remove('hidden');
 
       const won = data.winner === mySide;
+      AudioManager.stopMusic();
+      setTimeout(() => won ? AudioManager.playVictory() : AudioManager.playDefeat(), 500);
       gameOverTitle.textContent = won ? 'Victory!' : 'Defeat';
       gameOverTitle.className = won ? 'victory-title' : 'defeat-title';
       gameOverSub.textContent = won
@@ -382,6 +385,55 @@
   }
 
   // ─── HUD Updates ──────────────────────────────────────────────
+  // ─── Audio Triggers ───────────────────────────────────────────
+  let prevProjectileCount = 0;
+  let prevDeathCount = 0;
+  let prevGold = 0;
+
+  function triggerAudio(data) {
+    if (!AudioManager.isEnabled()) return;
+    AudioManager.resume();
+
+    // Combat sounds: fire whenever new projectiles appear
+    const projs = (data.projectiles || []).length;
+    if (projs > prevProjectileCount) {
+      const newShots = projs - prevProjectileCount;
+      for (let i = 0; i < Math.min(newShots, 3); i++) {
+        setTimeout(() => {
+          // Ranged/tower shots vs melee
+          const p = data.projectiles[i];
+          if (p && p.isTower) AudioManager.playTowerShot();
+          else AudioManager.playArrowFire();
+        }, i * 40);
+      }
+    }
+    prevProjectileCount = projs;
+
+    // Melee clash: fire when damage numbers appear (non-projectile combat)
+    const dmgNums = data.damageNumbers || [];
+    if (dmgNums.length > 0) {
+      // Sample a few recent damage numbers to play sword sounds
+      const recent = dmgNums.filter(d => Date.now() - d.time < 100);
+      if (recent.length > 0) {
+        AudioManager.playSwordClash();
+      }
+    }
+
+    // Death sounds
+    const deaths = (data.effects || []).filter(e => e.type === 'death').length;
+    if (deaths > prevDeathCount) {
+      AudioManager.playUnitDeath();
+    }
+    prevDeathCount = deaths;
+
+    // Gold gain sound
+    const gold = data.self ? data.self.gold : 0;
+    if (gold > prevGold && prevGold > 0) {
+      AudioManager.playGoldGain();
+    }
+    prevGold = gold;
+  }
+
   function updateHUD(state) {
     if (!state.self) return;
 
