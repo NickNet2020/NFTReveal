@@ -280,7 +280,8 @@ function spawnUnitFromBuilding(room, building) {
     hp: unitDef.hp, maxHp: unitDef.hp, damage, speed: unitDef.speed,
     range: unitDef.range, attackSpeed: unitDef.attackSpeed, lastAttackTime: 0,
     targetId: null, targetType: null,
-    state: 'marching', lane, laneY, reachedLane: false, spawnTime: Date.now()
+    state: 'marching', lane, laneY, reachedLane: false, spawnTime: Date.now(),
+    onLane: false
   };
 
   room.units.set(unit.id, unit);
@@ -401,6 +402,12 @@ function handleDeath(room, targetInfo, target, attacker) {
 
   if (targetInfo.type === 'unit') {
     attackerOwner.kills++;
+    // Give gold for kill: 2% of barracks cost rounded up
+    const buildingDef = attackerOwner.character.buildings.find(b => b.id === 'barracks' || b.id === 'spear_hall' || b.id === 'raider_camp' || b.id === 'sellsword_camp' || b.id === 'crypt' || b.id === 'grove');
+    if (buildingDef) {
+      const killGold = Math.ceil(buildingDef.cost * 0.02);
+      attackerOwner.gold += killGold;
+    }
     room.units.delete(targetInfo.id);
     room.effects.push({ type: 'death', x: target.x, y: target.y, unitType: target.unitType, time: Date.now(), duration: 1000 });
   } else if (targetInfo.type === 'hero') {
@@ -431,6 +438,61 @@ function handleDeath(room, targetInfo, target, attacker) {
       duration: Date.now() - room.startTime, winnerKills: winnerData.kills, loserKills: loserData.kills
     });
     console.log(`Game ${room.id} over! ${winnerData.name} wins!`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Castle Attack Logic (Defensive arrows)
+// ═══════════════════════════════════════════════════════════════════════
+function updateCastleDefense(room, now) {
+  const castles = [
+    { castle: room.castle1, side: 'left', enemySide: 'right' },
+    { castle: room.castle2, side: 'right', enemySide: 'left' }
+  ];
+
+  for (const { castle, side, enemySide } of castles) {
+    if (castle.hp <= 0) continue;
+    if (!castle.lastAttackTime) castle.lastAttackTime = 0;
+    if (now - castle.lastAttackTime < 1200) continue; // 75% of 1600ms = 1200ms
+
+    let nearestEnemy = null;
+    let nearestDist = 350;
+
+    for (const [, u] of room.units) {
+      if (u.side === side || u.hp <= 0) continue;
+      const d = dist(castle, u);
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = u; }
+    }
+
+    const enemyHero = getHero(room, enemySide);
+    if (enemyHero && enemyHero.hp > 0) {
+      const d = dist(castle, enemyHero);
+      if (d < nearestDist) { nearestDist = d; nearestEnemy = enemyHero; }
+    }
+
+    if (nearestEnemy) {
+      castle.lastAttackTime = now;
+      const dmg = 10; // Half of original (was ~20)
+      nearestEnemy.hp -= dmg;
+      room.damageNumbers.push({ x: nearestEnemy.x, y: nearestEnemy.y - 20, value: dmg, time: now, side });
+      room.projectiles.push({
+        x: castle.x, y: castle.y - 30, tx: nearestEnemy.x, ty: nearestEnemy.y,
+        time: now, side, characterId: '', isTower: true
+      });
+
+      if (nearestEnemy.hp <= 0) {
+        if (nearestEnemy.isHero) {
+          room.effects.push({ type: 'hero_death', x: nearestEnemy.x, y: nearestEnemy.y, time: now, duration: 2000 });
+        } else {
+          const playerData = getPlayerData(room, side);
+          playerData.kills++;
+          const buildingDef = playerData.character.buildings.find(b => b.id === 'barracks' || b.id === 'spear_hall' || b.id === 'raider_camp' || b.id === 'sellsword_camp' || b.id === 'crypt' || b.id === 'grove');
+          if (buildingDef) playerData.gold += Math.ceil(buildingDef.cost * 0.02);
+          room.units.delete(nearestEnemy.id);
+          room.effects.push({ type: 'death', x: nearestEnemy.x, y: nearestEnemy.y, unitType: nearestEnemy.unitType, time: now, duration: 1000 });
+        }
+      }
+    }
   }
 }
 
@@ -686,6 +748,9 @@ function gameTick() {
       }
     }
 
+    // ─── Castle Defense ───────────────────────────────────────────
+    updateCastleDefense(room, now);
+
     // ─── Tower Attacks ────────────────────────────────────────────
     updateTowers(room, now);
 
@@ -707,16 +772,20 @@ function gameTick() {
       }
 
       // Move to lane first
-      if (!unit.reachedLane) {
+      if (!unit.onLane) {
         const dy = unit.laneY - unit.y;
         if (Math.abs(dy) > 5) {
           unit.y += Math.sign(dy) * unit.speed * dt;
           continue;
         } else {
           unit.y = unit.laneY;
-          unit.reachedLane = true;
+          unit.onLane = true;
         }
       }
+
+      const enemyCastle = getEnemyCastle(room, unit.side);
+      const inEnemyTerritory = (unit.side === 'left' && unit.x > GC.P2_BASE_MIN_X) ||
+                               (unit.side === 'right' && unit.x < GC.P1_BASE_MAX_X);
 
       // Find/validate target
       let target = null;
@@ -744,10 +813,17 @@ function gameTick() {
         if (targetPos && targetPos.hp > 0) {
           const d = dist(unit, targetPos);
           if (d > unit.range + 10) {
-            // Move toward target
+            // Move toward target, stay on lane if not in enemy territory
             const a = angleTo(unit, targetPos);
-            unit.x += Math.cos(a) * unit.speed * dt;
-            unit.y += Math.sin(a) * unit.speed * dt;
+            let newX = unit.x + Math.cos(a) * unit.speed * dt;
+            let newY = unit.y + Math.sin(a) * unit.speed * dt;
+
+            if (!inEnemyTerritory) {
+              newY = unit.laneY; // Stay on lane
+            }
+
+            unit.x = clamp(newX, 20, GC.MAP_WIDTH - 20);
+            unit.y = clamp(newY, 20, GC.MAP_HEIGHT - 20);
           } else {
             // Attack
             if (now - unit.lastAttackTime >= unit.attackSpeed) {
@@ -763,10 +839,8 @@ function gameTick() {
       }
 
       if (unit.state === 'marching') {
-        // March toward enemy castle
-        const enemyCastle = getEnemyCastle(room, unit.side);
-        const laneDeviation = Math.sin(unit.id * 1.7 + now * 0.001) * 15;
-        const targetY = unit.laneY + laneDeviation;
+        // March toward enemy castle, stay on lane
+        const targetY = inEnemyTerritory ? unit.y : unit.laneY;
         const a = angleTo(unit, { x: enemyCastle.x, y: targetY });
         unit.x += Math.cos(a) * unit.speed * dt;
         unit.y += Math.sin(a) * unit.speed * dt;
@@ -809,6 +883,8 @@ function serializeState(room, now, playerSide) {
   const buildingArray = [];
   for (const [, b] of room.buildings) {
     if (b.side !== playerSide && !isVisibleTo(room, playerSide, b.x, b.y)) continue;
+    // Hide constructing buildings from enemy view (fog of war)
+    if (b.side !== playerSide && !b.constructed) continue;
     buildingArray.push({
       id: b.id, typeId: b.typeId, side: b.side, characterId: b.characterId,
       x: b.x, y: b.y, hp: Math.round(b.hp), maxHp: b.maxHp,

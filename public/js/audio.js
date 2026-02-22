@@ -108,6 +108,14 @@ const AudioManager = (() => {
     if (!ctx || !enabled) return;
     noiseBurst(0.1, 1500, 2, 0.2);
     playTone(400, 0.15, 'sawtooth', 0.1);
+    // 1/100 chance for death cry
+    if (Math.random() < 0.01) {
+      setTimeout(() => {
+        if (!ctx || !enabled) return;
+        const cryFreq = 200 + Math.random() * 150;
+        playTone(cryFreq, 0.3, 'sawtooth', 0.2);
+      }, 100);
+    }
   }
 
   function playGoldGain() {
