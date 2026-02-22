@@ -534,6 +534,41 @@ body {
   color: var(--text-dim);
 }
 
+.foundation-item {
+  border-left: 1px solid rgba(201, 168, 76, 0.2);
+  padding-left: 10px;
+  margin-left: 4px;
+}
+
+.foundation-icon {
+  color: #a88cd4;
+  font-size: 16px;
+}
+
+.buy-foundation-btn {
+  background: rgba(201, 168, 76, 0.2);
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  color: var(--gold-light);
+  font-family: 'Cinzel', serif;
+  font-size: 14px;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  transition: all 0.2s;
+}
+
+.buy-foundation-btn:hover {
+  background: rgba(201, 168, 76, 0.4);
+  border-color: var(--gold);
+}
+
 /* ─── Building Panel ────────────────────────────────────────────────── */
 
 #buildingPanel {

@@ -82,7 +82,7 @@ const CHARACTERS = {
       },
       {
         id: 'longbow', name: 'Longbowman', type: 'ranged',
-        hp: 38, damage: 12, speed: 34, range: 220, attackSpeed: 2600,
+        hp: 38, damage: 12, speed: 34, range: 220, attackSpeed: 5200,
         description: 'Expert archers with deadly range and precision'
       },
       {
@@ -100,7 +100,9 @@ const CHARACTERS = {
         hp: 55, damage: 11, speed: 58, range: 35, attackSpeed: 1400,
         description: 'Swift bird of prey striking from the skies'
       }
-    ]
+    ],
+    l3Eligible: ['barracks', 'stables'],
+    general: { name: 'Warden General', description: 'Northern field commander' }
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -166,7 +168,7 @@ const CHARACTERS = {
       },
       {
         id: 'fire_mage', name: 'Fire Mage', type: 'ranged',
-        hp: 32, damage: 18, speed: 30, range: 190, attackSpeed: 2860,
+        hp: 32, damage: 18, speed: 30, range: 190, attackSpeed: 5720,
         description: 'Channelers of devastating dragonfire magic'
       },
       {
@@ -184,7 +186,9 @@ const CHARACTERS = {
         hp: 130, damage: 22, speed: 50, range: 45, attackSpeed: 1600,
         description: 'Fearsome winged beast raining fire from above'
       }
-    ]
+    ],
+    l3Eligible: ['spear_hall', 'dragon_roost'],
+    general: { name: 'Flame General', description: 'Dragonfire field commander' }
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -250,7 +254,7 @@ const CHARACTERS = {
       },
       {
         id: 'crossbowman', name: 'Salted Crossbowman', type: 'ranged',
-        hp: 42, damage: 13, speed: 32, range: 200, attackSpeed: 2600,
+        hp: 42, damage: 13, speed: 32, range: 200, attackSpeed: 5200,
         description: 'Crossbowmen with armor-piercing bolts'
       },
       {
@@ -268,7 +272,9 @@ const CHARACTERS = {
         hp: 48, damage: 13, speed: 65, range: 38, attackSpeed: 1300,
         description: 'Nimble storm bird striking with lightning speed'
       }
-    ]
+    ],
+    l3Eligible: ['raider_camp', 'ram_forge'],
+    general: { name: 'Iron General', description: 'Ironborn war commander' }
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -334,7 +340,7 @@ const CHARACTERS = {
       },
       {
         id: 'arbalist', name: 'Guild Arbalist', type: 'ranged',
-        hp: 36, damage: 15, speed: 33, range: 210, attackSpeed: 2730,
+        hp: 36, damage: 15, speed: 33, range: 210, attackSpeed: 5460,
         description: 'Elite crossbow specialists with piercing bolts'
       },
       {
@@ -352,7 +358,9 @@ const CHARACTERS = {
         hp: 58, damage: 12, speed: 62, range: 36, attackSpeed: 1300,
         description: 'Majestic eagle trained for aerial warfare'
       }
-    ]
+    ],
+    l3Eligible: ['sellsword_camp', 'champions_arena'],
+    general: { name: 'Golden General', description: 'Gilded field marshal' }
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -418,7 +426,7 @@ const CHARACTERS = {
       },
       {
         id: 'plague_archer', name: 'Plague Archer', type: 'ranged',
-        hp: 28, damage: 10, speed: 35, range: 190, attackSpeed: 2340,
+        hp: 28, damage: 10, speed: 35, range: 190, attackSpeed: 4680,
         description: 'Undead archer whose arrows carry deadly plague'
       },
       {
@@ -436,7 +444,9 @@ const CHARACTERS = {
         hp: 65, damage: 14, speed: 55, range: 40, attackSpeed: 1500,
         description: 'Ghostly spirit that drains the life from its victims'
       }
-    ]
+    ],
+    l3Eligible: ['crypt', 'doom_stable'],
+    general: { name: 'Dark General', description: 'Shadow war commander' }
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -502,7 +512,7 @@ const CHARACTERS = {
       },
       {
         id: 'elven_archer', name: 'Elven Archer', type: 'ranged',
-        hp: 34, damage: 14, speed: 36, range: 230, attackSpeed: 2470,
+        hp: 34, damage: 14, speed: 36, range: 230, attackSpeed: 4940,
         description: 'Graceful archers with supernaturally accurate aim'
       },
       {
@@ -520,7 +530,9 @@ const CHARACTERS = {
         hp: 72, damage: 13, speed: 60, range: 38, attackSpeed: 1400,
         description: 'Majestic eagle soaring above the battlefield'
       }
-    ]
+    ],
+    l3Eligible: ['grove', 'beastiary'],
+    general: { name: 'Grove General', description: 'Forest war commander' }
   }
 };
 
@@ -558,7 +570,23 @@ const GAME_CONSTANTS = {
   FOG_BUILDING_RANGE: 300,
   FOG_UNIT_RANGE: 250,
   FOG_HERO_RANGE: 400,
-  TICK_RATE: 20
+  TICK_RATE: 20,
+  BASE_SPAWN_INTERVAL: 20000,
+  L2_SPAWN_INTERVAL: 30000,
+  L3_SPAWN_INTERVAL: 30000,
+  L2_COST_MULT: 1.5,
+  L3_COST_MULT: 2.0,
+  L2_HP_MULT: 1.3,
+  L2_DMG_MULT: 1.25,
+  L3_HP_MULT: 1.6,
+  L3_DMG_MULT: 1.5,
+  CORE_FOUNDATION_COST: 750,
+  GENERAL_HP: 500,
+  GENERAL_DAMAGE: 25,
+  GENERAL_SPEED: 45,
+  GENERAL_RANGE: 45,
+  GENERAL_ATTACK_SPEED: 1200,
+  GENERAL_AURA_RANGE: 200
 };
 
 if (typeof module !== 'undefined' && module.exports) {

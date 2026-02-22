@@ -117,7 +117,8 @@ function createGameRoom(p1Socket, p1Char, p2Socket, p2Char, p2IsBot = false) {
       rescueStrikeUsed: false,
       isBot: false,
       name: p1Socket ? (p1Socket.playerName || 'Player 1') : 'Player 1',
-      kills: 0
+      kills: 0,
+      coreFoundations: 1
     },
     player2: {
       socketId: p2Socket ? p2Socket.id : null,
@@ -129,7 +130,8 @@ function createGameRoom(p1Socket, p1Char, p2Socket, p2Char, p2IsBot = false) {
       rescueStrikeUsed: false,
       isBot: p2IsBot,
       name: p2IsBot ? 'AI Commander' : (p2Socket ? (p2Socket.playerName || 'Player 2') : 'Player 2'),
-      kills: 0
+      kills: 0,
+      coreFoundations: 1
     },
 
     castle1: { id: genId(), x: GC.P1_CASTLE_X, y: GC.CASTLE_Y, hp: GC.CASTLE_HP, maxHp: GC.CASTLE_HP, side: 'left' },
@@ -138,6 +140,10 @@ function createGameRoom(p1Socket, p1Char, p2Socket, p2Char, p2IsBot = false) {
     // Heroes
     hero1: createHero(charData1, 'left', GC.P1_CASTLE_X + 60, GC.CASTLE_Y),
     hero2: createHero(charData2, 'right', GC.P2_CASTLE_X - 60, GC.CASTLE_Y),
+
+    // Generals
+    general1: createGeneral(charData1, 'left', GC.P1_CASTLE_X + 40, GC.CASTLE_Y - 60),
+    general2: createGeneral(charData2, 'right', GC.P2_CASTLE_X - 40, GC.CASTLE_Y - 60),
 
     units: new Map(),
     buildings: new Map(),
@@ -206,6 +212,38 @@ function createHero(charData, side, x, y) {
     state: 'idle',
     isHero: true,
     name: h.name,
+    activated: false
+  };
+}
+
+function createGeneral(charData, side, x, y) {
+  const genDef = charData.general || {};
+  return {
+    id: genId(),
+    typeId: 'general',
+    unitType: 'infantry',
+    side,
+    characterId: charData.id,
+    x, y,
+    hp: GC.GENERAL_HP, maxHp: GC.GENERAL_HP,
+    damage: GC.GENERAL_DAMAGE,
+    speed: GC.GENERAL_SPEED,
+    range: GC.GENERAL_RANGE,
+    attackSpeed: GC.GENERAL_ATTACK_SPEED,
+    lastAttackTime: 0,
+    targetId: null,
+    targetType: null,
+    moveTargetX: null,
+    moveTargetY: null,
+    state: 'idle',
+    isGeneral: true,
+    name: genDef.name || 'General',
+    xp: 0,
+    rank: 0,
+    baseDamage: GC.GENERAL_DAMAGE,
+    baseAttackSpeed: GC.GENERAL_ATTACK_SPEED,
+    baseMaxHp: GC.GENERAL_HP,
+    auraRange: GC.GENERAL_AURA_RANGE,
     activated: false
   };
 }
@@ -310,13 +348,14 @@ function placeBuilding(room, side, buildingTypeId, x, y) {
     towerRange: buildingDef.towerRange || 0,
     towerAttackSpeed: buildingDef.towerAttackSpeed || 0,
     lastTowerAttack: 0,
-    spawnInterval: buildingDef.spawnInterval || 0,
+    spawnInterval: GC.BASE_SPAWN_INTERVAL,
     unitType: buildingDef.unit || null,
     lastSpawnTime: Date.now(),
     constructionTime: Date.now(),
     constructed: false,
     constructionDuration: 2000,
-    characterId: playerData.characterId
+    characterId: playerData.characterId,
+    level: 1
   };
 
   if (!building.isTower && charData.passive.type === 'spawn_speed') {
@@ -363,7 +402,92 @@ function spawnUnitFromBuilding(room, building) {
     baseDamage: damage, baseAttackSpeed: unitDef.attackSpeed, baseMaxHp: unitDef.hp
   };
 
+  // Apply building level multipliers
+  if (building.level >= 2) {
+    const hpMult = building.level === 3 ? GC.L3_HP_MULT : GC.L2_HP_MULT;
+    const dmgMult = building.level === 3 ? GC.L3_DMG_MULT : GC.L2_DMG_MULT;
+    unit.hp = Math.floor(unit.hp * hpMult);
+    unit.maxHp = Math.floor(unit.maxHp * hpMult);
+    unit.damage = Math.floor(unit.damage * dmgMult);
+    unit.baseDamage = unit.damage;
+    unit.baseMaxHp = unit.maxHp;
+    unit.unitLevel = building.level;
+  } else {
+    unit.unitLevel = 1;
+  }
+
+  // Unit passives based on level
+  if (building.level >= 2) {
+    const passives = {};
+    if (unit.unitType === 'infantry') passives.damageReduction = building.level === 3 ? 0.20 : 0.10;
+    else if (unit.unitType === 'ranged') passives.attackSpeedBonus = building.level === 3 ? 0.25 : 0.15;
+    else if (unit.unitType === 'cavalry') passives.firstStrikeMult = building.level === 3 ? 2.0 : 1.5;
+    else if (unit.unitType === 'siege') passives.damageReduction = building.level === 3 ? 0.30 : 0.20;
+    else if (unit.unitType === 'flying') passives.dodgeChance = building.level === 3 ? 0.20 : 0.10;
+    unit.passives = passives;
+
+    // Apply attack speed bonus for ranged immediately
+    if (passives.attackSpeedBonus) {
+      unit.attackSpeed = Math.max(200, Math.floor(unit.attackSpeed * (1 - passives.attackSpeedBonus)));
+      unit.baseAttackSpeed = unit.attackSpeed;
+    }
+  }
+
   room.units.set(unit.id, unit);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Building Upgrade System
+// ═══════════════════════════════════════════════════════════════════════
+function upgradeBuilding(room, side, buildingId) {
+  const playerData = getPlayerData(room, side);
+  const charData = playerData.character;
+  const building = room.buildings.get(buildingId);
+  if (!building || building.side !== side || !building.constructed || building.isTower) {
+    return { success: false, reason: 'Cannot upgrade this building' };
+  }
+
+  const bDef = charData.buildings.find(b => b.id === building.typeId);
+  if (!bDef) return { success: false, reason: 'Invalid building' };
+
+  if (building.level >= 3) return { success: false, reason: 'Already max level' };
+
+  const targetLevel = building.level + 1;
+
+  if (targetLevel === 3) {
+    // L3 requires l3Eligible check and core foundation
+    if (!charData.l3Eligible || !charData.l3Eligible.includes(building.typeId)) {
+      return { success: false, reason: 'This building cannot reach Level 3' };
+    }
+    if (playerData.coreFoundations <= 0) {
+      return { success: false, reason: 'Requires a Core Foundation' };
+    }
+  }
+
+  const upgradeCost = targetLevel === 2
+    ? Math.floor(bDef.cost * GC.L2_COST_MULT)
+    : Math.floor(bDef.cost * GC.L3_COST_MULT);
+
+  if (playerData.gold < upgradeCost) {
+    return { success: false, reason: 'Not enough gold' };
+  }
+
+  playerData.gold -= upgradeCost;
+  if (targetLevel === 3) playerData.coreFoundations--;
+
+  building.level = targetLevel;
+  // Upgrade spawn interval
+  building.spawnInterval = targetLevel >= 2 ? GC.L2_SPAWN_INTERVAL : GC.BASE_SPAWN_INTERVAL;
+  if (charData.passive.type === 'spawn_speed') {
+    building.spawnInterval = Math.floor(building.spawnInterval * (1 - charData.passive.value));
+  }
+
+  // Boost building HP
+  const hpMult = targetLevel === 3 ? 1.5 : 1.25;
+  building.maxHp = Math.floor(building.maxHp * hpMult);
+  building.hp = building.maxHp;
+
+  return { success: true, level: targetLevel };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -469,7 +593,24 @@ function dealDamage(room, attacker, targetInfo, isHero) {
     dmg *= 1.5;
   }
 
+  // Cavalry first-strike bonus (L2/L3 passive)
+  if (!isHero && attacker.passives && attacker.passives.firstStrikeMult && !attacker.hasStruck) {
+    dmg *= attacker.passives.firstStrikeMult;
+    attacker.hasStruck = true;
+  }
+
   dmg = Math.max(1, Math.floor(dmg));
+
+  // Target dodge chance (L2/L3 flying passive)
+  if (target.passives && target.passives.dodgeChance && Math.random() < target.passives.dodgeChance) {
+    room.damageNumbers.push({ x: target.x, y: target.y - 20, value: 'DODGE', time: Date.now(), side: attacker.side });
+    return;
+  }
+
+  // Target damage reduction (L2/L3 infantry/siege passive)
+  if (target.passives && target.passives.damageReduction) {
+    dmg = Math.max(1, Math.floor(dmg * (1 - target.passives.damageReduction)));
+  }
 
   // Outpost buff: 2 outposts = 10% damage reduction
   const targetSide = target.side || null;
@@ -731,6 +872,113 @@ function updateHero(room, hero, now, dt) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// General Update (similar to hero but restricted to own half + AOE aura)
+// ═══════════════════════════════════════════════════════════════════════
+function updateGeneral(room, general, now, dt) {
+  if (!general || general.hp <= 0) return;
+
+  // Move toward target
+  if (general.moveTargetX !== null && general.moveTargetY !== null) {
+    const dx = general.moveTargetX - general.x;
+    const dy = general.moveTargetY - general.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d > 10) {
+      general.x += (dx / d) * general.speed * dt;
+      general.y += (dy / d) * general.speed * dt;
+      // Clamp general to own half of map
+      if (general.side === 'left') {
+        general.x = clamp(general.x, 20, GC.MAP_WIDTH / 2);
+      } else {
+        general.x = clamp(general.x, GC.MAP_WIDTH / 2, GC.MAP_WIDTH - 20);
+      }
+      general.y = clamp(general.y, 20, GC.MAP_HEIGHT - 20);
+      general.state = 'moving';
+    } else {
+      general.moveTargetX = null;
+      general.moveTargetY = null;
+      general.state = 'idle';
+    }
+  }
+
+  // Auto-attack nearest enemy in range
+  let nearestEnemy = null;
+  let nearestDist = general.range + 50;
+  const enemySide = general.side === 'left' ? 'right' : 'left';
+
+  for (const [, u] of room.units) {
+    if (u.side === general.side || u.hp <= 0) continue;
+    const d = dist(general, u);
+    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: u.id, type: 'unit', target: u }; }
+  }
+
+  const enemyHero = getHero(room, enemySide);
+  if (enemyHero && enemyHero.hp > 0) {
+    const d = dist(general, enemyHero);
+    if (d < nearestDist) { nearestDist = d; nearestEnemy = { id: enemyHero.id, type: 'hero', target: enemyHero }; }
+  }
+
+  if (nearestEnemy && nearestDist <= general.range + 10) {
+    const genBuff = getOutpostBuffs(room, general.side);
+    const genEffAS = Math.floor(general.attackSpeed * genBuff.attackSpeedMult);
+    if (now - general.lastAttackTime >= genEffAS) {
+      general.lastAttackTime = now;
+      general.state = 'fighting';
+      // General deals damage like a hero
+      dealDamageGeneral(room, general, nearestEnemy, now);
+    }
+  }
+
+  // AOE aura: apply buffs to nearby friendly units based on rank
+  if (general.rank > 0) {
+    const auraRange = general.auraRange;
+    for (const [, u] of room.units) {
+      if (u.side !== general.side || u.hp <= 0) continue;
+      if (dist(general, u) > auraRange) continue;
+      // Regen aura
+      if (general.rank >= 1 && u.hp < u.maxHp) {
+        u.hp = Math.min(u.maxHp, u.hp + (general.rank >= 3 ? 3 : 1) * dt);
+      }
+    }
+  }
+}
+
+function dealDamageGeneral(room, general, targetInfo, now) {
+  const target = targetInfo.target;
+  if (!target || target.hp <= 0) return;
+
+  let dmg = Math.max(1, Math.floor(general.damage * 1.2));
+
+  // Outpost damage reduction
+  const targetSide = target.side || null;
+  if (targetSide) {
+    const tBuffs = getOutpostBuffs(room, targetSide);
+    if (tBuffs.damageReduction > 0) dmg = Math.max(1, Math.floor(dmg * (1 - tBuffs.damageReduction)));
+  }
+
+  target.hp -= dmg;
+  room.damageNumbers.push({ x: target.x, y: target.y - 20, value: dmg, time: now, side: general.side });
+
+  if (target.hp <= 0) {
+    // XP for general on kill
+    if (targetInfo.type === 'unit') {
+      const defenderData = getPlayerData(room, target.side);
+      const producingBuilding = defenderData.character.buildings.find(b => b.unit === target.typeId);
+      const xpGained = producingBuilding ? Math.ceil(producingBuilding.cost * 0.10) : 10;
+      general.xp += xpGained;
+      checkRankUp(general);
+
+      const attackerOwner = getPlayerData(room, general.side);
+      attackerOwner.kills++;
+      if (producingBuilding) attackerOwner.gold += Math.ceil(producingBuilding.cost * 0.02);
+      room.units.delete(targetInfo.id);
+      room.effects.push({ type: 'death', x: target.x, y: target.y, unitType: target.unitType, time: now, duration: 1000 });
+    } else if (targetInfo.type === 'hero') {
+      room.effects.push({ type: 'hero_death', x: target.x, y: target.y, time: now, duration: 2000 });
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Rescue Strike
 // ═══════════════════════════════════════════════════════════════════════
 function executeRescueStrike(room, side) {
@@ -908,6 +1156,10 @@ function gameTick() {
     updateHero(room, room.hero1, now, dt);
     updateHero(room, room.hero2, now, dt);
 
+    // ─── General Updates ──────────────────────────────────────────
+    updateGeneral(room, room.general1, now, dt);
+    updateGeneral(room, room.general2, now, dt);
+
     // ─── Outpost Updates ──────────────────────────────────────────
     updateOutposts(room, dt);
 
@@ -924,8 +1176,11 @@ function gameTick() {
         unit.hp = Math.min(unit.maxHp, unit.hp + charData.passive.value * dt);
       }
 
-      // Movement zones
-      const inHomeTerritory = unit.x <= GC.P1_BASE_MAX_X || unit.x >= GC.P2_BASE_MIN_X;
+      // Movement zones — side-aware so units don't get stuck at enemy stairs
+      const inOwnBase = (unit.side === 'left' && unit.x <= GC.P1_BASE_MAX_X) ||
+                        (unit.side === 'right' && unit.x >= GC.P2_BASE_MIN_X);
+      const inEnemyBase = (unit.side === 'left' && unit.x >= GC.P2_BASE_MIN_X) ||
+                          (unit.side === 'right' && unit.x <= GC.P1_BASE_MAX_X);
       const isFlying = unit.unitType === 'flying';
       const laneHalfW = GC.LANE_WIDTH / 2 + 30;
       const onLaneY = Math.abs(unit.y - unit.laneY) < laneHalfW;
@@ -963,7 +1218,12 @@ function gameTick() {
             const a = angleTo(unit, targetPos);
             unit.x += Math.cos(a) * unit.speed * dt;
             unit.y += Math.sin(a) * unit.speed * dt;
-          } else if (inHomeTerritory) {
+          } else if (inEnemyBase) {
+            // In enemy base — chase target directly
+            const a = angleTo(unit, targetPos);
+            unit.x += Math.cos(a) * unit.speed * dt;
+            unit.y += Math.sin(a) * unit.speed * dt;
+          } else if (inOwnBase) {
             if (d <= closeChaseRange) {
               // Close enemy in base — chase directly
               const a = angleTo(unit, targetPos);
@@ -1000,7 +1260,13 @@ function gameTick() {
         if (isFlying) {
           const moveDir = unit.side === 'left' ? 1 : -1;
           unit.x += moveDir * unit.speed * dt;
-        } else if (inHomeTerritory) {
+        } else if (inEnemyBase) {
+          // In enemy base with no target — march toward enemy castle
+          const enemyCastle = getEnemyCastle(room, unit.side);
+          const a = angleTo(unit, enemyCastle);
+          unit.x += Math.cos(a) * unit.speed * dt;
+          unit.y += Math.sin(a) * unit.speed * dt;
+        } else if (inOwnBase) {
           // Navigate toward stairs (lane entrance)
           const stairsX = unit.side === 'left' ? GC.P1_BASE_MAX_X : GC.P2_BASE_MIN_X;
           const a = angleTo(unit, { x: stairsX, y: unit.laneY });
@@ -1092,7 +1358,8 @@ function serializeState(room, now, playerSide) {
       damage: u.damage, speed: u.speed,
       attackSpeed: Math.floor(u.attackSpeed * buffs.attackSpeedMult),
       xp: u.xp, rank: u.rank,
-      xpToNext: u.rank < 3 ? RANK_THRESHOLDS[u.rank] : RANK_THRESHOLDS[2]
+      xpToNext: u.rank < 3 ? RANK_THRESHOLDS[u.rank] : RANK_THRESHOLDS[2],
+      unitLevel: u.unitLevel || 1
     });
   }
 
@@ -1107,7 +1374,8 @@ function serializeState(room, now, playerSide) {
       constructed: b.constructed, isTower: b.isTower,
       constructionProgress: b.constructed ? 1 : Math.min(1, (now - b.constructionTime) / b.constructionDuration),
       spawnProgress: (b.constructed && !b.isTower && b.spawnInterval > 0)
-        ? Math.min(1, (now - b.lastSpawnTime) / b.spawnInterval) : 0
+        ? Math.min(1, (now - b.lastSpawnTime) / b.spawnInterval) : 0,
+      level: b.level || 1
     });
   }
 
@@ -1125,6 +1393,24 @@ function serializeState(room, now, playerSide) {
   let hero1Data = serializeHero(room.hero1);
   let hero2Data = serializeHero(room.hero2);
 
+  const serializeGeneral = (gen) => {
+    if (!gen || gen.hp <= 0) return null;
+    return {
+      id: gen.id, typeId: gen.typeId, unitType: gen.unitType, side: gen.side,
+      characterId: gen.characterId, name: gen.name,
+      x: Math.round(gen.x * 10) / 10, y: Math.round(gen.y * 10) / 10,
+      hp: Math.round(gen.hp), maxHp: gen.maxHp, state: gen.state,
+      isGeneral: true, damage: gen.damage, speed: gen.speed,
+      attackSpeed: gen.attackSpeed, range: gen.range,
+      xp: gen.xp, rank: gen.rank,
+      xpToNext: gen.rank < 3 ? RANK_THRESHOLDS[gen.rank] : RANK_THRESHOLDS[2],
+      auraRange: gen.auraRange
+    };
+  };
+
+  let gen1Data = serializeGeneral(room.general1);
+  let gen2Data = serializeGeneral(room.general2);
+
   // Fog: hide enemy hero if not visible
   if (playerSide === 'left' && hero2Data && hero2Data.hp > 0 && !isVisibleTo(room, 'left', hero2Data.x, hero2Data.y)) {
     hero2Data = null;
@@ -1139,6 +1425,7 @@ function serializeState(room, now, playerSide) {
     castle2: { hp: Math.round(room.castle2.hp), maxHp: room.castle2.maxHp, x: room.castle2.x, y: room.castle2.y },
     units: unitArray, buildings: buildingArray,
     hero1: hero1Data, hero2: hero2Data,
+    general1: gen1Data, general2: gen2Data,
     projectiles: room.projectiles.map(p => ({
       x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(p.tx), ty: Math.round(p.ty),
       time: p.time, side: p.side, characterId: p.characterId, isTower: p.isTower || false
@@ -1160,7 +1447,7 @@ function broadcastState(room, now) {
       const state = serializeState(room, now, 'left');
       socket.emit('state', {
         ...state,
-        self: { gold: Math.floor(room.player1.gold), income: room.player1.income, rescueStrikeUsed: room.player1.rescueStrikeUsed, kills: room.player1.kills },
+        self: { gold: Math.floor(room.player1.gold), income: room.player1.income, rescueStrikeUsed: room.player1.rescueStrikeUsed, kills: room.player1.kills, coreFoundations: room.player1.coreFoundations },
         opponent: { gold: Math.floor(room.player2.gold), income: room.player2.income, rescueStrikeUsed: room.player2.rescueStrikeUsed, kills: room.player2.kills }
       });
     }
@@ -1173,7 +1460,7 @@ function broadcastState(room, now) {
       const state = serializeState(room, now, 'right');
       socket.emit('state', {
         ...state,
-        self: { gold: Math.floor(room.player2.gold), income: room.player2.income, rescueStrikeUsed: room.player2.rescueStrikeUsed, kills: room.player2.kills },
+        self: { gold: Math.floor(room.player2.gold), income: room.player2.income, rescueStrikeUsed: room.player2.rescueStrikeUsed, kills: room.player2.kills, coreFoundations: room.player2.coreFoundations },
         opponent: { gold: Math.floor(room.player1.gold), income: room.player1.income, rescueStrikeUsed: room.player1.rescueStrikeUsed, kills: room.player1.kills }
       });
     }
@@ -1246,6 +1533,50 @@ io.on('connection', (socket) => {
       hero.moveTargetX = clamp(data.x, 20, GC.MAP_WIDTH - 20);
       hero.moveTargetY = clamp(data.y, 20, GC.MAP_HEIGHT - 20);
       hero.activated = true;
+    }
+  });
+
+  socket.on('generalMove', (data) => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+    const room = gameRooms.get(roomId);
+    if (!room || room.state !== 'playing') return;
+    const side = room.player1.socketId === socket.id ? 'left' : 'right';
+    const general = side === 'left' ? room.general1 : room.general2;
+    if (general && general.hp > 0) {
+      // Clamp to own half
+      let tx = clamp(data.x, 20, GC.MAP_WIDTH - 20);
+      let ty = clamp(data.y, 20, GC.MAP_HEIGHT - 20);
+      if (side === 'left') tx = Math.min(tx, GC.MAP_WIDTH / 2);
+      else tx = Math.max(tx, GC.MAP_WIDTH / 2);
+      general.moveTargetX = tx;
+      general.moveTargetY = ty;
+      general.activated = true;
+    }
+  });
+
+  socket.on('upgradeBuilding', (data) => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+    const room = gameRooms.get(roomId);
+    if (!room || room.state !== 'playing') return;
+    const side = room.player1.socketId === socket.id ? 'left' : 'right';
+    socket.emit('upgradeResult', upgradeBuilding(room, side, data.buildingId));
+  });
+
+  socket.on('buyFoundation', () => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+    const room = gameRooms.get(roomId);
+    if (!room || room.state !== 'playing') return;
+    const side = room.player1.socketId === socket.id ? 'left' : 'right';
+    const playerData = getPlayerData(room, side);
+    if (playerData.gold >= GC.CORE_FOUNDATION_COST) {
+      playerData.gold -= GC.CORE_FOUNDATION_COST;
+      playerData.coreFoundations++;
+      socket.emit('foundationResult', { success: true, count: playerData.coreFoundations });
+    } else {
+      socket.emit('foundationResult', { success: false, reason: 'Not enough gold' });
     }
   });
 

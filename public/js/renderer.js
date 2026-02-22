@@ -527,6 +527,43 @@ const Renderer = (() => {
       drawHealthBar(pos.x, pos.y - 35 * z, 36 * z, bData.hp, bData.maxHp,
         isMySide ? 'friendly' : 'enemy');
     }
+
+    // Building level indicator (L2/L3 badge)
+    if (bData.level && bData.level >= 2 && bData.constructed) {
+      const badgeX = pos.x + 18 * z;
+      const badgeY = pos.y - 28 * z;
+      const badgeR = 8 * z;
+
+      // Badge background
+      const badgeColor = bData.level === 3 ? '#ffd700' : '#c0c0c0';
+      const badgeDark = bData.level === 3 ? '#b8860b' : '#808080';
+      ctx.fillStyle = badgeDark;
+      ctx.beginPath();
+      ctx.arc(badgeX, badgeY, badgeR + 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = badgeColor;
+      ctx.beginPath();
+      ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Level text
+      ctx.font = `bold ${9 * z}px Cinzel, serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = bData.level === 3 ? '#2a1500' : '#222';
+      ctx.fillText(`L${bData.level}`, badgeX, badgeY + 3.5 * z);
+      ctx.textAlign = 'left';
+
+      // L3 glow
+      if (bData.level === 3) {
+        const glow = ctx.createRadialGradient(badgeX, badgeY, 0, badgeX, badgeY, badgeR * 2);
+        glow.addColorStop(0, 'rgba(255, 215, 0, 0.2)');
+        glow.addColorStop(1, 'rgba(255, 215, 0, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(badgeX, badgeY, badgeR * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
   function drawBuildingStructure(ctx, typeId, z, palette, charId) {
@@ -766,6 +803,203 @@ const Renderer = (() => {
     ctx.lineTo(8 * z, -37 * z + bob + wingAngle * 5 * z);
     ctx.lineTo(6 * z, -33 * z + bob);
     ctx.fill();
+  }
+
+  // ─── Draw General ──────────────────────────────────────────────
+  function drawGeneral(gData) {
+    if (!gData || gData.hp <= 0) return;
+    if (!isVisible(gData.x, gData.y, 80)) return;
+    const pos = worldToScreen(gData.x, gData.y);
+    const z = camera.zoom;
+    const palette = CHAR_PALETTES[gData.characterId] || CHAR_PALETTES.northern_lord;
+    const isMySide = gData.side === mySide;
+    const facingRight = gData.side === 'left';
+    const scale = 1.6; // Generals are larger
+
+    // Selection ring
+    if (selectedUnitId === gData.id) {
+      const pulse = 0.7 + Math.sin(time * 4) * 0.3;
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 215, 0, ${(0.8 * pulse).toFixed(2)})`;
+      ctx.lineWidth = 3 * z;
+      ctx.beginPath();
+      ctx.ellipse(pos.x, pos.y + 12 * z * scale, (14 + 5) * z, (14 * 0.3 + 3) * z, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(0, 12 * z * scale, 14 * z * scale, 4 * z * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const dir = facingRight ? 1 : -1;
+    ctx.scale(dir, 1);
+
+    const sz = z * scale;
+    const bob = Math.sin(time * 4 + gData.id * 2) * 1.5 * z;
+
+    // Cape (flowing behind)
+    ctx.fillStyle = palette.primary;
+    ctx.globalAlpha = 0.8;
+    const capeWave = Math.sin(time * 3) * 3 * z;
+    ctx.beginPath();
+    ctx.moveTo(-2 * sz, -6 * sz + bob);
+    ctx.lineTo(-8 * sz + capeWave, 8 * sz + bob);
+    ctx.lineTo(-12 * sz + capeWave * 1.5, 14 * sz + bob);
+    ctx.lineTo(-4 * sz + capeWave * 0.5, 10 * sz + bob);
+    ctx.lineTo(2 * sz, 4 * sz + bob);
+    ctx.fill();
+    // Cape inner highlight
+    ctx.fillStyle = palette.secondary;
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.moveTo(-2 * sz, -4 * sz + bob);
+    ctx.lineTo(-6 * sz + capeWave, 6 * sz + bob);
+    ctx.lineTo(-3 * sz + capeWave * 0.5, 8 * sz + bob);
+    ctx.lineTo(0, 2 * sz + bob);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Legs (armored)
+    ctx.fillStyle = '#4a4040';
+    ctx.fillRect(-4 * sz, 4 * sz + bob, 3 * sz, 7 * sz);
+    ctx.fillRect(1 * sz, 4 * sz + bob, 3 * sz, 7 * sz);
+    // Leg armor shine
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(-4 * sz, 4 * sz + bob, 1.5 * sz, 7 * sz);
+    ctx.fillRect(1 * sz, 4 * sz + bob, 1.5 * sz, 7 * sz);
+
+    // Body armor (large plate armor)
+    const armorGrad = ctx.createLinearGradient(-5 * sz, -10 * sz, 5 * sz, 4 * sz);
+    armorGrad.addColorStop(0, palette.primary);
+    armorGrad.addColorStop(0.5, palette.dark);
+    armorGrad.addColorStop(1, palette.primary);
+    ctx.fillStyle = armorGrad;
+    ctx.fillRect(-5 * sz, -10 * sz + bob, 10 * sz, 14 * sz);
+
+    // Armor detail - belt
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(-5 * sz, 1 * sz + bob, 10 * sz, 2 * sz);
+    // Belt buckle
+    ctx.fillStyle = '#d4a017';
+    ctx.fillRect(-1 * sz, 0.5 * sz + bob, 2 * sz, 2.5 * sz);
+
+    // Shoulder pauldrons
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.ellipse(-5.5 * sz, -8 * sz + bob, 3 * sz, 2.5 * sz, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(5.5 * sz, -8 * sz + bob, 3 * sz, 2.5 * sz, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // Pauldron gold trim
+    ctx.strokeStyle = '#d4a017';
+    ctx.lineWidth = 0.5 * sz;
+    ctx.beginPath();
+    ctx.ellipse(-5.5 * sz, -8 * sz + bob, 3 * sz, 2.5 * sz, -0.3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(5.5 * sz, -8 * sz + bob, 3 * sz, 2.5 * sz, 0.3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Head
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath();
+    ctx.arc(0, -14 * sz + bob, 4 * sz, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-2 * sz, -14.5 * sz + bob, 1.2 * sz, 1 * sz);
+    ctx.fillRect(1 * sz, -14.5 * sz + bob, 1.2 * sz, 1 * sz);
+
+    // Crown (faction colored)
+    ctx.fillStyle = palette.primary;
+    ctx.fillRect(-4.5 * sz, -19.5 * sz + bob, 9 * sz, 4 * sz);
+    // Crown points
+    ctx.fillRect(-4 * sz, -22 * sz + bob, 2 * sz, 3 * sz);
+    ctx.fillRect(-1 * sz, -23 * sz + bob, 2 * sz, 4 * sz);
+    ctx.fillRect(2 * sz, -22 * sz + bob, 2 * sz, 3 * sz);
+    // Crown gold trim
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(-4.5 * sz, -19.5 * sz + bob, 9 * sz, 1.5 * sz);
+    // Crown gems
+    ctx.fillStyle = '#ff3333';
+    ctx.beginPath();
+    ctx.arc(0, -21.5 * sz + bob, 0.8 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3366ff';
+    ctx.beginPath();
+    ctx.arc(-3 * sz, -20.5 * sz + bob, 0.6 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(3 * sz, -20.5 * sz + bob, 0.6 * sz, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sword (larger than infantry)
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1.8 * sz;
+    const swordSwing = gData.state === 'fighting' ? Math.sin(time * 10) * 0.5 : 0;
+    ctx.save();
+    ctx.rotate(swordSwing);
+    ctx.beginPath();
+    ctx.moveTo(6 * sz, -6 * sz + bob);
+    ctx.lineTo(14 * sz, -18 * sz + bob);
+    ctx.stroke();
+    // Sword guard
+    ctx.strokeStyle = '#d4a017';
+    ctx.lineWidth = 2 * sz;
+    ctx.beginPath();
+    ctx.moveTo(4 * sz, -7 * sz + bob);
+    ctx.lineTo(8 * sz, -5 * sz + bob);
+    ctx.stroke();
+    ctx.restore();
+
+    // Shield (on other arm)
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.ellipse(-6 * sz, -4 * sz + bob, 4 * sz, 6 * sz, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = palette.secondary;
+    ctx.lineWidth = 0.8 * sz;
+    ctx.stroke();
+    // Shield emblem
+    ctx.fillStyle = palette.primary;
+    ctx.beginPath();
+    ctx.arc(-6 * sz, -4 * sz + bob, 2 * sz, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Aura glow based on rank
+    if (gData.rank > 0) {
+      ctx.scale(dir, 1); // Reset scale for aura
+      const auraColors = ['', 'rgba(100,200,100,0.08)', 'rgba(200,180,50,0.10)', 'rgba(255,215,0,0.12)'];
+      const auraR = (gData.auraRange || 200) * z / scale; // Scale to screen
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.min(auraR, 120 * z));
+      grad.addColorStop(0, auraColors[Math.min(gData.rank, 3)]);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.min(auraR, 120 * z), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // Health bar
+    if (gData.hp < gData.maxHp) {
+      drawHealthBar(pos.x, pos.y - 28 * z * scale, 30 * z, gData.hp, gData.maxHp,
+        isMySide ? 'friendly' : 'enemy');
+    }
+
+    // Rank indicator above
+    if (gData.rank > 0) {
+      drawRankIndicator(pos.x, pos.y - 32 * z * scale, z, gData.rank);
+    }
   }
 
   // ─── Draw Unit ──────────────────────────────────────────────────
@@ -1434,6 +1668,18 @@ const Renderer = (() => {
       }
     }
 
+    // Generals (larger dots on minimap)
+    const generals = [state.general1, state.general2].filter(g => g && g.hp > 0);
+    for (const g of generals) {
+      const gx = (g.x / GC.MAP_WIDTH) * mW;
+      const gy = (g.y / GC.MAP_HEIGHT) * mH;
+      mCtx.fillStyle = g.side === mySide ? '#ffd700' : '#ff6600';
+      mCtx.fillRect(gx - 2, gy - 2, 4, 4);
+      mCtx.strokeStyle = g.side === mySide ? '#aa8800' : '#aa4400';
+      mCtx.lineWidth = 0.5;
+      mCtx.strokeRect(gx - 2, gy - 2, 4, 4);
+    }
+
     // Camera viewport
     const vx = ((camera.x - screenW / (2 * camera.zoom)) / GC.MAP_WIDTH) * mW;
     const vy = ((camera.y - screenH / (2 * camera.zoom)) / GC.MAP_HEIGHT) * mH;
@@ -1647,12 +1893,16 @@ const Renderer = (() => {
       if (state.outposts.south) drawOutpost(state.outposts.south, false);
     }
 
-    // Units (sorted by Y)
+    // Units + Generals (sorted by Y for proper draw order)
     const allUnits = state.units || [];
     const sortedUnits = [...allUnits].sort((a, b) => a.y - b.y);
     for (const u of sortedUnits) {
       drawUnit(u);
     }
+
+    // Draw generals on top of regular units (they're larger/important)
+    if (state.general1) drawGeneral(state.general1);
+    if (state.general2) drawGeneral(state.general2);
 
     // Projectiles
     drawProjectiles(state.projectiles || []);

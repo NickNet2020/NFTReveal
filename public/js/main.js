@@ -30,6 +30,8 @@
   const myCastleFaction = document.getElementById('myCastleFaction');
   const enemyCastleFaction = document.getElementById('enemyCastleFaction');
   const passiveText = document.getElementById('passiveText');
+  const foundationDisplay = document.getElementById('foundationDisplay');
+  const buyFoundationBtn = document.getElementById('buyFoundationBtn');
   const gameOverTitle = document.getElementById('gameOverTitle');
   const gameOverSub = document.getElementById('gameOverSub');
   const gameOverDuration = document.getElementById('gameOverDuration');
@@ -67,6 +69,7 @@
   let selectedUnitName = null;
   let selectedBuildingId = null;
   let bannerEl = null;
+  let pendingUpgradeBtn = null;
 
   // Name generator for units
   const UNIT_NAMES = [
@@ -227,6 +230,12 @@
       socket.emit('rescueStrike');
     });
 
+    // Buy core foundation
+    buyFoundationBtn.addEventListener('click', () => {
+      if (!gameActive) return;
+      socket.emit('buyFoundation');
+    });
+
     // Keyboard
     window.addEventListener('keydown', (e) => {
       keys[e.key.toLowerCase()] = true;
@@ -285,6 +294,14 @@
       // Unit selection mode
       const world = Renderer.screenToWorld(e.clientX, e.clientY);
       trySelectUnit(world.x, world.y);
+    });
+
+    // Right-click to move General
+    gameCanvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (!gameActive) return;
+      const world = Renderer.screenToWorld(e.clientX, e.clientY);
+      socket.emit('generalMove', { x: world.x, y: world.y });
     });
 
     // Mouse wheel zoom
@@ -416,6 +433,24 @@
       gameOverDuration.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
     });
 
+    socket.on('upgradeResult', (data) => {
+      if (data.success) {
+        showToast(`Building upgraded to Level ${data.level}!`);
+        AudioManager.playBuildingPlace();
+      } else {
+        showToast(data.reason || 'Cannot upgrade');
+      }
+    });
+
+    socket.on('foundationResult', (data) => {
+      if (data.success) {
+        showToast(`Core Foundation acquired! (${data.count} total)`);
+        AudioManager.playGoldGain();
+      } else {
+        showToast(data.reason || 'Cannot buy foundation');
+      }
+    });
+
     socket.on('error', (data) => {
       showToast(data.message);
     });
@@ -509,6 +544,11 @@
     if (state.self.rescueStrikeUsed) {
       rescueStrikeBtn.classList.add('used');
       rescueStrikeBtn.disabled = true;
+    }
+
+    // Core foundations
+    if (state.self.coreFoundations !== undefined) {
+      foundationDisplay.textContent = state.self.coreFoundations;
     }
   }
 
@@ -613,6 +653,30 @@
       if (d < closestDist) { closestDist = d; closest = { type: 'hero', data: h }; }
     }
 
+    // Try generals
+    const generals = [gameState.general1, gameState.general2].filter(g => g && g.hp > 0);
+    for (const g of generals) {
+      const dx = g.x - wx;
+      const dy = g.y - wy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < closestDist) { closestDist = d; closest = { type: 'general', data: g }; }
+    }
+
+    // Try outposts (within 50 world units)
+    if (gameState.outposts) {
+      const outposts = [
+        { key: 'north', data: gameState.outposts.north },
+        { key: 'south', data: gameState.outposts.south }
+      ];
+      for (const op of outposts) {
+        if (!op.data) continue;
+        const dx = op.data.x - wx;
+        const dy = op.data.y - wy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 50 && d < closestDist) { closestDist = d; closest = { type: 'outpost', data: op.data, key: op.key }; }
+      }
+    }
+
     // Try buildings (within 40 world units)
     if (gameState.buildings) {
       for (const b of gameState.buildings) {
@@ -624,12 +688,20 @@
     }
 
     if (closest) {
-      if (closest.type === 'unit' || closest.type === 'hero') {
+      if (closest.type === 'unit' || closest.type === 'hero' || closest.type === 'general') {
         selectedUnitId = closest.data.id;
         selectedBuildingId = null;
-        selectedUnitName = closest.data.isHero ? closest.data.name : getUnitDisplayName(closest.data);
+        selectedUnitName = closest.data.isHero ? closest.data.name :
+                          closest.data.isGeneral ? closest.data.name :
+                          getUnitDisplayName(closest.data);
         Renderer.setSelectedUnit(selectedUnitId);
         showBanner(closest.data, closest.type);
+      } else if (closest.type === 'outpost') {
+        selectedBuildingId = null;
+        selectedUnitId = null;
+        selectedUnitName = null;
+        Renderer.setSelectedUnit(null);
+        showBanner(closest.data, 'outpost');
       } else {
         selectedBuildingId = closest.data.id;
         selectedUnitId = null;
@@ -659,20 +731,34 @@
     bannerEl.style.cssText = `
       position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
       width: 300px; height: 200px; display: none; z-index: 100;
-      pointer-events: none; font-family: 'Cinzel', serif;
+      pointer-events: auto; font-family: 'Cinzel', serif; cursor: default;
     `;
     // We draw the banner on a canvas for the medieval sword-themed look
     const c = document.createElement('canvas');
     c.id = 'bannerCanvas';
     c.width = 300;
     c.height = 200;
-    c.style.cssText = 'width: 300px; height: 200px;';
+    c.style.cssText = 'width: 300px; height: 200px; cursor: pointer;';
     bannerEl.appendChild(c);
+
+    // Click handler for upgrade button on banner
+    c.addEventListener('click', (e) => {
+      if (!pendingUpgradeBtn) return;
+      const rect = c.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const btn = pendingUpgradeBtn;
+      if (cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h) {
+        socket.emit('upgradeBuilding', { buildingId: btn.buildingId });
+      }
+    });
+
     document.getElementById('gameScreen').appendChild(bannerEl);
   }
 
   function hideBanner() {
     if (bannerEl) bannerEl.style.display = 'none';
+    pendingUpgradeBtn = null;
   }
 
   function showBanner(data, selType) {
@@ -687,6 +773,7 @@
     const ctx = canvas.getContext('2d');
     const W = 300, H = 200;
 
+    pendingUpgradeBtn = null;
     ctx.clearRect(0, 0, W, H);
 
     // Background
@@ -720,6 +807,10 @@
 
     if (selType === 'building') {
       renderBuildingBanner(ctx, data, charData, primary, W, H);
+    } else if (selType === 'outpost') {
+      renderOutpostBanner(ctx, data, W, H);
+    } else if (selType === 'general') {
+      renderGeneralBanner(ctx, data, charData, primary, W, H);
     } else {
       renderUnitBanner(ctx, data, charData, primary, W, H, selType);
     }
@@ -882,13 +973,30 @@
     // Simple building icon
     drawBuildingIcon(ctx, building, px, py, 56, 56);
 
+    // Level badge on icon
+    const bLevel = building.level || 1;
+    if (bLevel >= 2) {
+      const badgeColor = bLevel === 3 ? '#ffd700' : '#c0c0c0';
+      ctx.fillStyle = badgeColor;
+      ctx.beginPath();
+      ctx.arc(px + 48, py + 8, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = 'bold 9px Cinzel, serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#222';
+      ctx.fillText(`L${bLevel}`, px + 48, py + 11);
+      ctx.textAlign = 'left';
+    }
+
     // Building name
     const nameX = 84;
     const bDef = charData ? charData.buildings.find(b => b.id === building.typeId) : null;
     ctx.font = 'bold 13px Cinzel, serif';
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    ctx.fillText(bDef ? bDef.name : 'Building', nameX, 38, W - nameX - 16);
+    const nameStr = bDef ? bDef.name : 'Building';
+    const levelStr = bLevel >= 2 ? ` (Lv.${bLevel})` : '';
+    ctx.fillText(nameStr + levelStr, nameX, 38, W - nameX - 16);
 
     // Type (tower or barracks)
     ctx.font = '10px Cinzel, serif';
@@ -936,6 +1044,54 @@
       ctx.font = 'bold 11px Cinzel, serif';
       ctx.fillText(building.constructed ? 'ACTIVE' : 'BUILDING...', col1 + 52, statsY2);
     } else {
+      // Show upgrade info for own non-tower buildings
+      if (building.side === mySide && building.constructed && bLevel < 3 && bDef) {
+        const upgY = statsY + 18;
+        const nextLevel = bLevel + 1;
+        const upgCost = nextLevel === 2
+          ? Math.floor(bDef.cost * GAME_CONSTANTS.L2_COST_MULT)
+          : Math.floor(bDef.cost * GAME_CONSTANTS.L3_COST_MULT);
+
+        // Check L3 eligibility
+        let canUpgrade = true;
+        let upgradeNote = '';
+        if (nextLevel === 3) {
+          if (!charData.l3Eligible || !charData.l3Eligible.includes(building.typeId)) {
+            canUpgrade = false;
+            upgradeNote = 'Not L3 eligible';
+          } else {
+            const foundations = gameState && gameState.self ? gameState.self.coreFoundations : 0;
+            if (foundations <= 0) {
+              upgradeNote = 'Need Core Foundation';
+            }
+          }
+        }
+
+        if (canUpgrade) {
+          // Draw upgrade button area
+          ctx.fillStyle = 'rgba(201, 168, 76, 0.15)';
+          ctx.fillRect(20, upgY - 4, W - 40, 18);
+          ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(20, upgY - 4, W - 40, 18);
+
+          ctx.font = 'bold 10px Cinzel, serif';
+          ctx.fillStyle = '#e6c766';
+          ctx.textAlign = 'left';
+          ctx.fillText(`\u2B06 Upgrade to L${nextLevel} — ${upgCost}g`, 28, upgY + 8);
+
+          if (upgradeNote) {
+            ctx.font = '8px Cinzel, serif';
+            ctx.fillStyle = '#c0392b';
+            ctx.textAlign = 'right';
+            ctx.fillText(upgradeNote, W - 28, upgY + 8);
+          }
+
+          // Store upgrade button bounds for click handling
+          pendingUpgradeBtn = { x: 20, y: upgY - 4, w: W - 40, h: 18, buildingId: building.id };
+        }
+      }
+
       // Spawn progress bar
       const barY = H - 30;
       const barX = 20;
@@ -973,6 +1129,167 @@
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barW, barH);
     }
+
+    ctx.textAlign = 'left';
+  }
+
+  function renderOutpostBanner(ctx, outpost, W, H) {
+    const nameX = 84;
+    // Outpost icon
+    const px = 20, py = 22;
+    ctx.fillStyle = '#0a0806';
+    ctx.fillRect(px, py, 56, 56);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px, py, 56, 56);
+
+    // Tower icon
+    ctx.fillStyle = '#5a5550';
+    ctx.fillRect(px + 20, py + 8, 16, 32);
+    ctx.fillRect(px + 16, py + 4, 24, 6);
+    ctx.fillStyle = outpost.controlledBy === 'left' ? '#4a8c3f' : outpost.controlledBy === 'right' ? '#b22222' : '#888';
+    ctx.fillRect(px + 26, py + 2, 10, 6);
+
+    // Name
+    ctx.font = 'bold 13px Cinzel, serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText('Command Outpost', nameX, 38, W - nameX - 16);
+
+    // Control status
+    ctx.font = '10px Cinzel, serif';
+    const controlled = outpost.controlledBy;
+    ctx.fillStyle = controlled === mySide ? '#4a8c3f' : controlled ? '#b22222' : '#888';
+    ctx.fillText(controlled === mySide ? 'CONTROLLED BY YOU' : controlled ? 'ENEMY CONTROLLED' : 'NEUTRAL', nameX, 52);
+
+    // Separator
+    ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
+    ctx.fillRect(20, 72, W - 40, 1);
+
+    // Bonuses section
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillStyle = '#c9a84c';
+    ctx.fillText('Outpost Bonuses:', 24, 90);
+
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('1 Outpost: -10% Attack Speed for your units', 24, 108);
+    ctx.fillText('2 Outposts: +10% Damage Reduction for your units', 24, 124);
+
+    // Current bonus
+    ctx.font = 'bold 10px Cinzel, serif';
+    ctx.fillStyle = '#e6c766';
+    let ownedCount = 0;
+    if (gameState && gameState.outposts) {
+      if (gameState.outposts.north && gameState.outposts.north.controlledBy === mySide) ownedCount++;
+      if (gameState.outposts.south && gameState.outposts.south.controlledBy === mySide) ownedCount++;
+    }
+    ctx.fillText(`You control: ${ownedCount} outpost(s)`, 24, 148);
+
+    ctx.textAlign = 'left';
+  }
+
+  function renderGeneralBanner(ctx, gen, charData, primary, W, H) {
+    // Portrait
+    const px = 20, py = 22;
+    ctx.fillStyle = '#0a0806';
+    ctx.fillRect(px, py, 56, 56);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px, py, 56, 56);
+
+    // General portrait (large armored figure with crown)
+    ctx.fillStyle = primary || '#888';
+    ctx.fillRect(px + 12, py + 16, 32, 28);
+    ctx.fillStyle = '#d4a574';
+    ctx.beginPath(); ctx.arc(px + 28, py + 14, 10, 0, Math.PI * 2); ctx.fill();
+    // Crown
+    ctx.fillStyle = primary || '#ffd700';
+    ctx.fillRect(px + 18, py + 2, 20, 6);
+    ctx.fillRect(px + 20, py, 4, 4);
+    ctx.fillRect(px + 26, py, 4, 4);
+    ctx.fillRect(px + 32, py, 4, 4);
+
+    // Name + type + rank
+    const nameX = 84;
+    ctx.font = 'bold 13px Cinzel, serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    ctx.fillText(gen.name || 'General', nameX, 38, W - nameX - 16);
+
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = primary;
+    ctx.fillText('GENERAL', nameX, 52);
+
+    if (gen.rank > 0) {
+      const starColors = ['', '#cd7f32', '#c0c0c0', '#ffd700'];
+      ctx.font = '12px serif';
+      ctx.fillStyle = starColors[Math.min(gen.rank, 3)];
+      let stars = '';
+      for (let i = 0; i < gen.rank; i++) stars += '\u2605';
+      ctx.fillText(stars, nameX, 66);
+    }
+
+    // Separator
+    ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
+    ctx.fillRect(20, 84, W - 40, 1);
+
+    // Stats
+    const statsY = 98;
+    const col1 = 24, col2 = 158;
+    ctx.font = '11px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('HP', col1, statsY);
+    ctx.fillStyle = '#4a8c3f';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${Math.ceil(gen.hp)} / ${gen.maxHp}`, col1 + 40, statsY);
+
+    ctx.font = '11px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('DMG', col2, statsY);
+    ctx.fillStyle = '#c0392b';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${gen.damage}`, col2 + 40, statsY);
+
+    const statsY2 = statsY + 18;
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = '#c9a84c';
+    const auraText = gen.rank >= 3 ? 'Aura: Regen + Dmg + Dodge' :
+                     gen.rank >= 2 ? 'Aura: Regen + Damage' :
+                     gen.rank >= 1 ? 'Aura: HP Regen' : 'No Aura (Rank up!)';
+    ctx.fillText(auraText, col1, statsY2);
+
+    // XP bar
+    const xpBarY = H - 30, xpBarX = 20, xpBarW = W - 40, xpBarH = 12;
+    const xp = gen.xp || 0;
+    const xpNeeded = gen.xpToNext || 30;
+    const rank = gen.rank || 0;
+
+    ctx.font = '9px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.textAlign = 'left';
+    ctx.fillText('XP', xpBarX, xpBarY - 3);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = rank >= 3 ? '#ffd700' : '#888';
+    ctx.fillText(rank >= 3 ? 'MAX RANK' : `Rank ${rank}`, xpBarX + xpBarW, xpBarY - 3);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(xpBarX, xpBarY, xpBarW, xpBarH);
+    const xpPct = rank >= 3 ? 1 : Math.min(1, xp / xpNeeded);
+    const xpGrad = ctx.createLinearGradient(xpBarX, 0, xpBarX + xpBarW * xpPct, 0);
+    xpGrad.addColorStop(0, '#6a5acd');
+    xpGrad.addColorStop(1, '#9370db');
+    ctx.fillStyle = xpGrad;
+    ctx.fillRect(xpBarX, xpBarY, xpBarW * xpPct, xpBarH);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(xpBarX, xpBarY, xpBarW * xpPct, xpBarH / 2);
+    ctx.font = 'bold 9px Cinzel, serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText(rank >= 3 ? 'MAX' : `${xp} / ${xpNeeded}`, xpBarX + xpBarW / 2, xpBarY + 9);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(xpBarX, xpBarY, xpBarW, xpBarH);
 
     ctx.textAlign = 'left';
   }
@@ -1136,8 +1453,14 @@
         if (gameState.hero1 && gameState.hero1.id === selectedUnitId) unit = gameState.hero1;
         if (gameState.hero2 && gameState.hero2.id === selectedUnitId) unit = gameState.hero2;
       }
+      // Check generals
+      if (!unit) {
+        if (gameState.general1 && gameState.general1.id === selectedUnitId) unit = gameState.general1;
+        if (gameState.general2 && gameState.general2.id === selectedUnitId) unit = gameState.general2;
+      }
       if (!unit || unit.hp <= 0) { deselectAll(); return; }
-      renderBanner(unit, unit.isHero ? 'hero' : 'unit');
+      const selType = unit.isHero ? 'hero' : unit.isGeneral ? 'general' : 'unit';
+      renderBanner(unit, selType);
     } else if (selectedBuildingId && gameState.buildings) {
       const building = gameState.buildings.find(b => b.id === selectedBuildingId);
       if (!building) { deselectAll(); return; }
