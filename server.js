@@ -70,6 +70,10 @@ const sharedDecorations = generateDecorations();
 // Fog of War
 // ═══════════════════════════════════════════════════════════════════════
 function isVisibleTo(room, side, wx, wy) {
+  // Home territory is always fully visible — no fog of war in your own base
+  if (side === 'left' && wx <= GC.P1_BASE_MAX_X) return true;
+  if (side === 'right' && wx >= GC.P2_BASE_MIN_X) return true;
+
   const castle = getCastle(room, side);
   if (dist({ x: wx, y: wy }, castle) < GC.FOG_CASTLE_RANGE) return true;
 
@@ -386,6 +390,8 @@ function findTarget(room, unit) {
 
   // Flying units are unrestricted
   const isFlying = unit.unitType === 'flying';
+  // Units can only detect enemies within visual range (fog of war awareness)
+  const detRange = GC.UNIT_DETECTION_RANGE;
 
   function isReachable(t) {
     if (isFlying || !inMiddle) return true;
@@ -400,13 +406,14 @@ function findTarget(room, unit) {
     if (!canAttackTarget(unit.unitType, other.unitType)) continue;
     if (!isReachable(other)) continue;
     const d = dist(unit, other);
+    if (d > detRange) continue; // Can't see beyond detection range
     if (d < nearestDist) { nearestDist = d; nearest = { id: other.id, type: 'unit' }; }
   }
 
   const enemyHero = getHero(room, enemySide);
   if (enemyHero && enemyHero.hp > 0 && isReachable(enemyHero)) {
     const d = dist(unit, enemyHero);
-    if (d < nearestDist) { nearestDist = d; nearest = { id: enemyHero.id, type: 'hero' }; }
+    if (d <= detRange && d < nearestDist) { nearestDist = d; nearest = { id: enemyHero.id, type: 'hero' }; }
   }
 
   for (const [, b] of room.buildings) {
@@ -801,6 +808,27 @@ function botThink(room) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Path Clamping — keep ground units on cobblestone (home territory or lane)
+// ═══════════════════════════════════════════════════════════════════════
+function clampToPath(unit) {
+  if (unit.unitType === 'flying') return;
+  const laneHalfW = GC.LANE_WIDTH / 2;
+
+  if (unit.x <= GC.P1_BASE_MAX_X) {
+    // Left home territory — clamp to base area (all brick)
+    unit.x = clamp(unit.x, GC.P1_BASE_MIN_X + 5, GC.P1_BASE_MAX_X);
+    unit.y = clamp(unit.y, GC.BASE_MIN_Y + 5, GC.BASE_MAX_Y - 5);
+  } else if (unit.x >= GC.P2_BASE_MIN_X) {
+    // Right home territory — clamp to base area (all brick)
+    unit.x = clamp(unit.x, GC.P2_BASE_MIN_X, GC.P2_BASE_MAX_X - 5);
+    unit.y = clamp(unit.y, GC.BASE_MIN_Y + 5, GC.BASE_MAX_Y - 5);
+  } else {
+    // Middle — must stay on lane cobblestone
+    unit.y = clamp(unit.y, unit.laneY - laneHalfW, unit.laneY + laneHalfW);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Game Tick
 // ═══════════════════════════════════════════════════════════════════════
 function gameTick() {
@@ -929,6 +957,7 @@ function gameTick() {
 
           unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
           unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
+          clampToPath(unit);
         }
       } else {
         // No target — march along lane toward enemy base
@@ -950,6 +979,7 @@ function gameTick() {
 
         unit.x = clamp(unit.x, 20, GC.MAP_WIDTH - 20);
         unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
+        clampToPath(unit);
       }
     }
 
@@ -985,6 +1015,11 @@ function gameTick() {
       }
     }
 
+    // Re-clamp to cobblestone paths after collision separation
+    for (const u of unitArr) {
+      clampToPath(u);
+    }
+
     // ─── Clean up ────────────────────────────────────────────────
     room.projectiles = room.projectiles.filter(p => now - p.time < 400);
     room.damageNumbers = room.damageNumbers.filter(d => now - d.time < 1200);
@@ -1010,7 +1045,8 @@ function serializeState(room, now, playerSide) {
       id: u.id, typeId: u.typeId, unitType: u.unitType, side: u.side,
       characterId: u.characterId,
       x: Math.round(u.x * 10) / 10, y: Math.round(u.y * 10) / 10,
-      hp: Math.round(u.hp), maxHp: u.maxHp, state: u.state, lane: u.lane
+      hp: Math.round(u.hp), maxHp: u.maxHp, state: u.state, lane: u.lane,
+      damage: u.damage, speed: u.speed, attackSpeed: u.attackSpeed
     });
   }
 

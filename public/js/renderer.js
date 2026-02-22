@@ -13,6 +13,7 @@ const Renderer = (() => {
   let decorations = [];
   let time = 0;
   let mySide = 'left';
+  let selectedUnitId = null;
 
   // Color palettes per character
   const CHAR_PALETTES = {
@@ -58,6 +59,7 @@ const Renderer = (() => {
 
   function setDecorations(decs) { decorations = decs || []; terrainDirty = true; }
   function setSide(side) { mySide = side; }
+  function setSelectedUnit(id) { selectedUnitId = id; }
 
   // ─── Camera helpers ─────────────────────────────────────────────
   function worldToScreen(wx, wy) {
@@ -776,6 +778,24 @@ const Renderer = (() => {
     const isMySide = uData.side === mySide;
     const facingRight = uData.side === 'left';
     const yOffset = vis.yOff * z;
+
+    // Yellow selection ring on the ground
+    if (selectedUnitId === uData.id) {
+      const pulse = 0.7 + Math.sin(time * 4) * 0.3;
+      const ringY = pos.y + (uData.unitType === 'flying' ? 20 * z : vis.size * 0.6 * z);
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 215, 0, ${(0.8 * pulse).toFixed(2)})`;
+      ctx.lineWidth = 2.5 * z;
+      ctx.beginPath();
+      ctx.ellipse(pos.x, ringY, (vis.size + 5) * z, (vis.size * 0.3 + 3) * z, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(255, 215, 0, ${(0.25 * pulse).toFixed(2)})`;
+      ctx.lineWidth = 5 * z;
+      ctx.beginPath();
+      ctx.ellipse(pos.x, ringY, (vis.size + 8) * z, (vis.size * 0.3 + 4) * z, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.translate(pos.x, pos.y + yOffset);
@@ -1578,7 +1598,7 @@ const Renderer = (() => {
   }
 
   return {
-    init, resize, render, setDecorations, setSide,
+    init, resize, render, setDecorations, setSide, setSelectedUnit,
     worldToScreen, screenToWorld, isVisible, drawMinimap
   };
 })();

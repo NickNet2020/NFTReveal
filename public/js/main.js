@@ -62,6 +62,31 @@
   let isPlacing = false;
   let selectedBuildingType = null;
 
+  // Unit selection
+  let selectedUnitId = null;
+  let selectedUnitName = null;
+  let unitCardEl = null;
+
+  // Name generator for units
+  const UNIT_NAMES = [
+    'Aedric', 'Baldric', 'Cedric', 'Duncan', 'Edmund', 'Fendrel',
+    'Gareth', 'Harald', 'Ivar', 'Joffrey', 'Kael', 'Landon',
+    'Marcus', 'Nolan', 'Osric', 'Percival', 'Quinlan', 'Roderick',
+    'Siegfried', 'Theron', 'Ulric', 'Viktor', 'Wilhelm', 'Xander',
+    'Yorick', 'Zephyr', 'Aldric', 'Bramwell', 'Corwin', 'Darian',
+    'Eddard', 'Fyric', 'Gendry', 'Tormund', 'Bronn', 'Sandor',
+    'Beric', 'Thoros', 'Barristan', 'Renly', 'Stannis', 'Oberyn'
+  ];
+
+  function getUnitDisplayName(unit) {
+    const nameIndex = unit.id % UNIT_NAMES.length;
+    const name = UNIT_NAMES[nameIndex];
+    const charData = CHARACTERS[unit.characterId];
+    const unitDef = charData ? charData.units.find(u => u.id === unit.typeId) : null;
+    const typeName = unitDef ? unitDef.name : unit.unitType;
+    return `${name} the ${typeName}`;
+  }
+
   // Character icon map
   const CHAR_ICONS = {
     northern_lord: '&#x2744;',   // snowflake
@@ -212,12 +237,13 @@
           toggleBuildingSelection(char.buildings[num - 1].id);
         }
       }
-      // Escape to cancel placement
+      // Escape to cancel placement and deselect unit
       if (e.key === 'Escape') {
         selectedBuildingType = null;
         isPlacing = false;
         gameCanvas.classList.remove('placing');
         document.querySelectorAll('.building-item').forEach(i => i.classList.remove('selected'));
+        deselectUnit();
       }
       // R for rescue strike
       if (e.key.toLowerCase() === 'r' && gameActive) {
@@ -242,14 +268,22 @@
     });
 
     gameCanvas.addEventListener('click', (e) => {
-      if (!gameActive || !isPlacing || !selectedBuildingType) return;
+      if (!gameActive) return;
 
+      // Placement mode — build
+      if (isPlacing && selectedBuildingType) {
+        const world = Renderer.screenToWorld(e.clientX, e.clientY);
+        socket.emit('build', {
+          buildingTypeId: selectedBuildingType,
+          x: world.x,
+          y: world.y
+        });
+        return;
+      }
+
+      // Unit selection mode
       const world = Renderer.screenToWorld(e.clientX, e.clientY);
-      socket.emit('build', {
-        buildingTypeId: selectedBuildingType,
-        x: world.x,
-        y: world.y
-      });
+      trySelectUnit(world.x, world.y);
     });
 
     // Mouse wheel zoom
@@ -336,6 +370,7 @@
       triggerAudio(data);
       gameState = data;
       updateHUD(data);
+      updateSelectedUnit();
     });
 
     socket.on('buildResult', (data) => {
@@ -359,6 +394,7 @@
 
     socket.on('gameOver', (data) => {
       gameActive = false;
+      deselectUnit();
       gameScreen.classList.add('hidden');
       gameOverScreen.classList.remove('hidden');
 
@@ -548,6 +584,295 @@
     }
 
     setTimeout(() => toast.remove(), 2500);
+  }
+
+  // ─── Unit Selection & Card ──────────────────────────────────
+  function trySelectUnit(wx, wy) {
+    if (!gameState || !gameState.units) { deselectUnit(); return; }
+
+    let closest = null;
+    let closestDist = 30; // click radius in world units
+
+    for (const u of gameState.units) {
+      const dx = u.x - wx;
+      const dy = u.y - wy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < closestDist) { closestDist = d; closest = u; }
+    }
+
+    if (closest) {
+      selectedUnitId = closest.id;
+      selectedUnitName = getUnitDisplayName(closest);
+      Renderer.setSelectedUnit(selectedUnitId);
+      showUnitCard(closest);
+    } else {
+      deselectUnit();
+    }
+  }
+
+  function deselectUnit() {
+    selectedUnitId = null;
+    selectedUnitName = null;
+    Renderer.setSelectedUnit(null);
+    hideUnitCard();
+  }
+
+  function createUnitCard() {
+    unitCardEl = document.createElement('div');
+    unitCardEl.id = 'unitCard';
+    unitCardEl.style.cssText = `
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(28, 22, 14, 0.95); border: 2px solid rgba(201, 168, 76, 0.6);
+      border-radius: 4px; padding: 12px 16px; display: none; z-index: 100;
+      font-family: 'Cinzel', serif; color: #e6c766; min-width: 280px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6); pointer-events: auto;
+    `;
+    unitCardEl.innerHTML = `
+      <div style="display: flex; align-items: flex-start; gap: 12px;">
+        <canvas id="unitPortrait" width="48" height="48" style="border: 2px solid rgba(201,168,76,0.4); image-rendering: pixelated; background: #0a0806; flex-shrink: 0;"></canvas>
+        <div style="flex: 1; min-width: 0;">
+          <div id="ucName" style="font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+          <div id="ucType" style="font-size: 10px; color: rgba(201,168,76,0.7); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;"></div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-top: 10px; font-size: 11px;">
+        <div style="display: flex; justify-content: space-between;"><span style="color: #888;">HP</span><span id="ucHp" style="color: #4a8c3f; font-weight: 600;"></span></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #888;">DMG</span><span id="ucDmg" style="color: #c0392b; font-weight: 600;"></span></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #888;">ATK SPD</span><span id="ucAtkSpd" style="color: #d4a017; font-weight: 600;"></span></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: #888;">MOVE</span><span id="ucMoveSpd" style="color: #4a6fa5; font-weight: 600;"></span></div>
+      </div>
+    `;
+    document.getElementById('gameScreen').appendChild(unitCardEl);
+  }
+
+  function showUnitCard(unit) {
+    if (!unitCardEl) createUnitCard();
+    unitCardEl.style.display = 'block';
+    document.getElementById('ucName').textContent = selectedUnitName;
+    document.getElementById('ucType').textContent = unit.unitType;
+    updateUnitCardStats(unit);
+    drawUnitPortrait(unit);
+  }
+
+  function hideUnitCard() {
+    if (unitCardEl) unitCardEl.style.display = 'none';
+  }
+
+  function updateUnitCardStats(unit) {
+    if (!unitCardEl) return;
+    document.getElementById('ucHp').textContent = `${Math.ceil(unit.hp)} / ${unit.maxHp}`;
+    document.getElementById('ucDmg').textContent = unit.damage || '?';
+    document.getElementById('ucAtkSpd').textContent = (unit.attackSpeed || '?') + 'ms';
+    document.getElementById('ucMoveSpd').textContent = unit.speed || '?';
+  }
+
+  function updateSelectedUnit() {
+    if (!selectedUnitId || !gameState || !gameState.units) return;
+    const unit = gameState.units.find(u => u.id === selectedUnitId);
+    if (!unit) { deselectUnit(); return; }
+    updateUnitCardStats(unit);
+  }
+
+  function drawUnitPortrait(unit) {
+    const canvas = document.getElementById('unitPortrait');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const charData = CHARACTERS[unit.characterId];
+    const primary = charData ? charData.color : '#666';
+    const accent = charData ? charData.accentColor : '#888';
+    const dark = charData ? charData.darkColor : '#444';
+
+    ctx.clearRect(0, 0, 48, 48);
+    ctx.imageSmoothingEnabled = false;
+
+    // Dark background
+    ctx.fillStyle = '#0a0806';
+    ctx.fillRect(0, 0, 48, 48);
+
+    const type = unit.unitType;
+
+    if (type === 'infantry') {
+      // Helmet top
+      ctx.fillStyle = '#777';
+      ctx.fillRect(14, 4, 20, 14);
+      // Helmet brim
+      ctx.fillStyle = '#666';
+      ctx.fillRect(12, 12, 24, 4);
+      // Face
+      ctx.fillStyle = '#d4a574';
+      ctx.fillRect(16, 16, 16, 12);
+      // Eyes
+      ctx.fillStyle = '#222';
+      ctx.fillRect(18, 19, 4, 3);
+      ctx.fillRect(26, 19, 4, 3);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(19, 19, 2, 2);
+      ctx.fillRect(27, 19, 2, 2);
+      // Nose
+      ctx.fillStyle = '#c49464';
+      ctx.fillRect(22, 22, 4, 4);
+      // Mouth
+      ctx.fillStyle = '#8a6040';
+      ctx.fillRect(20, 27, 8, 2);
+      // Armor collar
+      ctx.fillStyle = primary;
+      ctx.fillRect(12, 30, 24, 14);
+      // Armor detail
+      ctx.fillStyle = dark;
+      ctx.fillRect(22, 30, 4, 14);
+      // Helmet crest
+      ctx.fillStyle = accent;
+      ctx.fillRect(20, 0, 8, 6);
+      // Shield edge
+      ctx.fillStyle = dark;
+      ctx.fillRect(2, 28, 10, 16);
+      ctx.fillStyle = primary;
+      ctx.fillRect(3, 29, 8, 14);
+      ctx.fillStyle = accent;
+      ctx.fillRect(5, 33, 4, 6);
+    } else if (type === 'ranged') {
+      // Hood
+      ctx.fillStyle = dark;
+      ctx.fillRect(10, 2, 28, 18);
+      ctx.fillRect(8, 10, 32, 12);
+      // Hood shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(14, 8, 20, 6);
+      // Face in shadow
+      ctx.fillStyle = '#d4a574';
+      ctx.fillRect(16, 14, 16, 12);
+      // Narrow eyes
+      ctx.fillStyle = '#333';
+      ctx.fillRect(18, 18, 5, 2);
+      ctx.fillRect(25, 18, 5, 2);
+      ctx.fillStyle = '#aad';
+      ctx.fillRect(20, 18, 2, 2);
+      ctx.fillRect(27, 18, 2, 2);
+      // Nose
+      ctx.fillStyle = '#c49464';
+      ctx.fillRect(22, 21, 4, 3);
+      // Cloak body
+      ctx.fillStyle = dark;
+      ctx.fillRect(8, 28, 32, 20);
+      ctx.fillStyle = primary;
+      ctx.fillRect(10, 30, 28, 16);
+      // Bow on right side
+      ctx.strokeStyle = '#6B4226';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(42, 26, 16, -1.2, 1.2);
+      ctx.stroke();
+      // Quiver hint
+      ctx.fillStyle = '#5c4033';
+      ctx.fillRect(38, 8, 6, 20);
+    } else if (type === 'cavalry') {
+      // Visor helmet
+      ctx.fillStyle = '#999';
+      ctx.fillRect(14, 2, 20, 18);
+      // Visor detail
+      ctx.fillStyle = '#777';
+      ctx.fillRect(14, 12, 20, 4);
+      // Eye slit
+      ctx.fillStyle = '#111';
+      ctx.fillRect(16, 13, 16, 2);
+      // Plume
+      ctx.fillStyle = primary;
+      ctx.fillRect(16, 0, 16, 4);
+      ctx.fillStyle = accent;
+      ctx.fillRect(20, 0, 8, 2);
+      // Neck armor
+      ctx.fillStyle = primary;
+      ctx.fillRect(12, 22, 24, 10);
+      // Horse head below
+      ctx.fillStyle = '#5c3a1e';
+      ctx.fillRect(10, 34, 20, 14);
+      ctx.fillStyle = '#4a2e15';
+      ctx.fillRect(6, 38, 10, 10);
+      // Horse eye
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(10, 41, 3, 2);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(11, 41, 2, 2);
+      // Mane
+      ctx.fillStyle = '#3a2010';
+      ctx.fillRect(22, 34, 8, 4);
+      // Barding
+      ctx.fillStyle = dark;
+      ctx.fillRect(10, 34, 20, 3);
+    } else if (type === 'siege') {
+      // War machine frame
+      ctx.fillStyle = '#5c4033';
+      ctx.fillRect(6, 16, 36, 18);
+      // Beam/arm
+      ctx.fillStyle = '#6B4226';
+      ctx.fillRect(8, 6, 6, 28);
+      // Crossbar
+      ctx.fillStyle = '#4a3520';
+      ctx.fillRect(4, 22, 40, 4);
+      // Wheels
+      ctx.fillStyle = '#4a3520';
+      ctx.beginPath();
+      ctx.arc(12, 40, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(36, 40, 6, 0, Math.PI * 2);
+      ctx.fill();
+      // Wheel spokes
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(12, 40, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(36, 40, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      // Metal bands
+      ctx.fillStyle = '#555';
+      ctx.fillRect(6, 18, 36, 2);
+      ctx.fillRect(6, 32, 36, 2);
+      // Flag
+      ctx.fillStyle = '#888';
+      ctx.fillRect(10, 0, 2, 8);
+      ctx.fillStyle = primary;
+      ctx.fillRect(12, 0, 10, 6);
+      ctx.fillStyle = accent;
+      ctx.fillRect(14, 2, 6, 2);
+    } else if (type === 'flying') {
+      // Bird/dragon head - larger
+      ctx.fillStyle = primary;
+      ctx.beginPath();
+      ctx.arc(22, 22, 14, 0, Math.PI * 2);
+      ctx.fill();
+      // Head highlight
+      ctx.fillStyle = accent;
+      ctx.fillRect(14, 12, 12, 8);
+      // Beak
+      ctx.fillStyle = '#d4a017';
+      ctx.fillRect(34, 18, 12, 4);
+      ctx.fillRect(36, 16, 8, 8);
+      // Eye
+      ctx.fillStyle = '#ffd700';
+      ctx.fillRect(28, 16, 6, 5);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(30, 17, 3, 3);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(31, 17, 1, 1);
+      // Wing hints
+      ctx.fillStyle = dark;
+      ctx.fillRect(2, 6, 18, 6);
+      ctx.fillRect(2, 34, 18, 6);
+      // Feather details
+      ctx.fillStyle = accent;
+      ctx.fillRect(4, 8, 4, 2);
+      ctx.fillRect(10, 8, 4, 2);
+      ctx.fillRect(4, 36, 4, 2);
+      ctx.fillRect(10, 36, 4, 2);
+    }
+
+    // Frame border
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, 48, 48);
   }
 
   // ─── Game Loop ────────────────────────────────────────────────
