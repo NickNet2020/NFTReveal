@@ -141,9 +141,11 @@ function createGameRoom(p1Socket, p1Char, p2Socket, p2Char, p2IsBot = false) {
     hero1: createHero(charData1, 'left', GC.P1_CASTLE_X + 60, GC.CASTLE_Y),
     hero2: createHero(charData2, 'right', GC.P2_CASTLE_X - 60, GC.CASTLE_Y),
 
-    // Generals
-    general1: createGeneral(charData1, 'left', GC.P1_CASTLE_X + 40, GC.CASTLE_Y - 60),
-    general2: createGeneral(charData2, 'right', GC.P2_CASTLE_X - 40, GC.CASTLE_Y - 60),
+    // Generals — DISABLED (code preserved)
+    // general1: createGeneral(charData1, 'left', GC.P1_CASTLE_X + 40, GC.CASTLE_Y - 60),
+    // general2: createGeneral(charData2, 'right', GC.P2_CASTLE_X - 40, GC.CASTLE_Y - 60),
+    general1: null,
+    general2: null,
 
     units: new Map(),
     buildings: new Map(),
@@ -1138,7 +1140,7 @@ function gameTick() {
         }
         continue;
       }
-      if (building.hp <= 0 || building.isTower) continue;
+      if (building.hp <= 0 || building.isTower || !building.unitType) continue;
 
       if (now - building.lastSpawnTime >= building.spawnInterval) {
         building.lastSpawnTime = now;
@@ -1156,9 +1158,9 @@ function gameTick() {
     updateHero(room, room.hero1, now, dt);
     updateHero(room, room.hero2, now, dt);
 
-    // ─── General Updates ──────────────────────────────────────────
-    updateGeneral(room, room.general1, now, dt);
-    updateGeneral(room, room.general2, now, dt);
+    // ─── General Updates — DISABLED ──────────────────────────────
+    // updateGeneral(room, room.general1, now, dt);
+    // updateGeneral(room, room.general2, now, dt);
 
     // ─── Outpost Updates ──────────────────────────────────────────
     updateOutposts(room, dt);
@@ -1547,24 +1549,24 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('generalMove', (data) => {
-    const roomId = playerRooms.get(socket.id);
-    if (!roomId) return;
-    const room = gameRooms.get(roomId);
-    if (!room || room.state !== 'playing') return;
-    const side = room.player1.socketId === socket.id ? 'left' : 'right';
-    const general = side === 'left' ? room.general1 : room.general2;
-    if (general && general.hp > 0) {
-      // Clamp to own half
-      let tx = clamp(data.x, 20, GC.MAP_WIDTH - 20);
-      let ty = clamp(data.y, 20, GC.MAP_HEIGHT - 20);
-      if (side === 'left') tx = Math.min(tx, GC.MAP_WIDTH / 2);
-      else tx = Math.max(tx, GC.MAP_WIDTH / 2);
-      general.moveTargetX = tx;
-      general.moveTargetY = ty;
-      general.activated = true;
-    }
-  });
+  // generalMove — DISABLED (code preserved)
+  // socket.on('generalMove', (data) => {
+  //   const roomId = playerRooms.get(socket.id);
+  //   if (!roomId) return;
+  //   const room = gameRooms.get(roomId);
+  //   if (!room || room.state !== 'playing') return;
+  //   const side = room.player1.socketId === socket.id ? 'left' : 'right';
+  //   const general = side === 'left' ? room.general1 : room.general2;
+  //   if (general && general.hp > 0) {
+  //     let tx = clamp(data.x, 20, GC.MAP_WIDTH - 20);
+  //     let ty = clamp(data.y, 20, GC.MAP_HEIGHT - 20);
+  //     if (side === 'left') tx = Math.min(tx, GC.MAP_WIDTH / 2);
+  //     else tx = Math.max(tx, GC.MAP_WIDTH / 2);
+  //     general.moveTargetX = tx;
+  //     general.moveTargetY = ty;
+  //     general.activated = true;
+  //   }
+  // });
 
   socket.on('upgradeBuilding', (data) => {
     const roomId = playerRooms.get(socket.id);
@@ -1591,21 +1593,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('buyGoldMine', () => {
-    const roomId = playerRooms.get(socket.id);
-    if (!roomId) return;
-    const room = gameRooms.get(roomId);
-    if (!room || room.state !== 'playing') return;
-    const side = room.player1.socketId === socket.id ? 'left' : 'right';
-    const playerData = getPlayerData(room, side);
-    if (playerData.gold >= GC.GOLD_MINE_COST) {
-      playerData.gold -= GC.GOLD_MINE_COST;
-      playerData.income += GC.GOLD_MINE_INCOME;
-      socket.emit('goldMineResult', { success: true, income: playerData.income });
-    } else {
-      socket.emit('goldMineResult', { success: false, reason: 'Not enough gold' });
-    }
-  });
+  // buyGoldMine removed — Gold Mine is now a placeable building
 
   socket.on('rescueStrike', () => {
     const roomId = playerRooms.get(socket.id);

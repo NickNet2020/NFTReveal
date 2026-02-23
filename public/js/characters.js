@@ -74,6 +74,10 @@ const CHARACTERS = {
         levelNames: ['Falconry', 'Raptor Spire', 'Stormwing Eyrie']
       },
       {
+        id: 'gold_mine', name: 'Gold Mine', cost: 200, hp: 300, income: 10,
+        description: 'Boosts your income by +10 gold every 5 seconds.'
+      },
+      {
         id: 'frost_tower', name: 'Frost Tower', cost: 150, hp: 600, income: 1,
         isTower: true, towerDamage: 20, towerRange: 280, towerAttackSpeed: 1800,
         description: 'Defensive tower that fires ice bolts at approaching enemies.'
@@ -163,6 +167,10 @@ const CHARACTERS = {
         spawnInterval: 13720, unit: 'young_dragon',
         description: 'Nurtures young dragons into terrifying war beasts.',
         levelNames: ['Dragon Roost', 'Wyrm Sanctuary', 'Dragon Spire']
+      },
+      {
+        id: 'gold_mine', name: 'Gold Mine', cost: 200, hp: 300, income: 10,
+        description: 'Boosts your income by +10 gold every 5 seconds.'
       },
       {
         id: 'flame_spire', name: 'Flame Spire', cost: 160, hp: 500, income: 1,
@@ -256,6 +264,10 @@ const CHARACTERS = {
         levelNames: ['Storm Rookery', 'Tempest Aviary', 'Thunderwing Spire']
       },
       {
+        id: 'gold_mine', name: 'Gold Mine', cost: 200, hp: 300, income: 10,
+        description: 'Boosts your income by +10 gold every 5 seconds.'
+      },
+      {
         id: 'harpoon_tower', name: 'Harpoon Tower', cost: 140, hp: 550, income: 1,
         isTower: true, towerDamage: 22, towerRange: 270, towerAttackSpeed: 2000,
         description: 'Fires iron harpoons at enemies within range.'
@@ -345,6 +357,10 @@ const CHARACTERS = {
         spawnInterval: 8330, unit: 'war_eagle',
         description: 'Houses trained war eagles for aerial superiority.',
         levelNames: ['Eagle Spire', 'Gilded Eyrie', 'Royal Eagle Pinnacle']
+      },
+      {
+        id: 'gold_mine', name: 'Gold Mine', cost: 200, hp: 300, income: 10,
+        description: 'Boosts your income by +10 gold every 5 seconds.'
       },
       {
         id: 'gilded_bastion', name: 'Gilded Bastion', cost: 170, hp: 520, income: 1,
@@ -438,6 +454,10 @@ const CHARACTERS = {
         levelNames: ['Shadow Aerie', 'Wraith Spire', 'Phantom Pinnacle']
       },
       {
+        id: 'gold_mine', name: 'Gold Mine', cost: 200, hp: 300, income: 10,
+        description: 'Boosts your income by +10 gold every 5 seconds.'
+      },
+      {
         id: 'dark_obelisk', name: 'Dark Obelisk', cost: 130, hp: 450, income: 1,
         isTower: true, towerDamage: 30, towerRange: 240, towerAttackSpeed: 2400,
         description: 'Channels dark energy to blast nearby enemies.'
@@ -529,6 +549,10 @@ const CHARACTERS = {
         levelNames: ['Eagle Nest', 'Windcaller Aerie', 'Skywarden Eyrie']
       },
       {
+        id: 'gold_mine', name: 'Gold Mine', cost: 200, hp: 300, income: 10,
+        description: 'Boosts your income by +10 gold every 5 seconds.'
+      },
+      {
         id: 'thornwood_tower', name: 'Thornwood Tower', cost: 150, hp: 580, income: 1,
         isTower: true, towerDamage: 18, towerRange: 290, towerAttackSpeed: 1600,
         description: 'Living tower that fires enchanted thorns rapidly.'
@@ -611,8 +635,8 @@ const GAME_CONSTANTS = {
   L3_HP_MULT: 1.6,
   L3_DMG_MULT: 1.5,
   CORE_FOUNDATION_COST: 750,
-  GOLD_MINE_COST: 200,
-  GOLD_MINE_INCOME: 10,
+  // Gold Mine is now a building definition — cost/income in each character's buildings array
+  // General constants — DISABLED (code preserved)
   GENERAL_HP: 500,
   GENERAL_DAMAGE: 25,
   GENERAL_SPEED: 45,

@@ -32,7 +32,7 @@
   const passiveText = document.getElementById('passiveText');
   const foundationDisplay = document.getElementById('foundationDisplay');
   const buyFoundationBtn = document.getElementById('buyFoundationBtn');
-  const buyGoldMineBtn = document.getElementById('buyGoldMineBtn');
+  // buyGoldMineBtn removed — Gold Mine is now a placeable building
   const gameOverTitle = document.getElementById('gameOverTitle');
   const gameOverSub = document.getElementById('gameOverSub');
   const gameOverDuration = document.getElementById('gameOverDuration');
@@ -156,6 +156,7 @@
       item.className = 'building-item';
       item.dataset.buildingId = b.id;
 
+      const spawnInfo = b.isTower ? 'Defense Tower' : (unitDef ? `Spawns: ${unitDef.name}` : 'Income Building');
       item.innerHTML = `
         <div class="building-header">
           <span class="building-name">${b.name}</span>
@@ -164,7 +165,7 @@
         <div class="building-desc">${b.description}</div>
         <div class="building-stats">
           <span class="building-stat">+${b.income}g/5s</span>
-          <span class="building-stat">Spawns: ${unitDef ? unitDef.name : b.unit}</span>
+          <span class="building-stat">${spawnInfo}</span>
         </div>
       `;
 
@@ -205,7 +206,7 @@
     });
     // Resource shop affordability
     if (buyFoundationBtn) buyFoundationBtn.classList.toggle('cant-afford', gold < GAME_CONSTANTS.CORE_FOUNDATION_COST);
-    if (buyGoldMineBtn) buyGoldMineBtn.classList.toggle('cant-afford', gold < GAME_CONSTANTS.GOLD_MINE_COST);
+    // buyGoldMineBtn affordability removed — Gold Mine is now a placeable building
   }
 
   // ─── Event Listeners ──────────────────────────────────────────
@@ -240,11 +241,7 @@
       socket.emit('buyFoundation');
     });
 
-    // Buy gold mine
-    buyGoldMineBtn.addEventListener('click', () => {
-      if (!gameActive) return;
-      socket.emit('buyGoldMine');
-    });
+    // buyGoldMine button removed — Gold Mine is now a placeable building
 
     // Keyboard
     window.addEventListener('keydown', (e) => {
@@ -306,12 +303,10 @@
       trySelectUnit(world.x, world.y);
     });
 
-    // Right-click to move General
+    // Right-click — general move DISABLED
     gameCanvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      if (!gameActive) return;
-      const world = Renderer.screenToWorld(e.clientX, e.clientY);
-      socket.emit('generalMove', { x: world.x, y: world.y });
+      // General movement removed
     });
 
     // Mouse wheel zoom
@@ -461,14 +456,7 @@
       }
     });
 
-    socket.on('goldMineResult', (data) => {
-      if (data.success) {
-        showToast(`Gold Mine purchased! (+${GAME_CONSTANTS.GOLD_MINE_INCOME}g/5s income)`);
-        AudioManager.playGoldGain();
-      } else {
-        showToast(data.reason || 'Cannot buy Gold Mine');
-      }
-    });
+    // goldMineResult removed — Gold Mine is now a placeable building
 
     socket.on('error', (data) => {
       showToast(data.message);
@@ -672,14 +660,9 @@
       if (d < closestDist) { closestDist = d; closest = { type: 'hero', data: h }; }
     }
 
-    // Try generals
-    const generals = [gameState.general1, gameState.general2].filter(g => g && g.hp > 0);
-    for (const g of generals) {
-      const dx = g.x - wx;
-      const dy = g.y - wy;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < closestDist) { closestDist = d; closest = { type: 'general', data: g }; }
-    }
+    // Generals — DISABLED
+    // const generals = [gameState.general1, gameState.general2].filter(g => g && g.hp > 0);
+    // for (const g of generals) { ... }
 
     // Try outposts (within 50 world units)
     if (gameState.outposts) {
@@ -721,11 +704,10 @@
     }
 
     if (closest) {
-      if (closest.type === 'unit' || closest.type === 'hero' || closest.type === 'general') {
+      if (closest.type === 'unit' || closest.type === 'hero') {
         selectedUnitId = closest.data.id;
         selectedBuildingId = null;
         selectedUnitName = closest.data.isHero ? closest.data.name :
-                          closest.data.isGeneral ? closest.data.name :
                           getUnitDisplayName(closest.data);
         Renderer.setSelectedUnit(selectedUnitId);
         showBanner(closest.data, closest.type);
@@ -2617,7 +2599,52 @@
     const scale = pw / 120;
     function s(v) { return v * scale; }
 
-    if (building.isTower) {
+    if (building.typeId === 'gold_mine') {
+      // Gold Mine icon
+      const baseY = py + ph - s(20);
+      // Rocky hill
+      ctx.fillStyle = '#5a5045';
+      ctx.beginPath();
+      ctx.moveTo(cx - s(44), baseY + s(2));
+      ctx.lineTo(cx - s(36), baseY - s(30));
+      ctx.lineTo(cx - s(14), baseY - s(56));
+      ctx.lineTo(cx + s(14), baseY - s(60));
+      ctx.lineTo(cx + s(36), baseY - s(36));
+      ctx.lineTo(cx + s(44), baseY + s(2));
+      ctx.fill();
+      // Rock texture
+      ctx.fillStyle = '#4a4035';
+      ctx.beginPath(); ctx.ellipse(cx - s(16), baseY - s(36), s(10), s(7), -0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#554a3e';
+      ctx.beginPath(); ctx.ellipse(cx + s(18), baseY - s(30), s(8), s(6), 0.2, 0, Math.PI * 2); ctx.fill();
+      // Mine entrance
+      ctx.fillStyle = '#0a0806';
+      ctx.beginPath();
+      ctx.moveTo(cx - s(16), baseY + s(2));
+      ctx.lineTo(cx - s(14), baseY - s(16));
+      ctx.arc(cx, baseY - s(16), s(14), Math.PI, 0);
+      ctx.lineTo(cx + s(16), baseY + s(2));
+      ctx.fill();
+      // Wooden support beams
+      ctx.fillStyle = '#6B4226';
+      ctx.fillRect(cx - s(16), baseY - s(16), s(4), s(18));
+      ctx.fillRect(cx + s(12), baseY - s(16), s(4), s(18));
+      ctx.fillRect(cx - s(16), baseY - s(20), s(32), s(5));
+      // Gold nuggets
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath(); ctx.arc(cx - s(26), baseY - s(8), s(4), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e6c200';
+      ctx.beginPath(); ctx.arc(cx - s(22), baseY + s(0), s(3), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath(); ctx.arc(cx + s(26), baseY - s(4), s(3.5), 0, Math.PI * 2); ctx.fill();
+      // Pickaxe
+      ctx.strokeStyle = '#8B7355';
+      ctx.lineWidth = s(2);
+      ctx.beginPath(); ctx.moveTo(cx + s(30), baseY - s(48)); ctx.lineTo(cx + s(36), baseY - s(18)); ctx.stroke();
+      ctx.fillStyle = '#888';
+      ctx.beginPath(); ctx.moveTo(cx + s(27), baseY - s(52)); ctx.lineTo(cx + s(33), baseY - s(46)); ctx.lineTo(cx + s(30), baseY - s(42)); ctx.fill();
+      return;
+    } else if (building.isTower) {
       // Detailed tower
       const baseY = py + ph - s(20);
       // Foundation
@@ -2726,13 +2753,13 @@
         if (gameState.hero1 && gameState.hero1.id === selectedUnitId) unit = gameState.hero1;
         if (gameState.hero2 && gameState.hero2.id === selectedUnitId) unit = gameState.hero2;
       }
-      // Check generals
-      if (!unit) {
-        if (gameState.general1 && gameState.general1.id === selectedUnitId) unit = gameState.general1;
-        if (gameState.general2 && gameState.general2.id === selectedUnitId) unit = gameState.general2;
-      }
+      // Generals — DISABLED
+      // if (!unit) {
+      //   if (gameState.general1 && gameState.general1.id === selectedUnitId) unit = gameState.general1;
+      //   if (gameState.general2 && gameState.general2.id === selectedUnitId) unit = gameState.general2;
+      // }
       if (!unit || unit.hp <= 0) { deselectAll(); return; }
-      const selType = unit.isHero ? 'hero' : 'unit'; // generals now use unit banner
+      const selType = unit.isHero ? 'hero' : 'unit';
       renderBanner(unit, selType);
     } else if (selectedBuildingId && gameState.buildings) {
       const building = gameState.buildings.find(b => b.id === selectedBuildingId);

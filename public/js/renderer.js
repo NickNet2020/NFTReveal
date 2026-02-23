@@ -574,6 +574,12 @@ const Renderer = (() => {
     const unitDef = charData && bDef ? charData.units.find(u => u.id === bDef.unit) : null;
     const unitType = unitDef ? unitDef.type : 'infantry';
 
+    // Gold Mine special case
+    if (typeId === 'gold_mine') {
+      drawGoldMineBuilding(ctx, z, palette);
+      return;
+    }
+
     // Building style varies by unit type produced
     if (unitType === 'infantry') {
       drawBarracksBuilding(ctx, z, palette);
@@ -803,6 +809,74 @@ const Renderer = (() => {
     ctx.lineTo(8 * z, -37 * z + bob + wingAngle * 5 * z);
     ctx.lineTo(6 * z, -33 * z + bob);
     ctx.fill();
+  }
+
+  function drawGoldMineBuilding(ctx, z, palette) {
+    // Mine entrance - rocky hill
+    ctx.fillStyle = '#5a5045';
+    ctx.beginPath();
+    ctx.moveTo(-24 * z, 15 * z);
+    ctx.lineTo(-20 * z, -8 * z);
+    ctx.lineTo(-8 * z, -18 * z);
+    ctx.lineTo(8 * z, -20 * z);
+    ctx.lineTo(20 * z, -10 * z);
+    ctx.lineTo(24 * z, 15 * z);
+    ctx.fill();
+
+    // Rock texture
+    ctx.fillStyle = '#4a4035';
+    ctx.beginPath();
+    ctx.ellipse(-10 * z, -10 * z, 6 * z, 4 * z, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#554a3e';
+    ctx.beginPath();
+    ctx.ellipse(10 * z, -8 * z, 5 * z, 3 * z, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mine entrance (dark opening)
+    ctx.fillStyle = '#0a0806';
+    ctx.beginPath();
+    ctx.moveTo(-10 * z, 15 * z);
+    ctx.lineTo(-8 * z, -2 * z);
+    ctx.arc(0, -2 * z, 8 * z, Math.PI, 0);
+    ctx.lineTo(10 * z, 15 * z);
+    ctx.fill();
+
+    // Wooden support beams
+    ctx.fillStyle = '#6B4226';
+    ctx.fillRect(-10 * z, -2 * z, 3 * z, 17 * z);
+    ctx.fillRect(7 * z, -2 * z, 3 * z, 17 * z);
+    // Top beam
+    ctx.fillRect(-10 * z, -4 * z, 20 * z, 3 * z);
+
+    // Gold nuggets
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath(); ctx.arc(-14 * z, 8 * z, 2 * z, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e6c200';
+    ctx.beginPath(); ctx.arc(-12 * z, 12 * z, 1.5 * z, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath(); ctx.arc(14 * z, 10 * z, 1.8 * z, 0, Math.PI * 2); ctx.fill();
+
+    // Pickaxe
+    ctx.strokeStyle = '#8B7355';
+    ctx.lineWidth = 1.5 * z;
+    ctx.beginPath();
+    ctx.moveTo(16 * z, -12 * z);
+    ctx.lineTo(20 * z, 2 * z);
+    ctx.stroke();
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.moveTo(14 * z, -14 * z);
+    ctx.lineTo(18 * z, -11 * z);
+    ctx.lineTo(16 * z, -9 * z);
+    ctx.fill();
+
+    // Gold sparkle effect
+    const sparkle = 0.5 + Math.sin(time * 5) * 0.3;
+    ctx.fillStyle = `rgba(255, 215, 0, ${sparkle * 0.4})`;
+    ctx.beginPath(); ctx.arc(-2 * z, 6 * z, 1.5 * z, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `rgba(255, 215, 0, ${(1 - sparkle) * 0.3})`;
+    ctx.beginPath(); ctx.arc(3 * z, 3 * z, 1 * z, 0, Math.PI * 2); ctx.fill();
   }
 
   // ─── Draw General ──────────────────────────────────────────────
@@ -1668,17 +1742,9 @@ const Renderer = (() => {
       }
     }
 
-    // Generals (larger dots on minimap)
-    const generals = [state.general1, state.general2].filter(g => g && g.hp > 0);
-    for (const g of generals) {
-      const gx = (g.x / GC.MAP_WIDTH) * mW;
-      const gy = (g.y / GC.MAP_HEIGHT) * mH;
-      mCtx.fillStyle = g.side === mySide ? '#ffd700' : '#ff6600';
-      mCtx.fillRect(gx - 2, gy - 2, 4, 4);
-      mCtx.strokeStyle = g.side === mySide ? '#aa8800' : '#aa4400';
-      mCtx.lineWidth = 0.5;
-      mCtx.strokeRect(gx - 2, gy - 2, 4, 4);
-    }
+    // Generals — DISABLED (minimap dots)
+    // const generals = [state.general1, state.general2].filter(g => g && g.hp > 0);
+    // for (const g of generals) { ... }
 
     // Camera viewport
     const vx = ((camera.x - screenW / (2 * camera.zoom)) / GC.MAP_WIDTH) * mW;
@@ -1893,16 +1959,16 @@ const Renderer = (() => {
       if (state.outposts.south) drawOutpost(state.outposts.south, false);
     }
 
-    // Units + Generals (sorted by Y for proper draw order)
+    // Units (sorted by Y for proper draw order)
     const allUnits = state.units || [];
     const sortedUnits = [...allUnits].sort((a, b) => a.y - b.y);
     for (const u of sortedUnits) {
       drawUnit(u);
     }
 
-    // Draw generals on top of regular units (they're larger/important)
-    if (state.general1) drawGeneral(state.general1);
-    if (state.general2) drawGeneral(state.general2);
+    // Generals — DISABLED
+    // if (state.general1) drawGeneral(state.general1);
+    // if (state.general2) drawGeneral(state.general2);
 
     // Projectiles
     drawProjectiles(state.projectiles || []);
