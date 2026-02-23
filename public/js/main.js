@@ -1554,136 +1554,100 @@
     const accent = charData ? charData.accentColor : '#888';
     const dark = charData ? charData.darkColor : '#444';
     const type = unit.unitType;
+    const charId = unit.characterId;
+    const typeId = unit.typeId;
 
-    // Seeded random for per-unit variation
     const rng = seededRng(unit.id || 1);
+    const cx = px + pw / 2;
+    const scale = pw / 120;
+    function s(v) { return v * scale; }
 
-    // Random traits
-    const skinTones = ['#e8c4a0', '#d4a574', '#c49464', '#a0724e', '#7a5535'];
-    const skinIdx = Math.floor(rng() * skinTones.length);
-    const skin = skinTones[skinIdx];
-    const skinShadow = ['#d4a880', '#c09060', '#a87850', '#886040', '#5c3a20'][skinIdx];
-    const skinHighlight = ['#f0d4b8', '#e0b888', '#d4a474', '#b08058', '#8a6540'][skinIdx];
-
+    // --- Random trait generation ---
     const hairColors = ['#2a1a0a', '#4a3018', '#6b4a2a', '#8b6a3a', '#aa8844', '#c0c0c0', '#881818'];
     const hair = hairColors[Math.floor(rng() * hairColors.length)];
-    const hairStyle = Math.floor(rng() * 5); // 0=bald, 1=short, 2=medium, 3=long, 4=mohawk
-    const hasBeard = rng() > 0.5;
-    const beardStyle = Math.floor(rng() * 3); // 0=stubble, 1=short, 2=full
-    const hasScar = rng() > 0.65;
+    const hairStyle = Math.floor(rng() * 5);
+    const hasBeard = rng() > 0.45;
+    const beardStyle = Math.floor(rng() * 3);
+    const hasScar = rng() > 0.6;
     const scarSide = rng() > 0.5 ? 1 : -1;
     const eyeColors = ['#3a2510', '#2244aa', '#228833', '#666666', '#884400'];
     const eyeColor = eyeColors[Math.floor(rng() * eyeColors.length)];
     const noseWidth = 2 + Math.floor(rng() * 3);
-    const earSize = 3 + Math.floor(rng() * 3);
     const browThickness = 1 + Math.floor(rng() * 2);
+
+    // --- Faction-specific skin palettes ---
+    let skinTones, skin, skinShadow, skinHighlight, skinIdx;
+    if (charId === 'orc_warchief') {
+      skinTones = ['#5a8a3a', '#4a7a2e', '#6a9a44', '#3a6a1e', '#7aaa54'];
+      skinIdx = Math.floor(rng() * skinTones.length);
+      skin = skinTones[skinIdx];
+      skinShadow = ['#3a6a1e', '#2a5a12', '#4a7a28', '#1a4a08', '#5a8a38'][skinIdx];
+      skinHighlight = ['#7aaa54', '#6a9a48', '#8aba64', '#5a8a38', '#9aca6e'][skinIdx];
+    } else if (charId === 'shadow_priest') {
+      skinTones = ['#b0a890', '#9a9080', '#c0b8a0', '#887868', '#706058'];
+      skinIdx = Math.floor(rng() * skinTones.length);
+      skin = skinTones[skinIdx];
+      skinShadow = ['#908870', '#7a7060', '#a09880', '#685848', '#504038'][skinIdx];
+      skinHighlight = ['#d0c8b0', '#b0a898', '#e0d8c0', '#a89888', '#907870'][skinIdx];
+    } else if (charId === 'forest_warden') {
+      skinTones = ['#f0dcc8', '#e8d4be', '#f4e4d4', '#eedcc8', '#f8ece0'];
+      skinIdx = Math.floor(rng() * skinTones.length);
+      skin = skinTones[skinIdx];
+      skinShadow = ['#d8c4a8', '#d0bca0', '#dcc8b0', '#d6c0a8', '#e0d0bc'][skinIdx];
+      skinHighlight = ['#fff0e0', '#f8e8d8', '#fff4e8', '#f8f0e0', '#fff8f0'][skinIdx];
+    } else if (charId === 'dragon_empress') {
+      skinTones = ['#d4a878', '#c89868', '#deb888', '#b88858', '#cca070'];
+      skinIdx = Math.floor(rng() * skinTones.length);
+      skin = skinTones[skinIdx];
+      skinShadow = ['#b48858', '#a87848', '#be9868', '#986838', '#ac8050'][skinIdx];
+      skinHighlight = ['#e8c898', '#dbb888', '#f0d0a0', '#c8a070', '#deb888'][skinIdx];
+    } else if (charId === 'iron_admiral') {
+      skinTones = ['#c89870', '#be8e66', '#d4a47a', '#b48460', '#ca9a72'];
+      skinIdx = Math.floor(rng() * skinTones.length);
+      skin = skinTones[skinIdx];
+      skinShadow = ['#a87850', '#9e6e46', '#b4845a', '#946440', '#aa7a52'][skinIdx];
+      skinHighlight = ['#e0b890', '#d6ae86', '#eac49a', '#c4a478', '#e0ba92'][skinIdx];
+    } else {
+      // Northern Lord, Golden Lord - lighter skin
+      skinTones = ['#e8c4a0', '#d4a574', '#f0d4b8', '#deb898', '#c49464'];
+      skinIdx = Math.floor(rng() * skinTones.length);
+      skin = skinTones[skinIdx];
+      skinShadow = ['#d4a880', '#c09060', '#dcc0a0', '#ca9e7e', '#a87850'][skinIdx];
+      skinHighlight = ['#f0d4b8', '#e0b888', '#f8e4d0', '#eecab0', '#d4a474'][skinIdx];
+    }
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(px, py, pw, ph);
     ctx.clip();
 
-    // Background atmosphere - subtle color tint based on faction
+    // --- Background atmosphere ---
     const atmGrad = ctx.createLinearGradient(px, py, px, py + ph);
-    atmGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    atmGrad.addColorStop(0.6, 'rgba(0,0,0,0)');
-    atmGrad.addColorStop(1, primary.replace('#', 'rgba(') ? `rgba(${parseInt(primary.slice(1,3),16)},${parseInt(primary.slice(3,5),16)},${parseInt(primary.slice(5,7),16)},0.15)` : 'rgba(0,0,0,0)');
+    const pr = parseInt(primary.slice(1,3),16), pg = parseInt(primary.slice(3,5),16), pb = parseInt(primary.slice(5,7),16);
+    atmGrad.addColorStop(0, `rgba(${pr},${pg},${pb},0.08)`);
+    atmGrad.addColorStop(0.5, `rgba(${Math.floor(pr*0.5)},${Math.floor(pg*0.5)},${Math.floor(pb*0.5)},0.12)`);
+    atmGrad.addColorStop(1, `rgba(${pr},${pg},${pb},0.2)`);
     ctx.fillStyle = atmGrad;
     ctx.fillRect(px, py, pw, ph);
 
-    const cx = px + pw / 2;  // center x
-    const scale = pw / 120;  // scale based on portrait width
+    // --- Shared layout ---
+    const headY = py + s(30);
+    const headCY = headY + s(24);
+    const bodyY = headY + s(54);
+    const eyeY = headCY - s(2);
+    const eyeSpacing = s(9);
 
-    // Helper to scale values
-    function s(v) { return v * scale; }
-
-    if (type === 'infantry' || type === 'general') {
-      // --- INFANTRY / GENERAL: Armored warrior bust portrait ---
-      const headY = py + s(28);
-      const bodyY = headY + s(52);
-
-      // Shoulders & armor (lower part)
-      const shoulderW = s(52);
-      const armorGrad = ctx.createLinearGradient(cx - shoulderW, bodyY, cx + shoulderW, bodyY + s(80));
-      armorGrad.addColorStop(0, primary);
-      armorGrad.addColorStop(0.5, dark);
-      armorGrad.addColorStop(1, '#111');
-      ctx.fillStyle = armorGrad;
-      ctx.beginPath();
-      ctx.moveTo(cx - shoulderW, bodyY + s(10));
-      ctx.quadraticCurveTo(cx - shoulderW - s(6), bodyY + s(40), cx - shoulderW + s(4), py + ph);
-      ctx.lineTo(cx + shoulderW - s(4), py + ph);
-      ctx.quadraticCurveTo(cx + shoulderW + s(6), bodyY + s(40), cx + shoulderW, bodyY + s(10));
-      ctx.quadraticCurveTo(cx, bodyY - s(4), cx - shoulderW, bodyY + s(10));
-      ctx.fill();
-
-      // Pauldrons (shoulder armor)
-      ctx.fillStyle = accent;
-      ctx.beginPath();
-      ctx.ellipse(cx - shoulderW + s(8), bodyY + s(12), s(14), s(10), -0.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(cx + shoulderW - s(8), bodyY + s(12), s(14), s(10), 0.3, 0, Math.PI * 2);
-      ctx.fill();
-      // Pauldron rivets
-      ctx.fillStyle = '#d4a017';
-      for (let side = -1; side <= 1; side += 2) {
-        const psx = cx + side * (shoulderW - s(8));
-        ctx.beginPath(); ctx.arc(psx, bodyY + s(8), s(2), 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(psx, bodyY + s(16), s(2), 0, Math.PI * 2); ctx.fill();
-      }
-
-      // Chest plate detail
-      ctx.fillStyle = accent;
-      ctx.fillRect(cx - s(6), bodyY + s(4), s(12), s(20));
-      // Center line on chest
-      ctx.fillStyle = dark;
-      ctx.fillRect(cx - s(1), bodyY + s(2), s(2), s(26));
-      // Belt
-      ctx.fillStyle = '#5c4033';
-      ctx.fillRect(cx - shoulderW + s(10), bodyY + s(28), shoulderW * 2 - s(20), s(6));
-      ctx.fillStyle = '#d4a017';
-      ctx.fillRect(cx - s(4), bodyY + s(27), s(8), s(8)); // buckle
-
-      // Gorget (neck armor)
-      ctx.fillStyle = '#777';
-      ctx.beginPath();
-      ctx.ellipse(cx, bodyY + s(2), s(18), s(8), 0, Math.PI, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#999';
-      ctx.fillRect(cx - s(16), bodyY - s(2), s(32), s(4));
-
-      // Neck
-      ctx.fillStyle = skin;
-      ctx.fillRect(cx - s(10), bodyY - s(10), s(20), s(14));
-      ctx.fillStyle = skinShadow;
-      ctx.fillRect(cx - s(10), bodyY - s(2), s(20), s(4));
-
-      // Head - oval shape
-      const headCY = headY + s(22);
-      ctx.fillStyle = skin;
-      ctx.beginPath();
-      ctx.ellipse(cx, headCY, s(22), s(26), 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Ears
-      ctx.fillStyle = skinShadow;
-      ctx.beginPath(); ctx.ellipse(cx - s(22), headCY + s(2), s(earSize), s(earSize + 2), 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx + s(22), headCY + s(2), s(earSize), s(earSize + 2), 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = skin;
-      ctx.beginPath(); ctx.ellipse(cx - s(21), headCY + s(2), s(earSize - 1), s(earSize + 1), 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx + s(21), headCY + s(2), s(earSize - 1), s(earSize + 1), 0, 0, Math.PI * 2); ctx.fill();
-
-      // Eyes
-      const eyeY = headCY - s(2);
-      const eyeSpacing = s(9);
+    // ============================================================
+    // HELPER: draw humanoid eyes
+    // ============================================================
+    function drawEyes(glowColor) {
       for (let side = -1; side <= 1; side += 2) {
         const ex = cx + side * eyeSpacing;
         // Eye white
         ctx.fillStyle = '#eee';
         ctx.beginPath(); ctx.ellipse(ex, eyeY, s(6), s(3.5), 0, 0, Math.PI * 2); ctx.fill();
         // Iris
-        ctx.fillStyle = eyeColor;
+        ctx.fillStyle = glowColor || eyeColor;
         ctx.beginPath(); ctx.arc(ex + side * s(1), eyeY, s(2.5), 0, Math.PI * 2); ctx.fill();
         // Pupil
         ctx.fillStyle = '#111';
@@ -1691,241 +1655,196 @@
         // Highlight
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.beginPath(); ctx.arc(ex + side * s(1) + s(0.8), eyeY - s(0.8), s(0.7), 0, Math.PI * 2); ctx.fill();
-        // Upper eyelid / brow
+        // Upper lid shadow
         ctx.fillStyle = skinShadow;
         ctx.fillRect(ex - s(6), eyeY - s(4), s(12), s(browThickness + 1));
       }
+    }
 
-      // Eyebrows
-      ctx.fillStyle = hair;
+    // ============================================================
+    // HELPER: draw brows
+    // ============================================================
+    function drawBrows(browColor) {
+      ctx.fillStyle = browColor || hair;
       for (let side = -1; side <= 1; side += 2) {
-        const bx = cx + side * eyeSpacing;
-        ctx.fillRect(bx - s(6), eyeY - s(7), s(12), s(browThickness + 1));
+        ctx.fillRect(cx + side * eyeSpacing - s(6), eyeY - s(7), s(12), s(browThickness + 1));
       }
+    }
 
-      // Nose
+    // ============================================================
+    // HELPER: draw nose
+    // ============================================================
+    function drawNose(nw) {
       ctx.fillStyle = skinShadow;
       ctx.beginPath();
       ctx.moveTo(cx - s(1), headCY - s(4));
-      ctx.lineTo(cx - s(noseWidth), headCY + s(8));
-      ctx.lineTo(cx + s(noseWidth), headCY + s(8));
+      ctx.lineTo(cx - s(nw || noseWidth), headCY + s(8));
+      ctx.lineTo(cx + s(nw || noseWidth), headCY + s(8));
       ctx.closePath();
       ctx.fill();
       ctx.fillStyle = skinHighlight;
       ctx.fillRect(cx - s(0.5), headCY - s(3), s(1), s(8));
+    }
 
-      // Mouth
+    // ============================================================
+    // HELPER: draw mouth
+    // ============================================================
+    function drawMouth() {
       ctx.fillStyle = '#7a3030';
       ctx.fillRect(cx - s(5), headCY + s(12), s(10), s(2));
       ctx.fillStyle = skinShadow;
       ctx.fillRect(cx - s(4), headCY + s(14), s(8), s(1));
+    }
 
-      // Beard (if applicable)
-      if (hasBeard) {
-        ctx.fillStyle = hair;
-        if (beardStyle === 0) {
-          // Stubble dots
-          ctx.globalAlpha = 0.3;
-          for (let bx = -8; bx <= 8; bx += 2) {
-            for (let by = 10; by <= 18; by += 2) {
-              if (rng() > 0.4) {
-                ctx.fillRect(cx + s(bx), headCY + s(by), s(1), s(1));
-              }
-            }
+    // ============================================================
+    // HELPER: draw beard
+    // ============================================================
+    function drawBeard() {
+      if (!hasBeard) return;
+      ctx.fillStyle = hair;
+      if (beardStyle === 0) {
+        ctx.globalAlpha = 0.3;
+        for (let bx = -8; bx <= 8; bx += 2) {
+          for (let by = 10; by <= 18; by += 2) {
+            if (rng() > 0.4) ctx.fillRect(cx + s(bx), headCY + s(by), s(1), s(1));
           }
-          ctx.globalAlpha = 1;
-        } else if (beardStyle === 1) {
-          // Short beard
-          ctx.beginPath();
-          ctx.moveTo(cx - s(14), headCY + s(10));
-          ctx.quadraticCurveTo(cx, headCY + s(24), cx + s(14), headCY + s(10));
-          ctx.fill();
-        } else {
-          // Full beard
-          ctx.beginPath();
-          ctx.moveTo(cx - s(16), headCY + s(6));
-          ctx.quadraticCurveTo(cx - s(18), headCY + s(20), cx, headCY + s(30));
-          ctx.quadraticCurveTo(cx + s(18), headCY + s(20), cx + s(16), headCY + s(6));
-          ctx.fill();
         }
-      }
-
-      // Scar
-      if (hasScar) {
-        ctx.strokeStyle = 'rgba(180,60,60,0.5)';
-        ctx.lineWidth = s(1.5);
-        ctx.beginPath();
-        ctx.moveTo(cx + scarSide * s(4), headCY - s(10));
-        ctx.lineTo(cx + scarSide * s(8), headCY + s(6));
-        ctx.stroke();
-      }
-
-      // Hair / Helmet
-      if (type === 'general') {
-        // General gets a crown/ornate helm
-        ctx.fillStyle = '#888';
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(10), s(24), s(18), 0, Math.PI, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#999';
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(12), s(26), s(10), 0, Math.PI, Math.PI * 2);
-        ctx.fill();
-        // Crown
-        ctx.fillStyle = '#ffd700';
-        ctx.fillRect(cx - s(20), headY - s(2), s(40), s(8));
-        // Crown points
-        for (let i = -2; i <= 2; i++) {
-          ctx.fillRect(cx + i * s(8) - s(3), headY - s(10 + Math.abs(i) * 2), s(6), s(10 + Math.abs(i) * 2));
-        }
-        // Gems
-        ctx.fillStyle = '#cc2222';
-        ctx.beginPath(); ctx.arc(cx, headY, s(3), 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#2244cc';
-        ctx.beginPath(); ctx.arc(cx - s(8), headY + s(1), s(2), 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + s(8), headY + s(1), s(2), 0, Math.PI * 2); ctx.fill();
-        // Cape/cloak behind
-        ctx.fillStyle = primary;
-        ctx.globalAlpha = 0.4;
-        ctx.fillRect(cx - shoulderW - s(4), bodyY + s(14), s(12), py + ph - bodyY - s(14));
-        ctx.fillRect(cx + shoulderW - s(8), bodyY + s(14), s(12), py + ph - bodyY - s(14));
         ctx.globalAlpha = 1;
+      } else if (beardStyle === 1) {
+        ctx.beginPath();
+        ctx.moveTo(cx - s(14), headCY + s(10));
+        ctx.quadraticCurveTo(cx, headCY + s(24), cx + s(14), headCY + s(10));
+        ctx.fill();
       } else {
-        // Infantry - helmet or hair
-        const helmType = Math.floor(rng() * 3);
-        if (helmType === 0) {
-          // Open-face helm
-          ctx.fillStyle = '#888';
-          ctx.beginPath();
-          ctx.ellipse(cx, headY + s(8), s(24), s(20), 0, Math.PI + 0.3, -0.3);
-          ctx.fill();
-          // Nose guard
-          ctx.fillStyle = '#777';
-          ctx.fillRect(cx - s(2), headY + s(4), s(4), s(20));
-          // Helm crest
-          ctx.fillStyle = primary;
-          ctx.fillRect(cx - s(2), headY - s(6), s(4), s(16));
-        } else if (helmType === 1) {
-          // Kettle helm
-          ctx.fillStyle = '#888';
-          ctx.beginPath();
-          ctx.ellipse(cx, headY + s(10), s(26), s(14), 0, Math.PI, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#999';
-          ctx.fillRect(cx - s(28), headY + s(8), s(56), s(4));
-          // Hair showing below
-          if (hairStyle > 0) {
-            ctx.fillStyle = hair;
-            ctx.fillRect(cx - s(20), headCY - s(6), s(40), s(4));
-          }
-        } else {
-          // Hair only (no helm)
-          ctx.fillStyle = hair;
-          if (hairStyle === 0) {
-            // Bald - just a subtle shadow
-            ctx.globalAlpha = 0.2;
-            ctx.beginPath();
-            ctx.ellipse(cx, headY + s(8), s(22), s(16), 0, Math.PI, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-          } else if (hairStyle === 1) {
-            // Short crop
-            ctx.beginPath();
-            ctx.ellipse(cx, headY + s(6), s(23), s(18), 0, Math.PI + 0.5, -0.5);
-            ctx.fill();
-          } else if (hairStyle === 2) {
-            // Medium
-            ctx.beginPath();
-            ctx.ellipse(cx, headY + s(6), s(24), s(20), 0, Math.PI + 0.3, -0.3);
-            ctx.fill();
-            ctx.fillRect(cx - s(24), headCY - s(4), s(4), s(16));
-            ctx.fillRect(cx + s(20), headCY - s(4), s(4), s(16));
-          } else if (hairStyle === 3) {
-            // Long flowing
-            ctx.beginPath();
-            ctx.ellipse(cx, headY + s(6), s(24), s(20), 0, Math.PI + 0.2, -0.2);
-            ctx.fill();
-            ctx.fillRect(cx - s(24), headCY - s(8), s(6), s(40));
-            ctx.fillRect(cx + s(18), headCY - s(8), s(6), s(40));
-          } else {
-            // Mohawk
-            ctx.beginPath();
-            ctx.ellipse(cx, headY + s(6), s(22), s(16), 0, Math.PI, Math.PI * 2);
-            ctx.fill();
-            ctx.fillRect(cx - s(3), headY - s(10), s(6), s(22));
-          }
-        }
-      }
-
-      // Weapon in hand (infantry)
-      if (type === 'infantry') {
-        const weapType = Math.floor(rng() * 3);
-        if (weapType === 0) {
-          // Sword
-          ctx.fillStyle = '#aaa';
-          ctx.fillRect(cx + s(36), bodyY - s(10), s(4), s(50));
-          ctx.fillStyle = '#ccc';
-          ctx.fillRect(cx + s(35), bodyY - s(12), s(6), s(4));
-          ctx.fillStyle = '#5c4033';
-          ctx.fillRect(cx + s(34), bodyY - s(8), s(8), s(10));
-          ctx.fillStyle = '#d4a017';
-          ctx.fillRect(cx + s(34), bodyY - s(8), s(8), s(2));
-          ctx.fillRect(cx + s(34), bodyY, s(8), s(2));
-        } else if (weapType === 1) {
-          // Axe
-          ctx.fillStyle = '#5c4033';
-          ctx.fillRect(cx + s(38), bodyY - s(16), s(3), s(56));
-          ctx.fillStyle = '#aaa';
-          ctx.beginPath();
-          ctx.moveTo(cx + s(38), bodyY - s(14));
-          ctx.lineTo(cx + s(30), bodyY - s(6));
-          ctx.lineTo(cx + s(38), bodyY + s(2));
-          ctx.fill();
-        } else {
-          // Mace
-          ctx.fillStyle = '#5c4033';
-          ctx.fillRect(cx + s(38), bodyY - s(10), s(3), s(50));
-          ctx.fillStyle = '#888';
-          ctx.beginPath();
-          ctx.arc(cx + s(39), bodyY - s(8), s(6), 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#666';
-          for (let a = 0; a < 6; a++) {
-            const ang = a * Math.PI / 3;
-            ctx.fillRect(cx + s(39) + Math.cos(ang) * s(5) - s(2), bodyY - s(8) + Math.sin(ang) * s(5) - s(2), s(4), s(4));
-          }
-        }
-        // Shield on other side
-        ctx.fillStyle = primary;
         ctx.beginPath();
-        ctx.moveTo(cx - s(40), bodyY);
-        ctx.lineTo(cx - s(50), bodyY + s(10));
-        ctx.lineTo(cx - s(46), bodyY + s(40));
-        ctx.lineTo(cx - s(36), bodyY + s(46));
-        ctx.lineTo(cx - s(26), bodyY + s(40));
-        ctx.lineTo(cx - s(22), bodyY + s(10));
-        ctx.lineTo(cx - s(32), bodyY);
+        ctx.moveTo(cx - s(16), headCY + s(6));
+        ctx.quadraticCurveTo(cx - s(18), headCY + s(20), cx, headCY + s(30));
+        ctx.quadraticCurveTo(cx + s(18), headCY + s(20), cx + s(16), headCY + s(6));
         ctx.fill();
-        ctx.fillStyle = accent;
-        ctx.beginPath();
-        ctx.moveTo(cx - s(38), bodyY + s(10));
-        ctx.lineTo(cx - s(42), bodyY + s(18));
-        ctx.lineTo(cx - s(36), bodyY + s(32));
-        ctx.lineTo(cx - s(30), bodyY + s(18));
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#d4a017';
-        ctx.beginPath(); ctx.arc(cx - s(36), bodyY + s(20), s(3), 0, Math.PI * 2); ctx.fill();
       }
+    }
 
-    } else if (type === 'ranged') {
-      // --- RANGED: Hooded archer bust ---
-      const headY = py + s(28);
-      const bodyY = headY + s(52);
-      const headCY = headY + s(22);
+    // ============================================================
+    // HELPER: draw scar
+    // ============================================================
+    function drawScar() {
+      if (!hasScar) return;
+      ctx.strokeStyle = 'rgba(180,60,60,0.5)';
+      ctx.lineWidth = s(1.5);
+      ctx.beginPath();
+      ctx.moveTo(cx + scarSide * s(4), headCY - s(10));
+      ctx.lineTo(cx + scarSide * s(8), headCY + s(6));
+      ctx.stroke();
+    }
 
-      // Shoulders & cloak
-      ctx.fillStyle = dark;
+    // ============================================================
+    // HELPER: draw human ears
+    // ============================================================
+    function drawHumanEars() {
+      const earSize = 3 + Math.floor(rng() * 3);
+      ctx.fillStyle = skinShadow;
+      ctx.beginPath(); ctx.ellipse(cx - s(22), headCY + s(2), s(earSize), s(earSize + 2), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + s(22), headCY + s(2), s(earSize), s(earSize + 2), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = skin;
+      ctx.beginPath(); ctx.ellipse(cx - s(21), headCY + s(2), s(earSize - 1), s(earSize + 1), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + s(21), headCY + s(2), s(earSize - 1), s(earSize + 1), 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ============================================================
+    // HELPER: draw elf ears (pointed)
+    // ============================================================
+    function drawElfEars() {
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.fillStyle = skinShadow;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * s(21), headCY - s(2));
+        ctx.quadraticCurveTo(cx + side * s(32), headCY - s(14), cx + side * s(36), headCY - s(10));
+        ctx.quadraticCurveTo(cx + side * s(30), headCY + s(2), cx + side * s(21), headCY + s(6));
+        ctx.fill();
+        ctx.fillStyle = skin;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * s(21), headCY - s(1));
+        ctx.quadraticCurveTo(cx + side * s(30), headCY - s(12), cx + side * s(34), headCY - s(9));
+        ctx.quadraticCurveTo(cx + side * s(28), headCY + s(1), cx + side * s(21), headCY + s(5));
+        ctx.fill();
+      }
+    }
+
+    // ============================================================
+    // HELPER: draw orc ears (pointed, larger)
+    // ============================================================
+    function drawOrcEars() {
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.fillStyle = skinShadow;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * s(23), headCY - s(4));
+        ctx.quadraticCurveTo(cx + side * s(36), headCY - s(18), cx + side * s(40), headCY - s(12));
+        ctx.quadraticCurveTo(cx + side * s(34), headCY + s(4), cx + side * s(23), headCY + s(8));
+        ctx.fill();
+        ctx.fillStyle = skin;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * s(23), headCY - s(3));
+        ctx.quadraticCurveTo(cx + side * s(34), headCY - s(16), cx + side * s(38), headCY - s(11));
+        ctx.quadraticCurveTo(cx + side * s(32), headCY + s(3), cx + side * s(23), headCY + s(7));
+        ctx.fill();
+      }
+    }
+
+    // ============================================================
+    // HELPER: draw neck and head oval
+    // ============================================================
+    function drawNeckAndHead(headRX, headRY) {
+      const rx = headRX || 22, ry = headRY || 26;
+      ctx.fillStyle = skin;
+      ctx.fillRect(cx - s(10), bodyY - s(10), s(20), s(14));
+      ctx.fillStyle = skinShadow;
+      ctx.fillRect(cx - s(10), bodyY - s(2), s(20), s(4));
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.ellipse(cx, headCY, s(rx), s(ry), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ============================================================
+    // HELPER: draw armored shoulders (heavy plate)
+    // ============================================================
+    function drawHeavyArmor(armorColor, accentCol, darkCol) {
+      const shoulderW = s(52);
+      const ag = ctx.createLinearGradient(cx - shoulderW, bodyY, cx + shoulderW, bodyY + s(80));
+      ag.addColorStop(0, armorColor || primary);
+      ag.addColorStop(0.5, darkCol || dark);
+      ag.addColorStop(1, '#111');
+      ctx.fillStyle = ag;
+      ctx.beginPath();
+      ctx.moveTo(cx - shoulderW, bodyY + s(10));
+      ctx.quadraticCurveTo(cx - shoulderW - s(6), bodyY + s(40), cx - shoulderW + s(4), py + ph);
+      ctx.lineTo(cx + shoulderW - s(4), py + ph);
+      ctx.quadraticCurveTo(cx + shoulderW + s(6), bodyY + s(40), cx + shoulderW, bodyY + s(10));
+      ctx.quadraticCurveTo(cx, bodyY - s(4), cx - shoulderW, bodyY + s(10));
+      ctx.fill();
+      // Pauldrons
+      ctx.fillStyle = accentCol || accent;
+      ctx.beginPath(); ctx.ellipse(cx - shoulderW + s(8), bodyY + s(12), s(14), s(10), -0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + shoulderW - s(8), bodyY + s(12), s(14), s(10), 0.3, 0, Math.PI * 2); ctx.fill();
+      // Rivets
+      ctx.fillStyle = '#d4a017';
+      for (let side = -1; side <= 1; side += 2) {
+        const psx = cx + side * (shoulderW - s(8));
+        ctx.beginPath(); ctx.arc(psx, bodyY + s(8), s(2), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(psx, bodyY + s(16), s(2), 0, Math.PI * 2); ctx.fill();
+      }
+      // Gorget
+      ctx.fillStyle = '#777';
+      ctx.beginPath(); ctx.ellipse(cx, bodyY + s(2), s(18), s(8), 0, Math.PI, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#999';
+      ctx.fillRect(cx - s(16), bodyY - s(2), s(32), s(4));
+    }
+
+    // ============================================================
+    // HELPER: draw light armor / leather shoulders
+    // ============================================================
+    function drawLightArmor(cloakColor, innerColor) {
+      ctx.fillStyle = cloakColor || dark;
       ctx.beginPath();
       ctx.moveTo(cx - s(48), bodyY + s(8));
       ctx.quadraticCurveTo(cx - s(52), bodyY + s(40), cx - s(44), py + ph);
@@ -1933,674 +1852,1604 @@
       ctx.quadraticCurveTo(cx + s(52), bodyY + s(40), cx + s(48), bodyY + s(8));
       ctx.quadraticCurveTo(cx, bodyY - s(6), cx - s(48), bodyY + s(8));
       ctx.fill();
-
       // Inner tunic
-      ctx.fillStyle = primary;
+      ctx.fillStyle = innerColor || primary;
       ctx.beginPath();
       ctx.moveTo(cx - s(20), bodyY + s(2));
       ctx.lineTo(cx - s(24), py + ph);
       ctx.lineTo(cx + s(24), py + ph);
       ctx.lineTo(cx + s(20), bodyY + s(2));
       ctx.fill();
-      // Belt
-      ctx.fillStyle = '#5c4033';
-      ctx.fillRect(cx - s(24), bodyY + s(24), s(48), s(5));
-      ctx.fillStyle = '#888';
-      ctx.fillRect(cx - s(3), bodyY + s(23), s(6), s(7));
-
-      // Quiver strap
-      ctx.strokeStyle = '#5c4033';
-      ctx.lineWidth = s(3);
+      // Collar
+      ctx.fillStyle = cloakColor || dark;
       ctx.beginPath();
-      ctx.moveTo(cx + s(18), bodyY);
-      ctx.lineTo(cx - s(14), bodyY + s(36));
-      ctx.stroke();
-      // Arrow tips poking out
-      ctx.fillStyle = '#aaa';
-      for (let i = 0; i < 3; i++) {
-        ctx.fillRect(cx + s(30 + i * 4), bodyY - s(10 + i * 3), s(2), s(8));
-        ctx.fillStyle = '#ccc';
-        ctx.beginPath();
-        ctx.moveTo(cx + s(31 + i * 4), bodyY - s(12 + i * 3));
-        ctx.lineTo(cx + s(28 + i * 4), bodyY - s(10 + i * 3));
-        ctx.lineTo(cx + s(34 + i * 4), bodyY - s(10 + i * 3));
-        ctx.fill();
-        ctx.fillStyle = '#aaa';
-      }
-
-      // Neck
-      ctx.fillStyle = skin;
-      ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
-
-      // Head
-      ctx.fillStyle = skin;
-      ctx.beginPath();
-      ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2);
+      ctx.ellipse(cx, bodyY + s(4), s(22), s(8), 0, Math.PI, Math.PI * 2);
       ctx.fill();
+    }
 
-      // Hood (always for ranged)
+    // ============================================================
+    // HELPER: draw a helm
+    // ============================================================
+    function drawHelm(helmColor, crestColor, helmStyle) {
+      const hs = helmStyle !== undefined ? helmStyle : Math.floor(rng() * 3);
+      ctx.fillStyle = helmColor || '#888';
+      if (hs === 0) {
+        // Open face with nose guard
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(24), s(20), 0, Math.PI + 0.3, -0.3); ctx.fill();
+        ctx.fillStyle = (helmColor || '#888');
+        ctx.fillRect(cx - s(2), headY + s(4), s(4), s(20));
+        if (crestColor) { ctx.fillStyle = crestColor; ctx.fillRect(cx - s(2), headY - s(6), s(4), s(16)); }
+      } else if (hs === 1) {
+        // Kettle helm
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(10), s(26), s(14), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = helmColor || '#999';
+        ctx.fillRect(cx - s(28), headY + s(8), s(56), s(4));
+      } else {
+        // Full great helm
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(10), s(24), s(20), 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.fillRect(cx - s(16), headCY - s(4), s(32), s(3));
+        if (crestColor) {
+          ctx.fillStyle = crestColor;
+          ctx.fillRect(cx - s(2), headY - s(10), s(4), s(16));
+        }
+      }
+    }
+
+    // ============================================================
+    // HELPER: draw hair (when no helm)
+    // ============================================================
+    function drawHair(hairCol) {
+      ctx.fillStyle = hairCol || hair;
+      if (hairStyle === 0) {
+        ctx.globalAlpha = 0.2;
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(22), s(16), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (hairStyle === 1) {
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(23), s(18), 0, Math.PI + 0.5, -0.5); ctx.fill();
+      } else if (hairStyle === 2) {
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(24), s(20), 0, Math.PI + 0.3, -0.3); ctx.fill();
+        ctx.fillRect(cx - s(24), headCY - s(4), s(4), s(16));
+        ctx.fillRect(cx + s(20), headCY - s(4), s(4), s(16));
+      } else if (hairStyle === 3) {
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(24), s(20), 0, Math.PI + 0.2, -0.2); ctx.fill();
+        ctx.fillRect(cx - s(24), headCY - s(8), s(6), s(40));
+        ctx.fillRect(cx + s(18), headCY - s(8), s(6), s(40));
+      } else {
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(22), s(16), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillRect(cx - s(3), headY - s(10), s(6), s(22));
+      }
+    }
+
+    // ============================================================
+    // HELPER: draw hood (for ranged units)
+    // ============================================================
+    function drawHood(hoodColor) {
       const hoodUp = rng() > 0.3;
-      ctx.fillStyle = dark;
+      ctx.fillStyle = hoodColor || dark;
       if (hoodUp) {
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(6), s(28), s(22), 0, Math.PI + 0.3, -0.3);
-        ctx.fill();
-        // Hood shadow over face
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(28), s(22), 0, Math.PI + 0.3, -0.3); ctx.fill();
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(14), s(22), s(10), 0, Math.PI, Math.PI * 2);
-        ctx.fill();
-        // Hood drape sides
-        ctx.fillStyle = dark;
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(14), s(22), s(10), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = hoodColor || dark;
         ctx.fillRect(cx - s(26), headCY - s(2), s(6), s(28));
         ctx.fillRect(cx + s(20), headCY - s(2), s(6), s(28));
       } else {
-        // Hood down around shoulders
         ctx.beginPath();
         ctx.moveTo(cx - s(30), bodyY + s(14));
         ctx.quadraticCurveTo(cx, bodyY + s(24), cx + s(30), bodyY + s(14));
         ctx.fill();
-        // Show hair
-        ctx.fillStyle = hair;
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(8), s(21), s(18), 0, Math.PI + 0.4, -0.4);
-        ctx.fill();
-      }
-
-      // Eyes (narrower, more focused)
-      const eyeY = headCY - s(2);
-      for (let side = -1; side <= 1; side += 2) {
-        const ex = cx + side * s(8);
-        ctx.fillStyle = '#ddd';
-        ctx.beginPath(); ctx.ellipse(ex, eyeY, s(5), s(2.5), 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = eyeColor;
-        ctx.beginPath(); ctx.arc(ex + side * s(1), eyeY, s(2), 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#111';
-        ctx.beginPath(); ctx.arc(ex + side * s(1), eyeY, s(1), 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.beginPath(); ctx.arc(ex + side * s(1) + s(0.6), eyeY - s(0.6), s(0.5), 0, Math.PI * 2); ctx.fill();
-      }
-
-      // Brows
-      ctx.fillStyle = hair;
-      ctx.fillRect(cx - s(14), eyeY - s(6), s(12), s(browThickness));
-      ctx.fillRect(cx + s(2), eyeY - s(6), s(12), s(browThickness));
-
-      // Nose
-      ctx.fillStyle = skinShadow;
-      ctx.beginPath();
-      ctx.moveTo(cx, headCY - s(2));
-      ctx.lineTo(cx - s(noseWidth), headCY + s(6));
-      ctx.lineTo(cx + s(noseWidth), headCY + s(6));
-      ctx.fill();
-
-      // Mouth
-      ctx.fillStyle = '#7a3030';
-      ctx.fillRect(cx - s(4), headCY + s(10), s(8), s(2));
-
-      if (hasScar) {
-        ctx.strokeStyle = 'rgba(180,60,60,0.4)';
-        ctx.lineWidth = s(1.2);
-        ctx.beginPath();
-        ctx.moveTo(cx + scarSide * s(6), headCY - s(8));
-        ctx.lineTo(cx + scarSide * s(10), headCY + s(4));
-        ctx.stroke();
-      }
-
-      // Bow in hand
-      ctx.strokeStyle = '#5c4033';
-      ctx.lineWidth = s(3);
-      ctx.beginPath();
-      ctx.arc(cx - s(44), bodyY + s(10), s(32), -Math.PI * 0.4, Math.PI * 0.4);
-      ctx.stroke();
-      // Bowstring
-      ctx.strokeStyle = '#ccc';
-      ctx.lineWidth = s(1);
-      ctx.beginPath();
-      ctx.moveTo(cx - s(44) + Math.cos(-Math.PI * 0.4) * s(32), bodyY + s(10) + Math.sin(-Math.PI * 0.4) * s(32));
-      ctx.lineTo(cx - s(44) + Math.cos(Math.PI * 0.4) * s(32), bodyY + s(10) + Math.sin(Math.PI * 0.4) * s(32));
-      ctx.stroke();
-
-    } else if (type === 'cavalry') {
-      // --- CAVALRY: Armored rider with horse visible ---
-      const headY = py + s(18);
-      const bodyY = headY + s(46);
-      const headCY = headY + s(20);
-
-      // Horse head/neck (lower portion)
-      const horseColors = ['#5c3a1e', '#3a2010', '#8b6a3a', '#2a1a0a', '#c0c0c0'];
-      const horseColor = horseColors[Math.floor(rng() * horseColors.length)];
-      const horseDark = '#2a1a0a';
-
-      // Horse body/neck visible below rider
-      ctx.fillStyle = horseColor;
-      ctx.beginPath();
-      ctx.moveTo(px, py + ph - s(10));
-      ctx.quadraticCurveTo(cx - s(20), bodyY + s(30), cx - s(10), bodyY + s(16));
-      ctx.lineTo(cx + s(10), bodyY + s(16));
-      ctx.quadraticCurveTo(cx + s(20), bodyY + s(30), px + pw, py + ph - s(10));
-      ctx.lineTo(px + pw, py + ph);
-      ctx.lineTo(px, py + ph);
-      ctx.fill();
-
-      // Horse mane
-      ctx.fillStyle = horseDark;
-      ctx.fillRect(cx - s(4), bodyY + s(16), s(8), s(30));
-
-      // Horse armor/barding
-      ctx.fillStyle = primary;
-      ctx.fillRect(cx - s(30), bodyY + s(30), s(60), s(6));
-      ctx.fillStyle = accent;
-      for (let i = -2; i <= 2; i++) {
-        ctx.fillRect(cx + i * s(12) - s(2), bodyY + s(29), s(4), s(8));
-      }
-
-      // Rider torso
-      const armorGrad = ctx.createLinearGradient(cx, bodyY - s(10), cx, bodyY + s(20));
-      armorGrad.addColorStop(0, '#999');
-      armorGrad.addColorStop(1, '#666');
-      ctx.fillStyle = armorGrad;
-      ctx.beginPath();
-      ctx.moveTo(cx - s(36), bodyY + s(6));
-      ctx.lineTo(cx - s(26), bodyY - s(4));
-      ctx.quadraticCurveTo(cx, bodyY - s(10), cx + s(26), bodyY - s(4));
-      ctx.lineTo(cx + s(36), bodyY + s(6));
-      ctx.lineTo(cx + s(30), bodyY + s(20));
-      ctx.lineTo(cx - s(30), bodyY + s(20));
-      ctx.fill();
-
-      // Tabard/surcoat over armor
-      ctx.fillStyle = primary;
-      ctx.beginPath();
-      ctx.moveTo(cx - s(14), bodyY);
-      ctx.lineTo(cx - s(18), bodyY + s(22));
-      ctx.lineTo(cx + s(18), bodyY + s(22));
-      ctx.lineTo(cx + s(14), bodyY);
-      ctx.fill();
-      ctx.fillStyle = accent;
-      ctx.fillRect(cx - s(2), bodyY + s(2), s(4), s(16));
-      ctx.fillRect(cx - s(8), bodyY + s(8), s(16), s(4));
-
-      // Pauldrons
-      ctx.fillStyle = '#aaa';
-      ctx.beginPath(); ctx.ellipse(cx - s(34), bodyY + s(2), s(10), s(8), -0.3, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(cx + s(34), bodyY + s(2), s(10), s(8), 0.3, 0, Math.PI * 2); ctx.fill();
-
-      // Neck
-      ctx.fillStyle = skin;
-      ctx.fillRect(cx - s(8), bodyY - s(12), s(16), s(12));
-
-      // Head
-      ctx.fillStyle = skin;
-      ctx.beginPath();
-      ctx.ellipse(cx, headCY, s(18), s(22), 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Full helm for cavalry
-      const cavalryHelm = Math.floor(rng() * 3);
-      ctx.fillStyle = '#999';
-      if (cavalryHelm === 0) {
-        // Great helm
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(8), s(22), s(18), 0, Math.PI, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#aaa';
-        ctx.fillRect(cx - s(22), headY + s(6), s(44), s(4));
-        // Visor slit
-        ctx.fillStyle = '#333';
-        ctx.fillRect(cx - s(14), headCY - s(4), s(28), s(3));
-        // Plume
-        ctx.fillStyle = primary;
-        ctx.fillRect(cx - s(2), headY - s(12), s(4), s(16));
-        ctx.fillStyle = accent;
-        ctx.fillRect(cx - s(1), headY - s(10), s(2), s(12));
-      } else if (cavalryHelm === 1) {
-        // Open face with cheek guards
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(6), s(22), s(18), 0, Math.PI + 0.4, -0.4);
-        ctx.fill();
-        ctx.fillStyle = '#888';
-        ctx.fillRect(cx - s(22), headCY - s(2), s(6), s(16));
-        ctx.fillRect(cx + s(16), headCY - s(2), s(6), s(16));
-        // Show eyes
-        const eyeY = headCY - s(2);
-        for (let side = -1; side <= 1; side += 2) {
-          const ex = cx + side * s(8);
-          ctx.fillStyle = '#eee';
-          ctx.beginPath(); ctx.ellipse(ex, eyeY, s(5), s(3), 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = eyeColor;
-          ctx.beginPath(); ctx.arc(ex, eyeY, s(2), 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#111';
-          ctx.beginPath(); ctx.arc(ex, eyeY, s(1), 0, Math.PI * 2); ctx.fill();
-        }
-      } else {
-        // No helm, show hair and face
-        ctx.fillStyle = hair;
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(6), s(20), s(17), 0, Math.PI + 0.3, -0.3);
-        ctx.fill();
-        // Eyes
-        const eyeY = headCY - s(2);
-        for (let side = -1; side <= 1; side += 2) {
-          const ex = cx + side * s(8);
-          ctx.fillStyle = '#eee';
-          ctx.beginPath(); ctx.ellipse(ex, eyeY, s(5), s(3), 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = eyeColor;
-          ctx.beginPath(); ctx.arc(ex, eyeY, s(2), 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#111';
-          ctx.beginPath(); ctx.arc(ex, eyeY, s(1), 0, Math.PI * 2); ctx.fill();
-        }
-        // Nose + mouth
-        ctx.fillStyle = skinShadow;
-        ctx.beginPath();
-        ctx.moveTo(cx, headCY - s(2));
-        ctx.lineTo(cx - s(noseWidth), headCY + s(5));
-        ctx.lineTo(cx + s(noseWidth), headCY + s(5));
-        ctx.fill();
-        ctx.fillStyle = '#7a3030';
-        ctx.fillRect(cx - s(4), headCY + s(8), s(8), s(2));
-      }
-
-      // Lance
-      ctx.fillStyle = '#5c4033';
-      ctx.save();
-      ctx.translate(cx + s(34), bodyY - s(8));
-      ctx.rotate(-0.15);
-      ctx.fillRect(-s(2), -s(60), s(4), s(80));
-      ctx.fillStyle = '#aaa';
-      ctx.beginPath();
-      ctx.moveTo(0, -s(62));
-      ctx.lineTo(-s(4), -s(52));
-      ctx.lineTo(s(4), -s(52));
-      ctx.fill();
-      ctx.fillStyle = primary;
-      ctx.fillRect(-s(6), -s(40), s(12), s(8));
-      ctx.restore();
-
-    } else if (type === 'siege') {
-      // --- SIEGE: Engineer with siege machine ---
-      const headY = py + s(30);
-      const bodyY = headY + s(42);
-      const headCY = headY + s(18);
-
-      // Siege machine background (catapult/trebuchet)
-      ctx.fillStyle = '#5c4033';
-      ctx.fillRect(px + s(10), py + ph - s(60), s(80), s(12));
-      // Frame
-      ctx.fillRect(px + s(20), py + ph - s(90), s(8), s(50));
-      ctx.fillRect(px + s(70), py + ph - s(90), s(8), s(50));
-      // Arm
-      ctx.save();
-      ctx.translate(px + s(50), py + ph - s(88));
-      ctx.rotate(-0.4);
-      ctx.fillStyle = '#4a3520';
-      ctx.fillRect(-s(4), -s(30), s(8), s(60));
-      ctx.fillStyle = '#888';
-      ctx.beginPath(); ctx.arc(0, -s(30), s(5), 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-      // Wheels
-      ctx.fillStyle = '#4a3520';
-      ctx.beginPath(); ctx.arc(px + s(24), py + ph - s(42), s(12), 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(px + s(74), py + ph - s(42), s(12), 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#333';
-      ctx.beginPath(); ctx.arc(px + s(24), py + ph - s(42), s(4), 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(px + s(74), py + ph - s(42), s(4), 0, Math.PI * 2); ctx.fill();
-      // Spokes
-      ctx.strokeStyle = '#5c4033';
-      ctx.lineWidth = s(2);
-      for (let a = 0; a < 4; a++) {
-        const ang = a * Math.PI / 4;
-        for (const wx of [s(24), s(74)]) {
-          ctx.beginPath();
-          ctx.moveTo(px + wx + Math.cos(ang) * s(4), py + ph - s(42) + Math.sin(ang) * s(4));
-          ctx.lineTo(px + wx + Math.cos(ang) * s(11), py + ph - s(42) + Math.sin(ang) * s(11));
-          ctx.stroke();
-        }
-      }
-
-      // Engineer figure (smaller, in front of machine)
-      // Body
-      ctx.fillStyle = primary;
-      ctx.fillRect(cx - s(16), bodyY, s(32), s(30));
-      ctx.fillStyle = '#5c4033'; // leather apron
-      ctx.fillRect(cx - s(12), bodyY + s(4), s(24), s(24));
-      ctx.fillStyle = '#888';
-      ctx.fillRect(cx - s(14), bodyY + s(20), s(28), s(4)); // tool belt
-
-      // Arms
-      ctx.fillStyle = skin;
-      ctx.fillRect(cx - s(22), bodyY + s(2), s(8), s(20));
-      ctx.fillRect(cx + s(14), bodyY + s(2), s(8), s(20));
-      // Gloves
-      ctx.fillStyle = '#5c4033';
-      ctx.fillRect(cx - s(22), bodyY + s(18), s(8), s(8));
-      ctx.fillRect(cx + s(14), bodyY + s(18), s(8), s(8));
-
-      // Neck
-      ctx.fillStyle = skin;
-      ctx.fillRect(cx - s(7), bodyY - s(8), s(14), s(12));
-
-      // Head
-      ctx.fillStyle = skin;
-      ctx.beginPath();
-      ctx.ellipse(cx, headCY, s(16), s(20), 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Engineer cap or goggles
-      const engGear = Math.floor(rng() * 3);
-      if (engGear === 0) {
-        // Leather cap
-        ctx.fillStyle = '#5c4033';
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(6), s(18), s(14), 0, Math.PI, Math.PI * 2);
-        ctx.fill();
-        ctx.fillRect(cx - s(18), headY + s(4), s(36), s(4));
-      } else if (engGear === 1) {
-        // Goggles on forehead
-        ctx.fillStyle = hair;
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(6), s(17), s(14), 0, Math.PI + 0.4, -0.4);
-        ctx.fill();
-        ctx.fillStyle = '#5c4033';
-        ctx.fillRect(cx - s(14), headY + s(6), s(28), s(3));
-        ctx.fillStyle = '#888';
-        ctx.beginPath(); ctx.arc(cx - s(7), headY + s(7), s(5), 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + s(7), headY + s(7), s(5), 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#aad';
-        ctx.beginPath(); ctx.arc(cx - s(7), headY + s(7), s(3.5), 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + s(7), headY + s(7), s(3.5), 0, Math.PI * 2); ctx.fill();
-      } else {
-        // Bandana
-        ctx.fillStyle = primary;
-        ctx.beginPath();
-        ctx.ellipse(cx, headY + s(8), s(18), s(12), 0, Math.PI, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = dark;
-        ctx.fillRect(cx - s(18), headY + s(6), s(36), s(3));
-        // Knot
-        ctx.fillStyle = primary;
-        ctx.fillRect(cx + s(14), headY + s(6), s(8), s(4));
-        ctx.fillRect(cx + s(18), headY + s(4), s(6), s(8));
-      }
-
-      // Eyes (determined, focused)
-      const eyeY = headCY - s(2);
-      for (let side = -1; side <= 1; side += 2) {
-        const ex = cx + side * s(7);
-        ctx.fillStyle = '#eee';
-        ctx.beginPath(); ctx.ellipse(ex, eyeY, s(4.5), s(3), 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = eyeColor;
-        ctx.beginPath(); ctx.arc(ex, eyeY, s(2), 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#111';
-        ctx.beginPath(); ctx.arc(ex, eyeY, s(1), 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.fillStyle = hair;
-      ctx.fillRect(cx - s(12), eyeY - s(5), s(10), s(browThickness));
-      ctx.fillRect(cx + s(2), eyeY - s(5), s(10), s(browThickness));
-
-      // Nose + mouth
-      ctx.fillStyle = skinShadow;
-      ctx.beginPath();
-      ctx.moveTo(cx, headCY);
-      ctx.lineTo(cx - s(noseWidth), headCY + s(6));
-      ctx.lineTo(cx + s(noseWidth), headCY + s(6));
-      ctx.fill();
-      ctx.fillStyle = '#7a3030';
-      ctx.fillRect(cx - s(3), headCY + s(9), s(6), s(2));
-
-      if (hasBeard) {
-        ctx.fillStyle = hair;
-        ctx.globalAlpha = beardStyle === 0 ? 0.3 : 1;
-        ctx.beginPath();
-        ctx.moveTo(cx - s(10), headCY + s(8));
-        ctx.quadraticCurveTo(cx, headCY + s(16 + beardStyle * 4), cx + s(10), headCY + s(8));
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-
-      // Tool in hand (hammer/wrench)
-      ctx.fillStyle = '#888';
-      ctx.fillRect(cx + s(18), bodyY + s(12), s(16), s(4));
-      ctx.fillRect(cx + s(18), bodyY + s(8), s(4), s(12));
-
-      // Faction banner on machine
-      ctx.fillStyle = primary;
-      ctx.fillRect(px + s(22), py + ph - s(100), s(2), s(18));
-      ctx.fillRect(px + s(24), py + ph - s(100), s(12), s(10));
-      ctx.fillStyle = accent;
-      ctx.fillRect(px + s(26), py + ph - s(98), s(8), s(6));
-
-    } else if (type === 'flying') {
-      // --- FLYING: Eagle/griffin with rider or winged creature ---
-      const creatureStyle = Math.floor(rng() * 2); // 0=eagle, 1=dragon
-
-      if (creatureStyle === 0) {
-        // Giant eagle with rider
-        const bodyY = py + s(50);
-        // Wings (spread wide)
-        ctx.fillStyle = dark;
-        // Left wing
-        ctx.beginPath();
-        ctx.moveTo(cx - s(10), bodyY);
-        ctx.quadraticCurveTo(px - s(10), bodyY - s(40), px + s(4), bodyY - s(30));
-        ctx.quadraticCurveTo(px + s(10), bodyY - s(10), cx - s(10), bodyY + s(10));
-        ctx.fill();
-        // Right wing
-        ctx.beginPath();
-        ctx.moveTo(cx + s(10), bodyY);
-        ctx.quadraticCurveTo(px + pw + s(10), bodyY - s(40), px + pw - s(4), bodyY - s(30));
-        ctx.quadraticCurveTo(px + pw - s(10), bodyY - s(10), cx + s(10), bodyY + s(10));
-        ctx.fill();
-
-        // Wing feather details
-        ctx.fillStyle = primary;
-        for (let i = 0; i < 5; i++) {
-          const t = i / 4;
-          // Left
-          const lx = cx - s(10) + (px - cx + s(10)) * t;
-          const ly = bodyY + (bodyY - s(30) - bodyY) * t;
-          ctx.beginPath();
-          ctx.ellipse(lx, ly, s(6), s(14), -0.3 - t * 0.5, 0, Math.PI * 2);
-          ctx.fill();
-          // Right
-          const rx = cx + s(10) + (px + pw - cx - s(10)) * t;
-          ctx.beginPath();
-          ctx.ellipse(rx, ly, s(6), s(14), 0.3 + t * 0.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Eagle body
-        ctx.fillStyle = accent;
-        ctx.beginPath();
-        ctx.ellipse(cx, bodyY + s(20), s(24), s(30), 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Tail
-        ctx.fillStyle = '#eee';
-        ctx.beginPath();
-        ctx.moveTo(cx - s(8), bodyY + s(44));
-        ctx.lineTo(cx, py + ph);
-        ctx.lineTo(cx + s(8), bodyY + s(44));
-        ctx.fill();
-
-        // Eagle head
-        ctx.fillStyle = '#eee';
-        ctx.beginPath();
-        ctx.ellipse(cx, bodyY - s(10), s(14), s(16), 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Eye
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath(); ctx.arc(cx + s(5), bodyY - s(14), s(4), 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#111';
-        ctx.beginPath(); ctx.arc(cx + s(5), bodyY - s(14), s(2), 0, Math.PI * 2); ctx.fill();
-
-        // Beak
-        ctx.fillStyle = '#d4a017';
-        ctx.beginPath();
-        ctx.moveTo(cx + s(12), bodyY - s(12));
-        ctx.lineTo(cx + s(24), bodyY - s(6));
-        ctx.lineTo(cx + s(12), bodyY - s(4));
-        ctx.fill();
-
-        // Talons
-        ctx.fillStyle = '#d4a017';
-        for (let side = -1; side <= 1; side += 2) {
-          const tx = cx + side * s(12);
-          const ty = bodyY + s(46);
-          for (let t = -1; t <= 1; t++) {
-            ctx.fillRect(tx + t * s(3), ty, s(2), s(8));
-            ctx.beginPath();
-            ctx.moveTo(tx + t * s(3), ty + s(8));
-            ctx.lineTo(tx + t * s(3) + s(3), ty + s(12));
-            ctx.lineTo(tx + t * s(3) - s(1), ty + s(8));
-            ctx.fill();
-          }
-        }
-
-        // Rider (small on top)
-        ctx.fillStyle = skin;
-        ctx.beginPath();
-        ctx.ellipse(cx - s(4), bodyY - s(2), s(6), s(7), 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = primary;
-        ctx.fillRect(cx - s(10), bodyY + s(4), s(12), s(14));
-
-      } else {
-        // Dragon-like creature
-        const bodyY = py + s(60);
-
-        // Wings
-        ctx.fillStyle = dark;
-        ctx.beginPath();
-        ctx.moveTo(cx, bodyY - s(10));
-        ctx.quadraticCurveTo(px - s(5), py + s(10), px + s(8), py + s(20));
-        ctx.lineTo(px + s(15), bodyY - s(15));
-        ctx.quadraticCurveTo(cx - s(20), bodyY - s(30), cx, bodyY - s(10));
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(cx, bodyY - s(10));
-        ctx.quadraticCurveTo(px + pw + s(5), py + s(10), px + pw - s(8), py + s(20));
-        ctx.lineTo(px + pw - s(15), bodyY - s(15));
-        ctx.quadraticCurveTo(cx + s(20), bodyY - s(30), cx, bodyY - s(10));
-        ctx.fill();
-
-        // Wing membrane veins
-        ctx.strokeStyle = primary;
-        ctx.lineWidth = s(1);
-        for (let i = 1; i <= 3; i++) {
-          ctx.beginPath();
-          ctx.moveTo(cx, bodyY - s(10));
-          ctx.quadraticCurveTo(cx - s(15 + i * 8), bodyY - s(20 + i * 5), px + s(10 + i * 4), py + s(16 + i * 8));
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(cx, bodyY - s(10));
-          ctx.quadraticCurveTo(cx + s(15 + i * 8), bodyY - s(20 + i * 5), px + pw - s(10 + i * 4), py + s(16 + i * 8));
-          ctx.stroke();
-        }
-
-        // Body
-        ctx.fillStyle = primary;
-        ctx.beginPath();
-        ctx.ellipse(cx, bodyY + s(10), s(22), s(28), 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Belly scales
-        ctx.fillStyle = accent;
-        ctx.beginPath();
-        ctx.ellipse(cx, bodyY + s(14), s(14), s(20), 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Scale pattern
-        for (let i = 0; i < 4; i++) {
-          ctx.strokeStyle = dark;
-          ctx.lineWidth = s(0.5);
-          ctx.beginPath();
-          ctx.ellipse(cx, bodyY + s(4 + i * 8), s(12 - i), s(3), 0, 0, Math.PI);
-          ctx.stroke();
-        }
-
-        // Head
-        ctx.fillStyle = primary;
-        ctx.beginPath();
-        ctx.ellipse(cx + s(2), bodyY - s(22), s(16), s(14), 0.1, 0, Math.PI * 2);
-        ctx.fill();
-        // Horns
-        ctx.fillStyle = '#555';
-        ctx.beginPath();
-        ctx.moveTo(cx - s(8), bodyY - s(32));
-        ctx.lineTo(cx - s(16), bodyY - s(48));
-        ctx.lineTo(cx - s(4), bodyY - s(30));
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(cx + s(12), bodyY - s(32));
-        ctx.lineTo(cx + s(20), bodyY - s(48));
-        ctx.lineTo(cx + s(8), bodyY - s(30));
-        ctx.fill();
-        // Eye
-        ctx.fillStyle = '#ffd700';
-        ctx.beginPath(); ctx.arc(cx + s(8), bodyY - s(24), s(4), 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#111';
-        ctx.fillRect(cx + s(7), bodyY - s(27), s(2), s(6));
-        // Snout
-        ctx.fillStyle = dark;
-        ctx.beginPath();
-        ctx.ellipse(cx + s(14), bodyY - s(18), s(8), s(6), 0.2, 0, Math.PI * 2);
-        ctx.fill();
-        // Nostril
-        ctx.fillStyle = '#ffa500';
-        ctx.beginPath(); ctx.arc(cx + s(18), bodyY - s(19), s(2), 0, Math.PI * 2); ctx.fill();
-
-        // Tail
-        ctx.strokeStyle = primary;
-        ctx.lineWidth = s(6);
-        ctx.beginPath();
-        ctx.moveTo(cx, bodyY + s(34));
-        ctx.quadraticCurveTo(cx - s(20), py + ph - s(10), cx - s(10), py + ph);
-        ctx.stroke();
-        // Tail tip
-        ctx.fillStyle = dark;
-        ctx.beginPath();
-        ctx.moveTo(cx - s(10), py + ph);
-        ctx.lineTo(cx - s(20), py + ph - s(10));
-        ctx.lineTo(cx, py + ph - s(6));
-        ctx.fill();
-
-        // Claws
-        ctx.fillStyle = '#555';
-        for (let side = -1; side <= 1; side += 2) {
-          const clx = cx + side * s(18);
-          const cly = bodyY + s(32);
-          for (let t = -1; t <= 1; t++) {
-            ctx.beginPath();
-            ctx.moveTo(clx + t * s(4), cly);
-            ctx.lineTo(clx + t * s(4) + side * s(3), cly + s(8));
-            ctx.lineTo(clx + t * s(4) - side * s(1), cly + s(4));
-            ctx.fill();
-          }
-        }
-
-        // Fire breath particles
-        ctx.fillStyle = '#ff6600';
-        ctx.globalAlpha = 0.5;
-        ctx.beginPath(); ctx.arc(cx + s(24), bodyY - s(14), s(4), 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ffaa00';
-        ctx.beginPath(); ctx.arc(cx + s(30), bodyY - s(10), s(3), 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
+        drawHair();
       }
     }
 
-    // Ambient particle effects at bottom
+    // =================================================================
+    //  CREATURE PORTRAITS (non-humanoid units)
+    // =================================================================
+    if (typeId === 'snow_hawk' || typeId === 'storm_petrel' || typeId === 'war_eagle' || typeId === 'great_eagle') {
+      // --- BIRD OF PREY portrait ---
+      const birdCY = py + s(80);
+      // Feathered body/breast
+      const featherBase = typeId === 'snow_hawk' ? '#e0dcd6' : typeId === 'storm_petrel' ? '#4a6068' : typeId === 'great_eagle' ? '#6a5a40' : '#8a7a50';
+      const featherDark = typeId === 'snow_hawk' ? '#b0aca6' : typeId === 'storm_petrel' ? '#2a4048' : typeId === 'great_eagle' ? '#4a3a20' : '#6a5a30';
+      const featherLight = typeId === 'snow_hawk' ? '#f8f6f2' : typeId === 'storm_petrel' ? '#6a8090' : typeId === 'great_eagle' ? '#8a7a60' : '#aa9a70';
+      const beakColor = typeId === 'snow_hawk' ? '#e8c840' : typeId === 'storm_petrel' ? '#cc6644' : '#d4a017';
+      const headFeather = typeId === 'snow_hawk' ? '#f4f2ee' : typeId === 'storm_petrel' ? '#3a5058' : typeId === 'great_eagle' ? '#eee8d0' : '#ddd4b0';
+
+      // Breast feathers (lower portion)
+      const breastGrad = ctx.createLinearGradient(cx, birdCY, cx, py + ph);
+      breastGrad.addColorStop(0, featherBase);
+      breastGrad.addColorStop(1, featherDark);
+      ctx.fillStyle = breastGrad;
+      ctx.beginPath();
+      ctx.ellipse(cx, birdCY + s(30), s(48), s(60), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Feather texture
+      ctx.strokeStyle = featherDark;
+      ctx.lineWidth = s(0.5);
+      for (let row = 0; row < 6; row++) {
+        for (let col = -3; col <= 3; col++) {
+          const fx = cx + col * s(10) + (row % 2) * s(5);
+          const fy = birdCY + s(10) + row * s(12);
+          ctx.beginPath();
+          ctx.ellipse(fx, fy, s(6), s(4), 0, 0.2, Math.PI - 0.2);
+          ctx.stroke();
+        }
+      }
+
+      // Head
+      ctx.fillStyle = headFeather;
+      ctx.beginPath();
+      ctx.ellipse(cx, birdCY - s(24), s(22), s(26), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Head feather texture
+      ctx.fillStyle = featherLight;
+      ctx.beginPath();
+      ctx.ellipse(cx, birdCY - s(28), s(18), s(16), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Crown feathers
+      ctx.fillStyle = featherDark;
+      ctx.beginPath();
+      ctx.ellipse(cx, birdCY - s(46), s(12), s(8), 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes (fierce, golden)
+      for (let side = -1; side <= 1; side += 2) {
+        const ex = cx + side * s(10);
+        const ey = birdCY - s(26);
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.ellipse(ex, ey, s(6), s(5), side * 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.ellipse(ex, ey, s(5), s(4), side * 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(ex + side * s(1), ey, s(2), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(ex + side * s(2), ey - s(1), s(1), 0, Math.PI * 2); ctx.fill();
+        // Brow ridge
+        ctx.fillStyle = featherDark;
+        ctx.beginPath();
+        ctx.moveTo(ex - side * s(7), ey - s(6));
+        ctx.quadraticCurveTo(ex, ey - s(8), ex + side * s(8), ey - s(4));
+        ctx.lineTo(ex + side * s(7), ey - s(3));
+        ctx.quadraticCurveTo(ex, ey - s(6), ex - side * s(6), ey - s(5));
+        ctx.fill();
+      }
+
+      // Beak
+      ctx.fillStyle = beakColor;
+      ctx.beginPath();
+      ctx.moveTo(cx, birdCY - s(18));
+      ctx.quadraticCurveTo(cx + s(4), birdCY - s(10), cx + s(2), birdCY - s(2));
+      ctx.quadraticCurveTo(cx, birdCY, cx - s(2), birdCY - s(2));
+      ctx.quadraticCurveTo(cx - s(4), birdCY - s(10), cx, birdCY - s(18));
+      ctx.fill();
+      // Beak highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.beginPath();
+      ctx.moveTo(cx, birdCY - s(17));
+      ctx.quadraticCurveTo(cx + s(2), birdCY - s(12), cx + s(1), birdCY - s(4));
+      ctx.lineTo(cx, birdCY - s(5));
+      ctx.quadraticCurveTo(cx - s(1), birdCY - s(12), cx, birdCY - s(17));
+      ctx.fill();
+      // Nostril
+      ctx.fillStyle = '#333';
+      ctx.beginPath(); ctx.ellipse(cx + s(2), birdCY - s(14), s(1.5), s(1), 0.3, 0, Math.PI * 2); ctx.fill();
+
+    } else if (typeId === 'young_dragon') {
+      // --- DRAGON portrait ---
+      const dCY = py + s(70);
+      // Neck/chest scales
+      const scaleGrad = ctx.createLinearGradient(cx, dCY - s(10), cx, py + ph);
+      scaleGrad.addColorStop(0, primary);
+      scaleGrad.addColorStop(1, dark);
+      ctx.fillStyle = scaleGrad;
+      ctx.beginPath();
+      ctx.ellipse(cx, dCY + s(20), s(44), s(60), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Belly scales
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.ellipse(cx, dCY + s(24), s(28), s(50), 0, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 6; i++) {
+        ctx.strokeStyle = dark;
+        ctx.lineWidth = s(0.5);
+        ctx.beginPath();
+        ctx.ellipse(cx, dCY + s(i * 10), s(24 - i), s(3), 0, 0, Math.PI);
+        ctx.stroke();
+      }
+      // Head
+      ctx.fillStyle = primary;
+      ctx.beginPath();
+      ctx.ellipse(cx, dCY - s(20), s(24), s(22), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Snout
+      ctx.fillStyle = dark;
+      ctx.beginPath();
+      ctx.ellipse(cx, dCY - s(8), s(16), s(10), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Horns
+      ctx.fillStyle = '#555';
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * s(14), dCY - s(36));
+        ctx.lineTo(cx + side * s(22), dCY - s(56));
+        ctx.lineTo(cx + side * s(8), dCY - s(32));
+        ctx.fill();
+      }
+      // Crest
+      ctx.fillStyle = accent;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx, dCY - s(38) - i * s(4));
+        ctx.lineTo(cx - s(3), dCY - s(32) - i * s(4));
+        ctx.lineTo(cx + s(3), dCY - s(32) - i * s(4));
+        ctx.fill();
+      }
+      // Eyes
+      for (let side = -1; side <= 1; side += 2) {
+        const dex = cx + side * s(12);
+        const dey = dCY - s(24);
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.ellipse(dex, dey, s(6), s(5), side * 0.15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.fillRect(dex - s(0.8), dey - s(4), s(1.6), s(8));
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.beginPath(); ctx.arc(dex + side * s(2), dey - s(2), s(1.5), 0, Math.PI * 2); ctx.fill();
+      }
+      // Nostrils
+      ctx.fillStyle = '#ffa500';
+      ctx.beginPath(); ctx.arc(cx - s(5), dCY - s(4), s(2.5), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + s(5), dCY - s(4), s(2.5), 0, Math.PI * 2); ctx.fill();
+      // Smoke wisps
+      ctx.fillStyle = 'rgba(255,120,0,0.25)';
+      ctx.beginPath(); ctx.arc(cx, dCY + s(2), s(5), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,80,0,0.15)';
+      ctx.beginPath(); ctx.arc(cx + s(6), dCY + s(6), s(4), 0, Math.PI * 2); ctx.fill();
+
+    } else if (typeId === 'wraith') {
+      // --- WRAITH portrait (ghostly ethereal) ---
+      const wCY = py + s(70);
+      // Ethereal body
+      ctx.globalAlpha = 0.6;
+      const wGrad = ctx.createLinearGradient(cx, py, cx, py + ph);
+      wGrad.addColorStop(0, '#2a1a3a');
+      wGrad.addColorStop(0.5, primary);
+      wGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = wGrad;
+      ctx.beginPath();
+      ctx.ellipse(cx, wCY, s(44), s(70), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Tattered hood
+      ctx.fillStyle = '#1a0a2a';
+      ctx.beginPath();
+      ctx.ellipse(cx, wCY - s(30), s(30), s(28), 0, Math.PI + 0.3, -0.3);
+      ctx.fill();
+      ctx.fillRect(cx - s(28), wCY - s(16), s(6), s(40));
+      ctx.fillRect(cx + s(22), wCY - s(16), s(6), s(40));
+      // Glowing eyes
+      for (let side = -1; side <= 1; side += 2) {
+        const wex = cx + side * s(10);
+        const wey = wCY - s(22);
+        ctx.fillStyle = '#aa44ff';
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath(); ctx.arc(wex, wey, s(6), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#dd88ff';
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(wex, wey, s(3), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(wex, wey, s(1.5), 0, Math.PI * 2); ctx.fill();
+      }
+      // Ghostly wisps
+      ctx.strokeStyle = 'rgba(170,68,255,0.3)';
+      ctx.lineWidth = s(2);
+      for (let i = 0; i < 4; i++) {
+        const wx = cx + (rng() - 0.5) * s(60);
+        const wy = wCY + s(10) + rng() * s(50);
+        ctx.beginPath();
+        ctx.moveTo(wx, wy);
+        ctx.quadraticCurveTo(wx + s(10), wy - s(15), wx + s(5), wy - s(30));
+        ctx.stroke();
+      }
+
+    } else if (typeId === 'bone_colossus') {
+      // --- BONE COLOSSUS portrait (massive skull construct) ---
+      const bCY = py + s(65);
+      // Massive ribcage/bone structure shoulders
+      ctx.fillStyle = '#c8c0a8';
+      ctx.beginPath();
+      ctx.moveTo(cx - s(50), bCY + s(20));
+      ctx.quadraticCurveTo(cx - s(55), py + ph, cx - s(30), py + ph);
+      ctx.lineTo(cx + s(30), py + ph);
+      ctx.quadraticCurveTo(cx + s(55), py + ph, cx + s(50), bCY + s(20));
+      ctx.quadraticCurveTo(cx, bCY, cx - s(50), bCY + s(20));
+      ctx.fill();
+      // Rib lines
+      ctx.strokeStyle = '#a09880';
+      ctx.lineWidth = s(2);
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - s(4), bCY + s(20 + i * 10));
+        ctx.quadraticCurveTo(cx - s(30), bCY + s(18 + i * 10), cx - s(40), bCY + s(24 + i * 10));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx + s(4), bCY + s(20 + i * 10));
+        ctx.quadraticCurveTo(cx + s(30), bCY + s(18 + i * 10), cx + s(40), bCY + s(24 + i * 10));
+        ctx.stroke();
+      }
+      // Giant skull
+      ctx.fillStyle = '#d8d0b8';
+      ctx.beginPath();
+      ctx.ellipse(cx, bCY - s(16), s(32), s(34), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Eye sockets
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.fillStyle = '#1a0a2a';
+        ctx.beginPath(); ctx.ellipse(cx + side * s(12), bCY - s(20), s(10), s(8), side * 0.1, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#8e44ad';
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath(); ctx.arc(cx + side * s(12), bCY - s(20), s(5), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // Nasal cavity
+      ctx.fillStyle = '#2a1a0a';
+      ctx.beginPath();
+      ctx.moveTo(cx, bCY - s(12));
+      ctx.lineTo(cx - s(5), bCY - s(2));
+      ctx.lineTo(cx + s(5), bCY - s(2));
+      ctx.fill();
+      // Jaw/teeth
+      ctx.fillStyle = '#c8c0a8';
+      ctx.fillRect(cx - s(20), bCY + s(4), s(40), s(8));
+      ctx.fillStyle = '#d8d0b8';
+      for (let i = -4; i <= 4; i++) {
+        ctx.fillRect(cx + i * s(4) - s(1.5), bCY + s(2), s(3), s(6));
+      }
+      // Cracks
+      ctx.strokeStyle = '#8a8068';
+      ctx.lineWidth = s(1);
+      ctx.beginPath(); ctx.moveTo(cx + s(8), bCY - s(40)); ctx.lineTo(cx + s(12), bCY - s(20)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - s(14), bCY - s(36)); ctx.lineTo(cx - s(10), bCY - s(18)); ctx.stroke();
+
+    } else if (typeId === 'treant') {
+      // --- TREANT portrait (living tree face) ---
+      const tCY = py + s(70);
+      // Bark body/trunk
+      const barkGrad = ctx.createLinearGradient(cx, py, cx, py + ph);
+      barkGrad.addColorStop(0, '#5a4a30');
+      barkGrad.addColorStop(0.5, '#4a3a20');
+      barkGrad.addColorStop(1, '#3a2a14');
+      ctx.fillStyle = barkGrad;
+      ctx.beginPath();
+      ctx.moveTo(cx - s(40), tCY + s(10));
+      ctx.quadraticCurveTo(cx - s(50), py + ph, cx - s(30), py + ph);
+      ctx.lineTo(cx + s(30), py + ph);
+      ctx.quadraticCurveTo(cx + s(50), py + ph, cx + s(40), tCY + s(10));
+      ctx.quadraticCurveTo(cx, tCY - s(6), cx - s(40), tCY + s(10));
+      ctx.fill();
+      // Bark texture
+      ctx.strokeStyle = '#3a2a14';
+      ctx.lineWidth = s(1.5);
+      for (let i = 0; i < 8; i++) {
+        const bx = cx + (rng() - 0.5) * s(60);
+        const by = tCY + s(10) + rng() * s(70);
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + (rng() - 0.5) * s(10), by + s(10 + rng() * 15));
+        ctx.stroke();
+      }
+      // Branch shoulders
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.fillStyle = '#5a4a30';
+        ctx.beginPath();
+        ctx.moveTo(cx + side * s(30), tCY + s(14));
+        ctx.quadraticCurveTo(cx + side * s(50), tCY - s(10), cx + side * s(55), tCY - s(20));
+        ctx.lineTo(cx + side * s(52), tCY - s(16));
+        ctx.quadraticCurveTo(cx + side * s(44), tCY + s(0), cx + side * s(28), tCY + s(20));
+        ctx.fill();
+        // Small leaves
+        ctx.fillStyle = '#27ae60';
+        for (let l = 0; l < 3; l++) {
+          const lx = cx + side * s(40 + l * 6);
+          const ly = tCY - s(14 + l * 4);
+          ctx.beginPath(); ctx.ellipse(lx, ly, s(4), s(2.5), side * 0.5, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      // Head (knothole face)
+      ctx.fillStyle = '#6a5a3a';
+      ctx.beginPath();
+      ctx.ellipse(cx, tCY - s(20), s(28), s(30), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#5a4a2a';
+      ctx.beginPath();
+      ctx.ellipse(cx, tCY - s(20), s(24), s(26), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Eyes (glowing green knotholes)
+      for (let side = -1; side <= 1; side += 2) {
+        const tex = cx + side * s(10);
+        const tey = tCY - s(24);
+        ctx.fillStyle = '#1a1008';
+        ctx.beginPath(); ctx.ellipse(tex, tey, s(7), s(5), side * 0.15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#27ae60';
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath(); ctx.arc(tex, tey, s(4), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#80ff80';
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(tex, tey, s(2), 0, Math.PI * 2); ctx.fill();
+      }
+      // Mouth (gnarled knothole)
+      ctx.fillStyle = '#2a1a08';
+      ctx.beginPath();
+      ctx.moveTo(cx - s(12), tCY - s(6));
+      ctx.quadraticCurveTo(cx, tCY + s(4), cx + s(12), tCY - s(6));
+      ctx.quadraticCurveTo(cx, tCY - s(2), cx - s(12), tCY - s(6));
+      ctx.fill();
+      // Moss/leaves on top
+      ctx.fillStyle = '#27ae60';
+      for (let i = 0; i < 6; i++) {
+        const mx = cx + (rng() - 0.5) * s(40);
+        const my = tCY - s(40) - rng() * s(16);
+        ctx.beginPath(); ctx.ellipse(mx, my, s(5), s(3), rng() * 2, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#2a8a40';
+      for (let i = 0; i < 4; i++) {
+        const mx = cx + (rng() - 0.5) * s(30);
+        const my = tCY - s(44) - rng() * s(12);
+        ctx.beginPath(); ctx.ellipse(mx, my, s(4), s(2.5), rng() * 2, 0, Math.PI * 2); ctx.fill();
+      }
+
+    } else if (typeId === 'void_walker') {
+      // --- VOID WALKER portrait (dark ethereal entity) ---
+      const vCY = py + s(70);
+      // Dark smoky body
+      ctx.globalAlpha = 0.7;
+      const vGrad = ctx.createRadialGradient(cx, vCY, s(5), cx, vCY, s(60));
+      vGrad.addColorStop(0, '#3a1a5a');
+      vGrad.addColorStop(0.6, '#1a0a2a');
+      vGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = vGrad;
+      ctx.beginPath(); ctx.ellipse(cx, vCY, s(50), s(65), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      // Inner form
+      ctx.fillStyle = '#2a1040';
+      ctx.beginPath(); ctx.ellipse(cx, vCY - s(10), s(30), s(40), 0, 0, Math.PI * 2); ctx.fill();
+      // Shoulders
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.fillStyle = '#3a1a5a';
+        ctx.beginPath(); ctx.ellipse(cx + side * s(28), vCY + s(6), s(16), s(12), side * 0.3, 0, Math.PI * 2); ctx.fill();
+      }
+      // Glowing eyes
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.fillStyle = '#8844cc';
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath(); ctx.arc(cx + side * s(10), vCY - s(20), s(8), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#bb66ff';
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(cx + side * s(10), vCY - s(20), s(4), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(cx + side * s(10), vCY - s(20), s(1.5), 0, Math.PI * 2); ctx.fill();
+      }
+      // Dark energy wisps
+      ctx.strokeStyle = 'rgba(136,68,204,0.4)';
+      ctx.lineWidth = s(2);
+      for (let i = 0; i < 5; i++) {
+        const wx = cx + (rng() - 0.5) * s(70);
+        const wy = vCY + rng() * s(50) - s(20);
+        ctx.beginPath();
+        ctx.moveTo(wx, wy);
+        ctx.quadraticCurveTo(wx + (rng()-0.5) * s(20), wy - s(20), wx + (rng()-0.5) * s(15), wy - s(40));
+        ctx.stroke();
+      }
+
+    } else if (typeId === 'imp') {
+      // --- IMP portrait (small demon) ---
+      const iCY = py + s(75);
+      // Body
+      ctx.fillStyle = '#8a2020';
+      ctx.beginPath();
+      ctx.ellipse(cx, iCY + s(10), s(28), s(40), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Shoulders
+      ctx.fillStyle = '#6a1010';
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.beginPath(); ctx.ellipse(cx + side * s(24), iCY + s(8), s(12), s(8), side * 0.3, 0, Math.PI * 2); ctx.fill();
+      }
+      // Head
+      ctx.fillStyle = '#aa3030';
+      ctx.beginPath(); ctx.ellipse(cx, iCY - s(18), s(18), s(20), 0, 0, Math.PI * 2); ctx.fill();
+      // Horns
+      ctx.fillStyle = '#444';
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * s(10), iCY - s(34));
+        ctx.lineTo(cx + side * s(18), iCY - s(50));
+        ctx.lineTo(cx + side * s(6), iCY - s(30));
+        ctx.fill();
+      }
+      // Pointed ears
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.fillStyle = '#992828';
+        ctx.beginPath();
+        ctx.moveTo(cx + side * s(16), iCY - s(20));
+        ctx.lineTo(cx + side * s(30), iCY - s(28));
+        ctx.lineTo(cx + side * s(18), iCY - s(12));
+        ctx.fill();
+      }
+      // Glowing eyes
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath(); ctx.ellipse(cx + side * s(7), iCY - s(20), s(5), s(3.5), 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ff4400';
+        ctx.beginPath(); ctx.arc(cx + side * s(7), iCY - s(20), s(2), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(cx + side * s(7), iCY - s(20), s(1), 0, Math.PI * 2); ctx.fill();
+      }
+      // Wicked grin
+      ctx.strokeStyle = '#440000';
+      ctx.lineWidth = s(1.5);
+      ctx.beginPath();
+      ctx.arc(cx, iCY - s(8), s(8), 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      // Teeth
+      ctx.fillStyle = '#eee';
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + i * s(3), iCY - s(8));
+        ctx.lineTo(cx + i * s(3) - s(1), iCY - s(5));
+        ctx.lineTo(cx + i * s(3) + s(1), iCY - s(5));
+        ctx.fill();
+      }
+
+    // =================================================================
+    //  SHADOW PRIEST (Undead) faction humanoid portraits
+    // =================================================================
+    } else if (charId === 'shadow_priest') {
+
+      if (typeId === 'skeleton') {
+        // --- SKELETON warrior portrait ---
+        // Bone colored armor shoulders
+        ctx.fillStyle = '#6a6050';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(48), bodyY + s(10));
+        ctx.quadraticCurveTo(cx - s(50), bodyY + s(40), cx - s(40), py + ph);
+        ctx.lineTo(cx + s(40), py + ph);
+        ctx.quadraticCurveTo(cx + s(50), bodyY + s(40), cx + s(48), bodyY + s(10));
+        ctx.quadraticCurveTo(cx, bodyY - s(4), cx - s(48), bodyY + s(10));
+        ctx.fill();
+        // Tattered cloth
+        ctx.fillStyle = '#3a2a4a';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(18), bodyY + s(2));
+        ctx.lineTo(cx - s(22), py + ph);
+        ctx.lineTo(cx + s(22), py + ph);
+        ctx.lineTo(cx + s(18), bodyY + s(2));
+        ctx.fill();
+        // Rusted pauldrons
+        ctx.fillStyle = '#8a7060';
+        ctx.beginPath(); ctx.ellipse(cx - s(40), bodyY + s(14), s(12), s(8), -0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx + s(40), bodyY + s(14), s(12), s(8), 0.3, 0, Math.PI * 2); ctx.fill();
+        // Spine/neck bones
+        ctx.fillStyle = '#c8c0a8';
+        ctx.fillRect(cx - s(6), bodyY - s(10), s(12), s(14));
+        ctx.fillStyle = '#b0a890';
+        ctx.fillRect(cx - s(4), bodyY - s(8), s(8), s(3));
+        ctx.fillRect(cx - s(4), bodyY - s(3), s(8), s(3));
+        ctx.fillRect(cx - s(4), bodyY + s(2), s(8), s(3));
+        // Skull
+        ctx.fillStyle = '#d8d0b8';
+        ctx.beginPath();
+        ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Cranium highlight
+        ctx.fillStyle = '#e8e0c8';
+        ctx.beginPath();
+        ctx.ellipse(cx, headCY - s(8), s(16), s(14), 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Eye sockets
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.fillStyle = '#0a0606';
+          ctx.beginPath(); ctx.ellipse(cx + side * s(8), headCY - s(2), s(7), s(6), side * 0.1, 0, Math.PI * 2); ctx.fill();
+          // Soul fire in eyes
+          ctx.fillStyle = '#8e44ad';
+          ctx.globalAlpha = 0.8;
+          ctx.beginPath(); ctx.arc(cx + side * s(8), headCY - s(2), s(3.5), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#cc88ff';
+          ctx.globalAlpha = 1;
+          ctx.beginPath(); ctx.arc(cx + side * s(8), headCY - s(2), s(1.5), 0, Math.PI * 2); ctx.fill();
+        }
+        // Nasal cavity
+        ctx.fillStyle = '#1a1008';
+        ctx.beginPath();
+        ctx.moveTo(cx, headCY + s(2));
+        ctx.lineTo(cx - s(3), headCY + s(8));
+        ctx.lineTo(cx + s(3), headCY + s(8));
+        ctx.fill();
+        // Jaw
+        ctx.fillStyle = '#c8c0a8';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(16), headCY + s(10));
+        ctx.quadraticCurveTo(cx, headCY + s(22), cx + s(16), headCY + s(10));
+        ctx.fill();
+        // Teeth
+        ctx.fillStyle = '#d8d0b8';
+        for (let i = -3; i <= 3; i++) {
+          ctx.fillRect(cx + i * s(3.5) - s(1), headCY + s(10), s(2.5), s(4));
+        }
+        // Cracks in skull
+        ctx.strokeStyle = '#a09880';
+        ctx.lineWidth = s(0.8);
+        ctx.beginPath(); ctx.moveTo(cx + s(6), headCY - s(20)); ctx.lineTo(cx + s(10), headCY - s(6)); ctx.stroke();
+
+      } else if (typeId === 'plague_archer') {
+        // --- PLAGUE ARCHER portrait (rotting undead archer) ---
+        drawLightArmor('#2a1a3a', '#3a2a4a');
+        // Quiver strap
+        ctx.strokeStyle = '#4a3a2a';
+        ctx.lineWidth = s(3);
+        ctx.beginPath(); ctx.moveTo(cx + s(18), bodyY); ctx.lineTo(cx - s(14), bodyY + s(36)); ctx.stroke();
+        // Neck (rotting)
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        // Head
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2); ctx.fill();
+        // Exposed bone patches
+        ctx.fillStyle = '#c8c0a8';
+        ctx.beginPath(); ctx.ellipse(cx + s(8), headCY - s(8), s(6), s(5), 0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx - s(12), headCY + s(4), s(4), s(3), -0.2, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        // One eye normal, one glowing
+        const ex1 = cx - eyeSpacing;
+        ctx.fillStyle = '#eee';
+        ctx.beginPath(); ctx.ellipse(ex1, eyeY, s(5), s(3), 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#8e44ad';
+        ctx.beginPath(); ctx.arc(ex1, eyeY, s(2), 0, Math.PI * 2); ctx.fill();
+        const ex2 = cx + eyeSpacing;
+        ctx.fillStyle = '#8e44ad';
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath(); ctx.arc(ex2, eyeY, s(5), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#cc88ff';
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(ex2, eyeY, s(2.5), 0, Math.PI * 2); ctx.fill();
+        drawBrows('#4a4038');
+        drawNose();
+        // Rotting mouth
+        ctx.fillStyle = '#3a2020';
+        ctx.fillRect(cx - s(5), headCY + s(12), s(10), s(3));
+        drawHood('#1a0a2a');
+
+      } else if (typeId === 'death_knight') {
+        // --- DEATH KNIGHT portrait (armored undead rider) ---
+        drawHeavyArmor('#3a3040', '#5a4060', '#1a1020');
+        // Neck (bone)
+        ctx.fillStyle = '#b0a890';
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        // Skull head
+        ctx.fillStyle = '#d0c8b0';
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2); ctx.fill();
+        // Dark helm
+        ctx.fillStyle = '#2a2030';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(24), s(20), 0, Math.PI + 0.2, -0.2); ctx.fill();
+        // Visor slit
+        ctx.fillStyle = '#0a0606';
+        ctx.fillRect(cx - s(16), headCY - s(4), s(32), s(4));
+        // Glowing eyes through visor
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.fillStyle = '#8e44ad';
+          ctx.globalAlpha = 0.9;
+          ctx.beginPath(); ctx.arc(cx + side * s(8), headCY - s(2), s(4), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#cc88ff';
+          ctx.globalAlpha = 1;
+          ctx.beginPath(); ctx.arc(cx + side * s(8), headCY - s(2), s(2), 0, Math.PI * 2); ctx.fill();
+        }
+        // Dark plume
+        ctx.fillStyle = '#3a1a5a';
+        ctx.fillRect(cx - s(2), headY - s(12), s(4), s(18));
+        // Jaw bone visible below helm
+        ctx.fillStyle = '#c0b8a0';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(14), headCY + s(8));
+        ctx.quadraticCurveTo(cx, headCY + s(18), cx + s(14), headCY + s(8));
+        ctx.fill();
+      }
+
+    // =================================================================
+    //  FOREST WARDEN (Elven) faction portraits
+    // =================================================================
+    } else if (charId === 'forest_warden') {
+
+      if (typeId === 'sentinel') {
+        // --- ELVEN SENTINEL portrait ---
+        // Elegant leaf-themed armor
+        const ag = ctx.createLinearGradient(cx - s(50), bodyY, cx + s(50), bodyY + s(80));
+        ag.addColorStop(0, '#2a6a30');
+        ag.addColorStop(0.5, '#1a4a20');
+        ag.addColorStop(1, '#0a2a10');
+        ctx.fillStyle = ag;
+        ctx.beginPath();
+        ctx.moveTo(cx - s(48), bodyY + s(10));
+        ctx.quadraticCurveTo(cx - s(50), bodyY + s(40), cx - s(40), py + ph);
+        ctx.lineTo(cx + s(40), py + ph);
+        ctx.quadraticCurveTo(cx + s(50), bodyY + s(40), cx + s(48), bodyY + s(10));
+        ctx.quadraticCurveTo(cx, bodyY - s(4), cx - s(48), bodyY + s(10));
+        ctx.fill();
+        // Leaf-shaped pauldrons
+        ctx.fillStyle = accent;
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(30), bodyY + s(4));
+          ctx.quadraticCurveTo(cx + side * s(50), bodyY + s(6), cx + side * s(48), bodyY + s(16));
+          ctx.quadraticCurveTo(cx + side * s(38), bodyY + s(22), cx + side * s(30), bodyY + s(18));
+          ctx.quadraticCurveTo(cx + side * s(34), bodyY + s(12), cx + side * s(30), bodyY + s(4));
+          ctx.fill();
+        }
+        // Golden vine on chest
+        ctx.strokeStyle = '#c8a030';
+        ctx.lineWidth = s(1.5);
+        ctx.beginPath();
+        ctx.moveTo(cx, bodyY + s(2));
+        ctx.quadraticCurveTo(cx - s(8), bodyY + s(12), cx, bodyY + s(22));
+        ctx.quadraticCurveTo(cx + s(8), bodyY + s(32), cx, bodyY + s(42));
+        ctx.stroke();
+        // Gorget
+        ctx.fillStyle = '#3a8a40';
+        ctx.beginPath(); ctx.ellipse(cx, bodyY + s(2), s(18), s(8), 0, Math.PI, Math.PI * 2); ctx.fill();
+        drawNeckAndHead();
+        drawElfEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawScar();
+        // Elven circlet
+        ctx.strokeStyle = '#c8a030';
+        ctx.lineWidth = s(2);
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(10), s(23), s(12), 0, Math.PI + 0.3, -0.3);
+        ctx.stroke();
+        // Gem on circlet
+        ctx.fillStyle = '#27ae60';
+        ctx.beginPath(); ctx.arc(cx, headY + s(4), s(3), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#80ff80';
+        ctx.beginPath(); ctx.arc(cx - s(0.5), headY + s(3), s(1), 0, Math.PI * 2); ctx.fill();
+        // Long flowing hair (elves always have beautiful hair)
+        const elfHair = ['#c8a860', '#e8d8a0', '#8a6a30', '#f0e8d0', '#aa8840'][Math.floor(rng() * 5)];
+        ctx.fillStyle = elfHair;
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(24), s(20), 0, Math.PI + 0.2, -0.2); ctx.fill();
+        ctx.fillRect(cx - s(24), headCY - s(8), s(5), s(44));
+        ctx.fillRect(cx + s(19), headCY - s(8), s(5), s(44));
+
+      } else if (typeId === 'elven_archer') {
+        // --- ELVEN ARCHER portrait ---
+        drawLightArmor('#1a4a20', '#27ae60');
+        // Quiver strap
+        ctx.strokeStyle = '#5a4a2a';
+        ctx.lineWidth = s(2.5);
+        ctx.beginPath(); ctx.moveTo(cx + s(18), bodyY); ctx.lineTo(cx - s(14), bodyY + s(36)); ctx.stroke();
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2); ctx.fill();
+        drawElfEars();
+        drawEyes('#228833');
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawScar();
+        // Elegant hood
+        drawHood('#1a3a14');
+
+      } else if (typeId === 'stag_rider') {
+        // --- STAG RIDER portrait ---
+        // Light elven plate
+        const ag = ctx.createLinearGradient(cx, bodyY, cx, bodyY + s(60));
+        ag.addColorStop(0, '#4a8a50');
+        ag.addColorStop(1, '#1a4a20');
+        ctx.fillStyle = ag;
+        ctx.beginPath();
+        ctx.moveTo(cx - s(44), bodyY + s(8));
+        ctx.quadraticCurveTo(cx - s(46), bodyY + s(40), cx - s(36), py + ph);
+        ctx.lineTo(cx + s(36), py + ph);
+        ctx.quadraticCurveTo(cx + s(46), bodyY + s(40), cx + s(44), bodyY + s(8));
+        ctx.quadraticCurveTo(cx, bodyY - s(4), cx - s(44), bodyY + s(8));
+        ctx.fill();
+        // Antler motif pauldrons
+        ctx.fillStyle = '#6aaa60';
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.beginPath(); ctx.ellipse(cx + side * s(36), bodyY + s(10), s(12), s(8), side * 0.3, 0, Math.PI * 2); ctx.fill();
+          // Antler detail
+          ctx.strokeStyle = '#8a7a50';
+          ctx.lineWidth = s(2);
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(38), bodyY + s(4));
+          ctx.lineTo(cx + side * s(44), bodyY - s(8));
+          ctx.moveTo(cx + side * s(41), bodyY - s(2));
+          ctx.lineTo(cx + side * s(48), bodyY - s(4));
+          ctx.stroke();
+        }
+        drawNeckAndHead();
+        drawElfEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Leafy crown
+        ctx.fillStyle = '#27ae60';
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + s(4), s(22), s(10), 0, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#1a8a20';
+        for (let i = -3; i <= 3; i++) {
+          ctx.beginPath();
+          ctx.ellipse(cx + i * s(6), headY + s(2), s(4), s(7), 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+    // =================================================================
+    //  ORC WARCHIEF faction portraits
+    // =================================================================
+    } else if (charId === 'orc_warchief') {
+
+      if (typeId === 'half_orc') {
+        // --- HALF-ORC warrior portrait ---
+        drawHeavyArmor('#4a5a28', '#6a7a38', '#2a3a14');
+        drawNeckAndHead(24, 28);
+        drawOrcEars();
+        // Orc eyes (fierce, yellow-tinted)
+        drawEyes('#aa8800');
+        drawBrows('#2a3a14');
+        drawNose(4);
+        // Tusks
+        ctx.fillStyle = '#e8e0c8';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(6), headCY + s(12));
+        ctx.lineTo(cx - s(8), headCY + s(4));
+        ctx.lineTo(cx - s(4), headCY + s(10));
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + s(6), headCY + s(12));
+        ctx.lineTo(cx + s(8), headCY + s(4));
+        ctx.lineTo(cx + s(4), headCY + s(10));
+        ctx.fill();
+        // Wide mouth
+        ctx.fillStyle = '#3a2010';
+        ctx.fillRect(cx - s(8), headCY + s(12), s(16), s(3));
+        drawBeard();
+        drawScar();
+        // Topknot or helm
+        const orcHelm = rng() > 0.5;
+        if (orcHelm) {
+          ctx.fillStyle = '#555';
+          ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(24), s(18), 0, Math.PI, Math.PI * 2); ctx.fill();
+          // Spikes
+          ctx.fillStyle = '#666';
+          ctx.beginPath();
+          ctx.moveTo(cx, headY - s(12));
+          ctx.lineTo(cx - s(4), headY + s(2));
+          ctx.lineTo(cx + s(4), headY + s(2));
+          ctx.fill();
+        } else {
+          // Dark topknot
+          ctx.fillStyle = '#1a1008';
+          ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(20), s(14), 0, Math.PI, Math.PI * 2); ctx.fill();
+          ctx.fillRect(cx - s(4), headY - s(10), s(8), s(16));
+          ctx.beginPath(); ctx.ellipse(cx, headY - s(10), s(6), s(8), 0, 0, Math.PI * 2); ctx.fill();
+        }
+
+      } else if (typeId === 'goblin') {
+        // --- GOBLIN portrait (small, green, big nose/ears) ---
+        const gHeadY = py + s(40);
+        const gBodyY = gHeadY + s(48);
+        const gHeadCY = gHeadY + s(22);
+        // Scrappy leather armor
+        ctx.fillStyle = '#5a4a28';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(40), gBodyY + s(8));
+        ctx.quadraticCurveTo(cx - s(44), gBodyY + s(30), cx - s(34), py + ph);
+        ctx.lineTo(cx + s(34), py + ph);
+        ctx.quadraticCurveTo(cx + s(44), gBodyY + s(30), cx + s(40), gBodyY + s(8));
+        ctx.quadraticCurveTo(cx, gBodyY - s(4), cx - s(40), gBodyY + s(8));
+        ctx.fill();
+        // Patches
+        ctx.fillStyle = '#4a3a18';
+        ctx.fillRect(cx - s(20), gBodyY + s(10), s(14), s(12));
+        ctx.fillStyle = '#6a5a38';
+        ctx.fillRect(cx + s(8), gBodyY + s(16), s(10), s(8));
+        // Neck
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(6), gBodyY - s(8), s(12), s(12));
+        // Head (larger proportionally)
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, gHeadCY, s(24), s(26), 0, 0, Math.PI * 2); ctx.fill();
+        // Giant pointed ears
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.fillStyle = skinShadow;
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(22), gHeadCY - s(2));
+          ctx.quadraticCurveTo(cx + side * s(42), gHeadCY - s(20), cx + side * s(48), gHeadCY - s(10));
+          ctx.quadraticCurveTo(cx + side * s(38), gHeadCY + s(6), cx + side * s(22), gHeadCY + s(8));
+          ctx.fill();
+          ctx.fillStyle = skin;
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(22), gHeadCY - s(1));
+          ctx.quadraticCurveTo(cx + side * s(38), gHeadCY - s(16), cx + side * s(44), gHeadCY - s(9));
+          ctx.quadraticCurveTo(cx + side * s(34), gHeadCY + s(4), cx + side * s(22), gHeadCY + s(7));
+          ctx.fill();
+        }
+        // Eyes (large, yellow)
+        for (let side = -1; side <= 1; side += 2) {
+          const gex = cx + side * s(10);
+          const gey = gHeadCY - s(4);
+          ctx.fillStyle = '#eeee88';
+          ctx.beginPath(); ctx.ellipse(gex, gey, s(8), s(6), 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#886600';
+          ctx.beginPath(); ctx.arc(gex + side * s(1), gey, s(3.5), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#111';
+          ctx.beginPath(); ctx.arc(gex + side * s(1), gey, s(1.8), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.5)';
+          ctx.beginPath(); ctx.arc(gex + side * s(2), gey - s(1.5), s(1), 0, Math.PI * 2); ctx.fill();
+        }
+        // Big hooked nose
+        ctx.fillStyle = skinShadow;
+        ctx.beginPath();
+        ctx.moveTo(cx, gHeadCY - s(6));
+        ctx.quadraticCurveTo(cx + s(2), gHeadCY + s(4), cx + s(6), gHeadCY + s(10));
+        ctx.lineTo(cx - s(4), gHeadCY + s(10));
+        ctx.quadraticCurveTo(cx - s(2), gHeadCY + s(4), cx, gHeadCY - s(6));
+        ctx.fill();
+        // Wide grin
+        ctx.fillStyle = '#2a1a08';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(12), gHeadCY + s(14));
+        ctx.quadraticCurveTo(cx, gHeadCY + s(20), cx + s(12), gHeadCY + s(14));
+        ctx.fill();
+        // Pointy teeth
+        ctx.fillStyle = '#ddd';
+        for (let i = -3; i <= 3; i++) {
+          ctx.beginPath();
+          ctx.moveTo(cx + i * s(3), gHeadCY + s(14));
+          ctx.lineTo(cx + i * s(3) + s(1.5), gHeadCY + s(17));
+          ctx.lineTo(cx + i * s(3) - s(1.5), gHeadCY + s(17));
+          ctx.fill();
+        }
+        // Scrappy hair
+        ctx.fillStyle = '#1a1a08';
+        for (let i = 0; i < 5; i++) {
+          const hx = cx + (rng() - 0.5) * s(30);
+          const hy = gHeadCY - s(24);
+          ctx.fillRect(hx, hy, s(2), s(6 + rng() * 10));
+        }
+
+      } else if (typeId === 'troll') {
+        // --- TROLL portrait (tall, lanky, blue-green tint) ---
+        // Troll skin override (blue-green)
+        const trollSkin = '#5a8a7a';
+        const trollSkinShadow = '#3a6a5a';
+        const trollSkinHighlight = '#7aaa9a';
+        // Minimal armor, tribal
+        ctx.fillStyle = '#4a3a18';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(44), bodyY + s(10));
+        ctx.quadraticCurveTo(cx - s(48), bodyY + s(40), cx - s(36), py + ph);
+        ctx.lineTo(cx + s(36), py + ph);
+        ctx.quadraticCurveTo(cx + s(48), bodyY + s(40), cx + s(44), bodyY + s(10));
+        ctx.quadraticCurveTo(cx, bodyY - s(4), cx - s(44), bodyY + s(10));
+        ctx.fill();
+        // Tribal shoulder wraps
+        ctx.fillStyle = '#6a5a28';
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.beginPath(); ctx.ellipse(cx + side * s(36), bodyY + s(14), s(12), s(8), side * 0.3, 0, Math.PI * 2); ctx.fill();
+        }
+        // Bone necklace
+        ctx.fillStyle = '#d8d0b8';
+        ctx.strokeStyle = '#5a4a28';
+        ctx.lineWidth = s(1);
+        for (let i = -3; i <= 3; i++) {
+          ctx.beginPath(); ctx.ellipse(cx + i * s(6), bodyY + s(4), s(2), s(4), 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        // Neck
+        ctx.fillStyle = trollSkin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        // Head (elongated)
+        ctx.fillStyle = trollSkin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(20), s(28), 0, 0, Math.PI * 2); ctx.fill();
+        // Long pointed ears
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.fillStyle = trollSkinShadow;
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(18), headCY - s(4));
+          ctx.quadraticCurveTo(cx + side * s(38), headCY - s(22), cx + side * s(44), headCY - s(14));
+          ctx.quadraticCurveTo(cx + side * s(34), headCY + s(4), cx + side * s(18), headCY + s(8));
+          ctx.fill();
+        }
+        // Eyes (red, menacing)
+        for (let side = -1; side <= 1; side += 2) {
+          const tex = cx + side * s(8);
+          ctx.fillStyle = '#ffcc88';
+          ctx.beginPath(); ctx.ellipse(tex, eyeY, s(5), s(3), 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#cc2200';
+          ctx.beginPath(); ctx.arc(tex + side * s(1), eyeY, s(2), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#111';
+          ctx.beginPath(); ctx.arc(tex + side * s(1), eyeY, s(1), 0, Math.PI * 2); ctx.fill();
+        }
+        // Long nose
+        ctx.fillStyle = trollSkinShadow;
+        ctx.beginPath();
+        ctx.moveTo(cx, headCY - s(6));
+        ctx.quadraticCurveTo(cx + s(3), headCY + s(6), cx + s(2), headCY + s(14));
+        ctx.lineTo(cx - s(3), headCY + s(12));
+        ctx.quadraticCurveTo(cx - s(2), headCY + s(4), cx, headCY - s(6));
+        ctx.fill();
+        // Tusks (upward from lower jaw)
+        ctx.fillStyle = '#e8e0c8';
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(8), headCY + s(18));
+          ctx.lineTo(cx + side * s(10), headCY + s(6));
+          ctx.lineTo(cx + side * s(6), headCY + s(16));
+          ctx.fill();
+        }
+        // Wide mouth
+        ctx.fillStyle = '#2a1a08';
+        ctx.fillRect(cx - s(8), headCY + s(16), s(16), s(3));
+        // Wild hair
+        ctx.fillStyle = '#cc4400';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(2), s(18), s(12), 0, Math.PI, Math.PI * 2); ctx.fill();
+        // Mohawk-style spikes
+        for (let i = -2; i <= 2; i++) {
+          ctx.fillRect(cx + i * s(5) - s(2), headY - s(8 + Math.abs(i) * 3), s(4), s(12 + Math.abs(i) * 3));
+        }
+
+      } else if (typeId === 'thrall') {
+        // --- THRALL portrait (orc shaman) ---
+        // Robes/ritual garb
+        ctx.fillStyle = '#3a4a28';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(46), bodyY + s(8));
+        ctx.quadraticCurveTo(cx - s(50), bodyY + s(40), cx - s(40), py + ph);
+        ctx.lineTo(cx + s(40), py + ph);
+        ctx.quadraticCurveTo(cx + s(50), bodyY + s(40), cx + s(46), bodyY + s(8));
+        ctx.quadraticCurveTo(cx, bodyY - s(4), cx - s(46), bodyY + s(8));
+        ctx.fill();
+        // Shaman shoulder totems
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.fillStyle = '#5a4a28';
+          ctx.beginPath(); ctx.ellipse(cx + side * s(38), bodyY + s(12), s(14), s(10), side * 0.3, 0, Math.PI * 2); ctx.fill();
+          // Feathers on shoulders
+          ctx.fillStyle = '#cc4400';
+          ctx.fillRect(cx + side * s(40), bodyY, s(3), s(12));
+          ctx.fillStyle = '#27ae60';
+          ctx.fillRect(cx + side * s(44), bodyY + s(2), s(3), s(10));
+        }
+        // Beads/fetishes
+        ctx.fillStyle = '#d4a017';
+        for (let i = -2; i <= 2; i++) {
+          ctx.beginPath(); ctx.arc(cx + i * s(6), bodyY + s(4), s(2), 0, Math.PI * 2); ctx.fill();
+        }
+        // Neck
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(10), bodyY - s(10), s(20), s(14));
+        // Head
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(22), s(26), 0, 0, Math.PI * 2); ctx.fill();
+        drawOrcEars();
+        drawEyes('#44aa00');
+        drawBrows('#2a3a14');
+        drawNose(3);
+        // Small tusks
+        ctx.fillStyle = '#e8e0c8';
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(5), headCY + s(12));
+          ctx.lineTo(cx + side * s(6), headCY + s(6));
+          ctx.lineTo(cx + side * s(3.5), headCY + s(10));
+          ctx.fill();
+        }
+        drawMouth();
+        drawBeard();
+        // Shaman headdress
+        ctx.fillStyle = '#5a4a28';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(24), s(14), 0, Math.PI, Math.PI * 2); ctx.fill();
+        // Ritual markings on face
+        ctx.strokeStyle = '#cc4400';
+        ctx.lineWidth = s(1.5);
+        ctx.beginPath();
+        ctx.moveTo(cx - s(16), headCY - s(4));
+        ctx.lineTo(cx - s(10), headCY - s(8));
+        ctx.lineTo(cx - s(6), headCY - s(4));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx + s(6), headCY - s(4));
+        ctx.lineTo(cx + s(10), headCY - s(8));
+        ctx.lineTo(cx + s(16), headCY - s(4));
+        ctx.stroke();
+
+      } else if (typeId === 'warlock') {
+        // --- WARLOCK portrait (dark orc spellcaster) ---
+        // Dark robes
+        ctx.fillStyle = '#1a1a28';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(46), bodyY + s(8));
+        ctx.quadraticCurveTo(cx - s(50), bodyY + s(40), cx - s(40), py + ph);
+        ctx.lineTo(cx + s(40), py + ph);
+        ctx.quadraticCurveTo(cx + s(50), bodyY + s(40), cx + s(46), bodyY + s(8));
+        ctx.quadraticCurveTo(cx, bodyY - s(4), cx - s(46), bodyY + s(8));
+        ctx.fill();
+        // Arcane shoulder pads
+        ctx.fillStyle = '#3a2a5a';
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.beginPath(); ctx.ellipse(cx + side * s(38), bodyY + s(12), s(14), s(10), side * 0.3, 0, Math.PI * 2); ctx.fill();
+          // Glowing rune on shoulder
+          ctx.fillStyle = '#8844cc';
+          ctx.globalAlpha = 0.6;
+          ctx.beginPath(); ctx.arc(cx + side * s(38), bodyY + s(12), s(4), 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+        // Neck
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(10), bodyY - s(10), s(20), s(14));
+        // Head
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(22), s(26), 0, 0, Math.PI * 2); ctx.fill();
+        drawOrcEars();
+        // Glowing purple eyes
+        for (let side = -1; side <= 1; side += 2) {
+          const wex = cx + side * eyeSpacing;
+          ctx.fillStyle = '#3a1a5a';
+          ctx.beginPath(); ctx.ellipse(wex, eyeY, s(6), s(3.5), 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#8844cc';
+          ctx.beginPath(); ctx.arc(wex + side * s(1), eyeY, s(2.5), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#cc88ff';
+          ctx.beginPath(); ctx.arc(wex + side * s(1), eyeY, s(1.2), 0, Math.PI * 2); ctx.fill();
+        }
+        drawBrows('#1a1a08');
+        drawNose(3);
+        // Tusks
+        ctx.fillStyle = '#e8e0c8';
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(6), headCY + s(12));
+          ctx.lineTo(cx + side * s(8), headCY + s(4));
+          ctx.lineTo(cx + side * s(4), headCY + s(10));
+          ctx.fill();
+        }
+        drawMouth();
+        // Dark hood
+        ctx.fillStyle = '#1a1028';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(28), s(22), 0, Math.PI + 0.3, -0.3); ctx.fill();
+        ctx.fillRect(cx - s(26), headCY - s(2), s(5), s(28));
+        ctx.fillRect(cx + s(21), headCY - s(2), s(5), s(28));
+        // Arcane tattoo
+        ctx.strokeStyle = '#8844cc';
+        ctx.lineWidth = s(1);
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath(); ctx.arc(cx, headCY + s(6), s(6), 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+    // =================================================================
+    //  NORTHERN LORD faction portraits
+    // =================================================================
+    } else if (charId === 'northern_lord') {
+
+      if (typeId === 'shieldwall') {
+        // Heavy northern plate with fur collar
+        drawHeavyArmor();
+        // Fur collar
+        ctx.fillStyle = '#8a7a60';
+        ctx.beginPath();
+        ctx.ellipse(cx, bodyY + s(6), s(34), s(10), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#a09080';
+        for (let i = -6; i <= 6; i++) {
+          ctx.fillRect(cx + i * s(4), bodyY, s(3), s(8 + Math.abs(i % 3)));
+        }
+        drawNeckAndHead();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        drawScar();
+        // Helm or hair
+        if (rng() > 0.4) {
+          drawHelm('#8899aa', primary, 0);
+        } else {
+          drawHair();
+        }
+
+      } else if (typeId === 'longbow') {
+        drawLightArmor('#2a3f65', '#4a6fa5');
+        // Fur trim on cloak
+        ctx.fillStyle = '#8a7a60';
+        ctx.fillRect(cx - s(48), bodyY + s(6), s(96), s(4));
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawScar();
+        drawHood('#2a3f65');
+
+      } else if (typeId === 'warhorse') {
+        drawHeavyArmor('#8899aa', '#aabbcc', '#556677');
+        drawNeckAndHead();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Great helm
+        drawHelm('#8899aa', primary, 2);
+
+      } else if (typeId === 'siege_tower') {
+        // Engineer outfit
+        ctx.fillStyle = primary;
+        ctx.fillRect(cx - s(36), bodyY, s(72), s(60));
+        ctx.fillStyle = '#5c4033';
+        ctx.fillRect(cx - s(28), bodyY + s(4), s(56), s(50));
+        ctx.fillStyle = '#888';
+        ctx.fillRect(cx - s(30), bodyY + s(24), s(60), s(5));
+        // Arms
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(42), bodyY + s(4), s(8), s(24));
+        ctx.fillRect(cx + s(34), bodyY + s(4), s(8), s(24));
+        ctx.fillStyle = '#5c4033';
+        ctx.fillRect(cx - s(42), bodyY + s(22), s(8), s(8));
+        ctx.fillRect(cx + s(34), bodyY + s(22), s(8), s(8));
+        // Neck
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        // Head
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(18), s(22), 0, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        // Eyes
+        for (let side = -1; side <= 1; side += 2) {
+          const ex = cx + side * s(7);
+          ctx.fillStyle = '#eee';
+          ctx.beginPath(); ctx.ellipse(ex, eyeY, s(4.5), s(3), 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = eyeColor;
+          ctx.beginPath(); ctx.arc(ex, eyeY, s(2), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#111';
+          ctx.beginPath(); ctx.arc(ex, eyeY, s(1), 0, Math.PI * 2); ctx.fill();
+        }
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Engineer cap
+        ctx.fillStyle = '#5c4033';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(20), s(14), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillRect(cx - s(20), headY + s(4), s(40), s(4));
+      }
+
+    // =================================================================
+    //  DRAGON EMPRESS faction portraits
+    // =================================================================
+    } else if (charId === 'dragon_empress') {
+
+      if (typeId === 'unsullied') {
+        // Eastern-style plate armor
+        drawHeavyArmor('#8a2020', '#cc4444', '#4a0808');
+        // Scaled collar
+        ctx.fillStyle = '#aa3030';
+        for (let i = -4; i <= 4; i++) {
+          ctx.beginPath(); ctx.ellipse(cx + i * s(5), bodyY + s(4), s(4), s(3), 0, 0, Math.PI * 2); ctx.fill();
+        }
+        drawNeckAndHead();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawScar();
+        // Unsullied helm (rounded with spike)
+        ctx.fillStyle = '#999';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(10), s(24), s(18), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(cx - s(24), headY + s(8), s(48), s(3));
+        // Spike
+        ctx.fillStyle = '#ccc';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(2), headY + s(2));
+        ctx.lineTo(cx, headY - s(14));
+        ctx.lineTo(cx + s(2), headY + s(2));
+        ctx.fill();
+
+      } else if (typeId === 'fire_mage') {
+        drawLightArmor('#4a0808', '#c0392b');
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        // Fiery eyes
+        drawEyes('#ff4400');
+        drawBrows();
+        drawNose();
+        drawMouth();
+        // Ornate headdress
+        ctx.fillStyle = '#c0392b';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(6), s(24), s(16), 0, Math.PI, Math.PI * 2); ctx.fill();
+        // Jeweled band
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = s(2);
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(10), s(23), s(8), 0, Math.PI + 0.3, -0.3); ctx.stroke();
+        ctx.fillStyle = '#ff4400';
+        ctx.beginPath(); ctx.arc(cx, headY + s(6), s(3), 0, Math.PI * 2); ctx.fill();
+
+      } else if (typeId === 'flame_rider') {
+        drawHeavyArmor('#8a2020', '#cc3333', '#4a0808');
+        drawNeckAndHead();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Dragon-crested helm
+        ctx.fillStyle = '#aa3333';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(24), s(18), 0, Math.PI, Math.PI * 2); ctx.fill();
+        // Dragon wing crests
+        ctx.fillStyle = '#cc4444';
+        for (let side = -1; side <= 1; side += 2) {
+          ctx.beginPath();
+          ctx.moveTo(cx + side * s(2), headY - s(4));
+          ctx.quadraticCurveTo(cx + side * s(14), headY - s(18), cx + side * s(20), headY - s(6));
+          ctx.lineTo(cx + side * s(16), headY + s(2));
+          ctx.fill();
+        }
+
+      } else if (typeId === 'scorpion') {
+        // Siege engineer - eastern style
+        ctx.fillStyle = '#8a2020';
+        ctx.fillRect(cx - s(36), bodyY, s(72), s(60));
+        ctx.fillStyle = '#5c4033';
+        ctx.fillRect(cx - s(28), bodyY + s(4), s(56), s(50));
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(18), s(22), 0, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Eastern headband
+        ctx.fillStyle = '#c0392b';
+        ctx.fillRect(cx - s(20), headY + s(6), s(40), s(5));
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.arc(cx, headY + s(8), s(3), 0, Math.PI * 2); ctx.fill();
+        drawHair();
+      }
+
+    // =================================================================
+    //  IRON ADMIRAL faction portraits
+    // =================================================================
+    } else if (charId === 'iron_admiral') {
+
+      if (typeId === 'reaver') {
+        drawHeavyArmor('#1a6a5a', '#2a9a8a', '#0a4a3a');
+        // Scale mail over chest
+        ctx.fillStyle = '#2a8a7a';
+        for (let row = 0; row < 3; row++) {
+          for (let col = -3; col <= 3; col++) {
+            const sx = cx + col * s(6) + (row % 2) * s(3);
+            const sy = bodyY + s(14) + row * s(6);
+            ctx.beginPath(); ctx.ellipse(sx, sy, s(3.5), s(2.5), 0, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+        drawNeckAndHead();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        drawScar();
+        if (rng() > 0.5) {
+          drawHelm('#668888', accent, 1);
+        } else {
+          drawHair();
+          // Bandana
+          ctx.fillStyle = primary;
+          ctx.fillRect(cx - s(22), headY + s(10), s(44), s(4));
+        }
+
+      } else if (typeId === 'crossbowman') {
+        drawLightArmor('#0a4a3a', '#1a8a7a');
+        // Leather bandolier
+        ctx.strokeStyle = '#5c4033';
+        ctx.lineWidth = s(3);
+        ctx.beginPath(); ctx.moveTo(cx - s(18), bodyY); ctx.lineTo(cx + s(14), bodyY + s(36)); ctx.stroke();
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawScar();
+        drawHood('#0a4a3a');
+
+      } else if (typeId === 'war_chariot') {
+        drawHeavyArmor('#1a6a5a', '#2a9a8a', '#0a4a3a');
+        drawNeckAndHead();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Naval officer helm
+        ctx.fillStyle = '#2a6a5a';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(24), s(16), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1a8a7a';
+        ctx.fillRect(cx - s(26), headY + s(6), s(52), s(4));
+        // Plume
+        ctx.fillStyle = accent;
+        ctx.fillRect(cx + s(14), headY - s(8), s(4), s(14));
+
+      } else if (typeId === 'battering_ram') {
+        ctx.fillStyle = primary;
+        ctx.fillRect(cx - s(36), bodyY, s(72), s(60));
+        ctx.fillStyle = '#5c4033';
+        ctx.fillRect(cx - s(28), bodyY + s(4), s(56), s(50));
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(18), s(22), 0, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Sea dog bandana
+        ctx.fillStyle = '#1a8a7a';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(20), s(12), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillRect(cx - s(20), headY + s(6), s(40), s(3));
+        // Knot
+        ctx.fillStyle = primary;
+        ctx.fillRect(cx + s(16), headY + s(4), s(6), s(6));
+      }
+
+    // =================================================================
+    //  GOLDEN LORD faction portraits
+    // =================================================================
+    } else if (charId === 'golden_lord') {
+
+      if (typeId === 'sellsword') {
+        drawHeavyArmor('#b89020', '#d4a017', '#8a6a10');
+        // Gold trim chest plate
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(cx - s(6), bodyY + s(4), s(12), s(24));
+        ctx.fillStyle = '#d4a017';
+        ctx.fillRect(cx - s(1), bodyY + s(2), s(2), s(28));
+        drawNeckAndHead();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        drawScar();
+        if (rng() > 0.4) {
+          // Golden helm
+          ctx.fillStyle = '#d4a017';
+          ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(24), s(18), 0, Math.PI + 0.3, -0.3); ctx.fill();
+          ctx.fillStyle = '#ffd700';
+          ctx.fillRect(cx - s(2), headY + s(4), s(4), s(16));
+        } else {
+          drawHair();
+        }
+
+      } else if (typeId === 'arbalist') {
+        drawLightArmor('#8a6a10', '#d4a017');
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(20), s(24), 0, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawScar();
+        drawHood('#8a6a10');
+
+      } else if (typeId === 'mounted_champion') {
+        drawHeavyArmor('#c8a020', '#ffd700', '#8a6a10');
+        // Ornate gold pauldrons
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.arc(cx - s(44), bodyY + s(12), s(5), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + s(44), bodyY + s(12), s(5), 0, Math.PI * 2); ctx.fill();
+        drawNeckAndHead();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Champion crown-helm
+        ctx.fillStyle = '#d4a017';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(24), s(18), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(cx - s(24), headY + s(4), s(48), s(5));
+        // Crown points
+        for (let i = -2; i <= 2; i++) {
+          ctx.fillRect(cx + i * s(8) - s(2), headY - s(4 + Math.abs(i) * 2), s(4), s(8 + Math.abs(i) * 2));
+        }
+        // Gem
+        ctx.fillStyle = '#cc2222';
+        ctx.beginPath(); ctx.arc(cx, headY + s(1), s(2.5), 0, Math.PI * 2); ctx.fill();
+
+      } else if (typeId === 'golden_trebuchet') {
+        ctx.fillStyle = '#d4a017';
+        ctx.fillRect(cx - s(36), bodyY, s(72), s(60));
+        ctx.fillStyle = '#5c4033';
+        ctx.fillRect(cx - s(28), bodyY + s(4), s(56), s(50));
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(cx - s(30), bodyY + s(24), s(60), s(5));
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - s(8), bodyY - s(10), s(16), s(14));
+        ctx.fillStyle = skin;
+        ctx.beginPath(); ctx.ellipse(cx, headCY, s(18), s(22), 0, 0, Math.PI * 2); ctx.fill();
+        drawHumanEars();
+        drawEyes();
+        drawBrows();
+        drawNose();
+        drawMouth();
+        drawBeard();
+        // Fine hat
+        ctx.fillStyle = '#d4a017';
+        ctx.beginPath(); ctx.ellipse(cx, headY + s(8), s(22), s(12), 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillRect(cx - s(22), headY + s(6), s(44), s(4));
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath(); ctx.arc(cx - s(12), headY + s(8), s(3), 0, Math.PI * 2); ctx.fill();
+      }
+
+    // =================================================================
+    //  FALLBACK (generic portrait for any unmatched unit)
+    // =================================================================
+    } else {
+      drawHeavyArmor();
+      drawNeckAndHead();
+      drawHumanEars();
+      drawEyes();
+      drawBrows();
+      drawNose();
+      drawMouth();
+      drawBeard();
+      drawScar();
+      drawHair();
+    }
+
+    // === Ambient particle effects ===
     ctx.fillStyle = 'rgba(201, 168, 76, 0.1)';
     const particleRng = seededRng((unit.id || 1) + 999);
     for (let i = 0; i < 8; i++) {
       const ppx = px + particleRng() * pw;
       const ppy = py + ph * 0.7 + particleRng() * ph * 0.3;
-      const pr = 1 + particleRng() * 3;
-      ctx.beginPath(); ctx.arc(ppx, ppy, pr, 0, Math.PI * 2); ctx.fill();
+      const ppr = 1 + particleRng() * 3;
+      ctx.beginPath(); ctx.arc(ppx, ppy, ppr, 0, Math.PI * 2); ctx.fill();
     }
 
     ctx.restore();
   }
-
   function drawBuildingIcon(ctx, building, px, py, pw, ph) {
     const charData = CHARACTERS[building.characterId];
     const primary = charData ? charData.color : '#666';
@@ -2656,13 +3505,21 @@
       ctx.beginPath(); ctx.moveTo(cx + s(27), baseY - s(52)); ctx.lineTo(cx + s(33), baseY - s(46)); ctx.lineTo(cx + s(30), baseY - s(42)); ctx.fill();
       return;
     } else if (building.isTower) {
-      // Detailed tower
+      // Faction-themed detailed tower
       const baseY = py + ph - s(20);
+      const charId = building.characterId;
+      // Faction-specific stone and glow colors
+      const stoneColor = charId === 'shadow_priest' ? '#3a3040' : charId === 'forest_warden' ? '#4a5a40' :
+        charId === 'orc_warchief' ? '#4a4030' : charId === 'iron_admiral' ? '#4a5a58' : '#5a5550';
+      const stoneDark = charId === 'shadow_priest' ? '#2a2030' : charId === 'forest_warden' ? '#3a4a30' :
+        charId === 'orc_warchief' ? '#3a3020' : charId === 'iron_admiral' ? '#3a4a48' : '#3a3530';
+      const glowColor = charId === 'shadow_priest' ? '#8e44ad' : charId === 'forest_warden' ? '#27ae60' :
+        charId === 'dragon_empress' ? '#ff4400' : charId === 'orc_warchief' ? '#88aa44' : '#d4a017';
       // Foundation
-      ctx.fillStyle = '#3a3530';
+      ctx.fillStyle = stoneDark;
       ctx.fillRect(cx - s(36), baseY, s(72), s(20));
       // Tower body
-      ctx.fillStyle = '#5a5550';
+      ctx.fillStyle = stoneColor;
       ctx.fillRect(cx - s(24), baseY - s(70), s(48), s(72));
       // Stone texture
       ctx.strokeStyle = 'rgba(0,0,0,0.15)';
@@ -2677,18 +3534,52 @@
         }
       }
       // Upper battlements
-      ctx.fillStyle = '#666';
+      ctx.fillStyle = primary;
       ctx.fillRect(cx - s(28), baseY - s(78), s(56), s(10));
       // Crenellations
       for (let i = -2; i <= 2; i++) {
         ctx.fillRect(cx + i * s(10) - s(4), baseY - s(86), s(8), s(10));
       }
+      // Faction-specific tower decoration
+      if (charId === 'orc_warchief') {
+        // Spikes on battlements
+        ctx.fillStyle = '#5a4a28';
+        for (let i = -2; i <= 2; i++) {
+          ctx.beginPath();
+          ctx.moveTo(cx + i * s(10), baseY - s(94));
+          ctx.lineTo(cx + i * s(10) - s(2), baseY - s(86));
+          ctx.lineTo(cx + i * s(10) + s(2), baseY - s(86));
+          ctx.fill();
+        }
+      } else if (charId === 'forest_warden') {
+        // Vines growing up the tower
+        ctx.strokeStyle = '#27ae60';
+        ctx.lineWidth = s(2);
+        ctx.beginPath();
+        ctx.moveTo(cx - s(24), baseY);
+        ctx.quadraticCurveTo(cx - s(28), baseY - s(40), cx - s(22), baseY - s(70));
+        ctx.stroke();
+        ctx.fillStyle = '#27ae60';
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath(); ctx.ellipse(cx - s(24), baseY - s(15 + i * 16), s(4), s(2.5), -0.3, 0, Math.PI * 2); ctx.fill();
+        }
+      } else if (charId === 'shadow_priest') {
+        // Skulls on battlements
+        ctx.fillStyle = '#c8c0a8';
+        for (let i = -1; i <= 1; i += 2) {
+          ctx.beginPath(); ctx.arc(cx + i * s(12), baseY - s(82), s(4), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1a0a2a';
+          ctx.beginPath(); ctx.arc(cx + i * s(12) - s(1.5), baseY - s(83), s(1), 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(cx + i * s(12) + s(1.5), baseY - s(83), s(1), 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#c8c0a8';
+        }
+      }
       // Arrow slits
       ctx.fillStyle = '#111';
       ctx.fillRect(cx - s(2), baseY - s(55), s(4), s(12));
       ctx.fillRect(cx - s(2), baseY - s(35), s(4), s(12));
-      // Window glow
-      ctx.fillStyle = '#d4a017';
+      // Window glow (faction colored)
+      ctx.fillStyle = glowColor;
       ctx.globalAlpha = 0.4;
       ctx.fillRect(cx - s(1), baseY - s(54), s(2), s(10));
       ctx.fillRect(cx - s(1), baseY - s(34), s(2), s(10));
@@ -2702,14 +3593,22 @@
       ctx.lineTo(cx + s(18), baseY - s(94));
       ctx.lineTo(cx + s(2), baseY - s(86));
       ctx.fill();
+      // Faction emblem on flag
+      ctx.fillStyle = accent;
+      ctx.beginPath(); ctx.arc(cx + s(8), baseY - s(93), s(3), 0, Math.PI * 2); ctx.fill();
     } else {
-      // Detailed barracks
+      // Faction-themed detailed barracks
       const baseY = py + ph - s(20);
+      const charId = building.characterId;
+      const wallColor = charId === 'shadow_priest' ? '#3a3040' : charId === 'forest_warden' ? '#4a5a40' :
+        charId === 'orc_warchief' ? '#4a3a20' : charId === 'iron_admiral' ? '#4a5a58' : '#5a5045';
+      const glowColor = charId === 'shadow_priest' ? '#8e44ad' : charId === 'forest_warden' ? '#27ae60' :
+        charId === 'dragon_empress' ? '#ff4400' : charId === 'orc_warchief' ? '#88aa44' : '#d4a017';
       // Foundation
       ctx.fillStyle = '#3a3530';
       ctx.fillRect(cx - s(44), baseY, s(88), s(20));
       // Walls
-      ctx.fillStyle = '#5a5045';
+      ctx.fillStyle = wallColor;
       ctx.fillRect(cx - s(40), baseY - s(50), s(80), s(52));
       // Roof
       ctx.fillStyle = dark;
@@ -2722,32 +3621,81 @@
       ctx.fillStyle = accent;
       ctx.fillRect(cx - s(2), baseY - s(76), s(4), s(28));
       // Wooden beams
-      ctx.fillStyle = '#4a3520';
+      ctx.fillStyle = charId === 'orc_warchief' ? '#3a2a10' : '#4a3520';
       ctx.fillRect(cx - s(38), baseY - s(26), s(76), s(3));
       ctx.fillRect(cx - s(38), baseY - s(48), s(76), s(3));
       // Door
-      ctx.fillStyle = '#2a1f14';
+      ctx.fillStyle = charId === 'orc_warchief' ? '#1a1508' : '#2a1f14';
       ctx.fillRect(cx - s(8), baseY - s(22), s(16), s(24));
-      ctx.fillStyle = '#d4a017';
+      ctx.fillStyle = glowColor;
       ctx.fillRect(cx + s(4), baseY - s(12), s(3), s(3));
       // Windows
       ctx.fillStyle = '#111';
       ctx.fillRect(cx - s(28), baseY - s(42), s(10), s(10));
       ctx.fillRect(cx + s(18), baseY - s(42), s(10), s(10));
-      ctx.fillStyle = '#d4a017';
+      ctx.fillStyle = glowColor;
       ctx.globalAlpha = 0.3;
       ctx.fillRect(cx - s(27), baseY - s(41), s(8), s(8));
       ctx.fillRect(cx + s(19), baseY - s(41), s(8), s(8));
       ctx.globalAlpha = 1;
+      // Faction-specific barracks decoration
+      if (charId === 'orc_warchief') {
+        // Skull over door
+        ctx.fillStyle = '#c8c0a8';
+        ctx.beginPath(); ctx.arc(cx, baseY - s(28), s(5), 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1a1008';
+        ctx.beginPath(); ctx.arc(cx - s(2), baseY - s(29), s(1.5), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + s(2), baseY - s(29), s(1.5), 0, Math.PI * 2); ctx.fill();
+        // Spikes on roof
+        ctx.fillStyle = '#5a4a28';
+        for (let i = -2; i <= 2; i++) {
+          ctx.beginPath();
+          ctx.moveTo(cx + i * s(12), baseY - s(58));
+          ctx.lineTo(cx + i * s(12) - s(2), baseY - s(50));
+          ctx.lineTo(cx + i * s(12) + s(2), baseY - s(50));
+          ctx.fill();
+        }
+      } else if (charId === 'forest_warden') {
+        // Vines and leaves
+        ctx.strokeStyle = '#27ae60';
+        ctx.lineWidth = s(1.5);
+        ctx.beginPath();
+        ctx.moveTo(cx - s(40), baseY - s(20));
+        ctx.quadraticCurveTo(cx - s(44), baseY - s(40), cx - s(38), baseY - s(48));
+        ctx.stroke();
+        ctx.fillStyle = '#27ae60';
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath(); ctx.ellipse(cx - s(40), baseY - s(25 + i * 10), s(3), s(2), -0.4, 0, Math.PI * 2); ctx.fill();
+        }
+        // Living roof
+        ctx.fillStyle = 'rgba(39,174,96,0.3)';
+        ctx.beginPath();
+        ctx.moveTo(cx - s(40), baseY - s(50));
+        ctx.lineTo(cx, baseY - s(72));
+        ctx.lineTo(cx + s(40), baseY - s(50));
+        ctx.fill();
+      } else if (charId === 'shadow_priest') {
+        // Eerie glow from within
+        ctx.fillStyle = '#8e44ad';
+        ctx.globalAlpha = 0.15;
+        ctx.fillRect(cx - s(38), baseY - s(48), s(76), s(48));
+        ctx.globalAlpha = 1;
+        // Candle in window
+        ctx.fillStyle = '#8e44ad';
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath(); ctx.arc(cx - s(23), baseY - s(37), s(3), 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + s(23), baseY - s(37), s(3), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
       // Banner
       ctx.fillStyle = primary;
       ctx.fillRect(cx - s(50), baseY - s(40), s(8), s(20));
       ctx.fillStyle = accent;
       ctx.fillRect(cx - s(49), baseY - s(38), s(6), s(4));
       // Smoke from chimney
-      ctx.fillStyle = '#5a5045';
+      ctx.fillStyle = charId === 'shadow_priest' ? '#3a2a4a' : '#5a5045';
       ctx.fillRect(cx + s(20), baseY - s(70), s(8), s(20));
-      ctx.fillStyle = 'rgba(150,150,150,0.3)';
+      ctx.fillStyle = charId === 'shadow_priest' ? 'rgba(100,50,150,0.3)' : 'rgba(150,150,150,0.3)';
       ctx.beginPath(); ctx.arc(cx + s(24), baseY - s(76), s(5), 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(cx + s(22), baseY - s(84), s(4), 0, Math.PI * 2); ctx.fill();
     }
