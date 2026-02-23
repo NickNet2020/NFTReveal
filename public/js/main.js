@@ -99,7 +99,8 @@
     iron_admiral: '&#x2693;',    // anchor
     golden_lord: '&#x1F451;',    // crown
     shadow_priest: '&#x1F480;',  // skull
-    forest_warden: '&#x1F333;'   // tree
+    forest_warden: '&#x1F333;',  // tree
+    orc_warchief: '&#x1F479;'   // ogre
   };
 
   // ─── Initialize ─────────────────────────────────────────────────
@@ -313,7 +314,9 @@
     gameCanvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const zoomDelta = e.deltaY > 0 ? -0.05 : 0.05;
-      camera.zoom = Math.max(camera.minZoom, Math.min(camera.maxZoom, camera.zoom + zoomDelta));
+      // Dynamic min zoom: battlefield must fill at least 85% of the screen
+      const minZoom = Math.max(0.85 * camera.screenW / GAME_CONSTANTS.MAP_WIDTH, 0.85 * camera.screenH / GAME_CONSTANTS.MAP_HEIGHT);
+      camera.zoom = Math.max(minZoom, Math.min(camera.maxZoom, camera.zoom + zoomDelta));
     }, { passive: false });
 
     // Minimap click to pan
@@ -329,6 +332,9 @@
     window.addEventListener('resize', () => {
       camera.screenW = window.innerWidth;
       camera.screenH = window.innerHeight;
+      // Re-clamp zoom so battlefield stays at least 85% of screen
+      const minZoom = Math.max(0.85 * camera.screenW / GAME_CONSTANTS.MAP_WIDTH, 0.85 * camera.screenH / GAME_CONSTANTS.MAP_HEIGHT);
+      if (camera.zoom < minZoom) camera.zoom = minZoom;
     });
   }
 

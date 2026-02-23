@@ -166,6 +166,7 @@ function createGameRoom(p1Socket, p1Char, p2Socket, p2Char, p2IsBot = false) {
     projectiles: [],
     damageNumbers: [],
     effects: [],
+    slowPools: [],
 
     botState: p2IsBot ? { nextBuildTime: Date.now() + 3000, phase: 'early', heroMoveTime: 0 } : null,
     winner: null,
@@ -449,7 +450,53 @@ function spawnUnitFromBuilding(room, building) {
     }
   }
 
+  // Copy special abilities from unit definition
+  if (unitDef.specials) {
+    unit.specials = JSON.parse(JSON.stringify(unitDef.specials));
+    // Initialize summoner timers
+    if (unit.specials.isSummoner) {
+      unit.nextSummonTime = Date.now() + Math.floor(Math.random() * (unit.specials.summon.firstSummonMax || 10000));
+      unit.lastShieldTime = 0;
+    }
+  }
+
   room.units.set(unit.id, unit);
+
+  // Double spawn (e.g., Goblin spawns 2 from each building cycle)
+  if (unitDef.specials && unitDef.specials.doubleSpawn) {
+    const unit2 = {
+      ...unit,
+      id: genId(),
+      x: unit.x + (unit.side === 'left' ? 10 : -10),
+      y: unit.y + (Math.random() > 0.5 ? 15 : -15),
+      targetId: null, targetType: null, lastAttackTime: 0
+    };
+    if (unitDef.specials) unit2.specials = JSON.parse(JSON.stringify(unitDef.specials));
+    if (unit.passives) unit2.passives = { ...unit.passives };
+    room.units.set(unit2.id, unit2);
+  }
+}
+
+// Create a summoned unit (void walker, imp, etc.)
+function createSummonedUnit(def, side, characterId, x, y, lane, laneY) {
+  const sumUnit = {
+    id: genId(), typeId: def.id, unitType: def.type, side,
+    characterId,
+    x, y,
+    hp: def.hp, maxHp: def.hp, damage: def.damage, speed: def.speed,
+    range: def.range, attackSpeed: def.attackSpeed, lastAttackTime: 0,
+    targetId: null, targetType: null,
+    state: 'marching', lane, laneY, reachedLane: true, spawnTime: Date.now(),
+    onLane: true,
+    xp: 0, rank: 0,
+    baseDamage: def.damage, baseAttackSpeed: def.attackSpeed, baseMaxHp: def.hp,
+    unitLevel: 1,
+    isSummoned: true
+  };
+  if (def.specials) {
+    sumUnit.specials = JSON.parse(JSON.stringify(def.specials));
+  }
+  return sumUnit;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -635,6 +682,14 @@ function dealDamage(room, attacker, targetInfo, isHero) {
     if (tBuffs.damageReduction > 0) dmg = Math.max(1, Math.floor(dmg * (1 - tBuffs.damageReduction)));
   }
 
+  // Spell shield: blocks one attack entirely
+  if (target.spellShield && target.spellShield > 0) {
+    target.spellShield--;
+    room.damageNumbers.push({ x: target.x, y: target.y - 20, value: 'BLOCKED', time: Date.now(), side: target.side });
+    room.effects.push({ type: 'spell_shield_break', x: target.x, y: target.y, time: Date.now(), duration: 500 });
+    return;
+  }
+
   target.hp -= dmg;
 
   room.damageNumbers.push({ x: target.x, y: target.y - 20, value: dmg, time: Date.now(), side: attacker.side, attackerType: attacker.unitType || 'infantry' });
@@ -646,6 +701,66 @@ function dealDamage(room, attacker, targetInfo, isHero) {
       time: Date.now(), side: attacker.side, characterId: attacker.characterId,
       attackerType: attacker.unitType
     });
+  }
+
+  // Lifesteal: attacker heals for a percentage of damage dealt
+  if (!isHero && attacker.specials && attacker.specials.lifesteal) {
+    const healAmount = Math.floor(dmg * attacker.specials.lifesteal);
+    if (healAmount > 0 && attacker.hp < attacker.maxHp) {
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + healAmount);
+    }
+  }
+
+  // Poison application (Troll attacks)
+  if (!isHero && attacker.specials && attacker.specials.poison && (targetInfo.type === 'unit' || targetInfo.type === 'hero')) {
+    if (!target.poisonStacks) target.poisonStacks = [];
+    if (target.poisonStacks.length < attacker.specials.poison.maxStacks) {
+      target.poisonStacks.push({
+        dmgPct: attacker.specials.poison.dmgPct,
+        tickInterval: attacker.specials.poison.tickInterval,
+        lastTick: Date.now(),
+        appliedBy: attacker.side
+      });
+    }
+  }
+
+  // Burn effect (Imp attacks)
+  if (!isHero && attacker.specials && attacker.specials.burnOnHit && (targetInfo.type === 'unit' || targetInfo.type === 'hero')) {
+    if (!target.burnStacks) target.burnStacks = [];
+    target.burnStacks.push({
+      dmgPerSecond: attacker.specials.burnOnHit.dmgPerSecond,
+      lastTick: Date.now(),
+      appliedBy: attacker.side
+    });
+  }
+
+  // Chain lightning (Thrall — 10% chance)
+  if (!isHero && attacker.specials && attacker.specials.chainLightning && Math.random() < attacker.specials.chainLightning.chance) {
+    const clRange = attacker.specials.chainLightning.range;
+    const bounces = attacker.specials.chainLightning.bounces;
+    const clDmg = Math.max(1, Math.floor(dmg * 0.5));
+    const hit = new Set();
+    hit.add(targetInfo.id);
+    let lastPos = { x: target.x, y: target.y };
+
+    for (let b = 0; b < bounces; b++) {
+      let nearest = null;
+      let nearestDist = clRange;
+      for (const [, u] of room.units) {
+        if (u.side === attacker.side || u.hp <= 0 || hit.has(u.id)) continue;
+        const d = dist(lastPos, u);
+        if (d < nearestDist) { nearestDist = d; nearest = u; }
+      }
+      if (!nearest) break;
+      hit.add(nearest.id);
+      nearest.hp -= clDmg;
+      room.damageNumbers.push({ x: nearest.x, y: nearest.y - 20, value: clDmg, time: Date.now(), side: attacker.side });
+      room.effects.push({ type: 'chain_lightning', x: lastPos.x, y: lastPos.y, tx: nearest.x, ty: nearest.y, time: Date.now(), duration: 300 });
+      lastPos = { x: nearest.x, y: nearest.y };
+      if (nearest.hp <= 0) {
+        handleDeath(room, { id: nearest.id, type: 'unit' }, nearest, attacker);
+      }
+    }
   }
 
   if (target.hp <= 0) {
@@ -673,6 +788,44 @@ function handleDeath(room, targetInfo, target, attacker) {
         checkRankUp(killerUnit);
       }
     }
+    // Extra kill gold for units with killGoldBonus (e.g., Goblin +4g per kill)
+    if (!attacker.isHero && attacker.specials && attacker.specials.killGoldBonus) {
+      attackerOwner.gold += attacker.specials.killGoldBonus;
+    }
+
+    // Death specials on the dying unit
+    if (target.specials) {
+      // Goblin: give gold to killer's side on death
+      if (target.specials.deathGoldToEnemy) {
+        attackerOwner.gold += target.specials.deathGoldToEnemy;
+      }
+      // Goblin: drop slow pool on death
+      if (target.specials.deathSlowPool) {
+        room.slowPools.push({
+          x: target.x, y: target.y,
+          radius: target.specials.deathSlowPool.radius || 60,
+          slowPct: target.specials.deathSlowPool.slowPct,
+          expireTime: Date.now() + target.specials.deathSlowPool.duration,
+          side: target.side
+        });
+        room.effects.push({ type: 'slow_pool', x: target.x, y: target.y, time: Date.now(), duration: target.specials.deathSlowPool.duration });
+      }
+      // Void Walker: spawn imps on death
+      if (target.specials.onDeathSpawn) {
+        const defOwner = getPlayerData(room, target.side);
+        const charData = defOwner.character;
+        const spawnDef = charData.summonedUnits ? charData.summonedUnits[target.specials.onDeathSpawn.unitId] : null;
+        if (spawnDef) {
+          for (let i = 0; i < target.specials.onDeathSpawn.count; i++) {
+            const spawned = createSummonedUnit(spawnDef, target.side, target.characterId,
+              target.x + (Math.random() - 0.5) * 30, target.y + (Math.random() - 0.5) * 30,
+              target.lane, target.laneY);
+            room.units.set(spawned.id, spawned);
+          }
+        }
+      }
+    }
+
     room.units.delete(targetInfo.id);
     room.effects.push({ type: 'death', x: target.x, y: target.y, unitType: target.unitType, time: Date.now(), duration: 1000 });
   } else if (targetInfo.type === 'hero') {
@@ -1102,6 +1255,132 @@ function checkRankUp(unit) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Debuff Ticks (Poison, Burn)
+// ═══════════════════════════════════════════════════════════════════════
+function updateDebuffs(room, now) {
+  const toKill = [];
+
+  for (const [unitId, unit] of room.units) {
+    if (unit.hp <= 0) continue;
+
+    // Poison tick
+    if (unit.poisonStacks && unit.poisonStacks.length > 0) {
+      for (const stack of unit.poisonStacks) {
+        if (now - stack.lastTick >= stack.tickInterval) {
+          stack.lastTick = now;
+          const dmg = Math.max(1, Math.floor(unit.maxHp * stack.dmgPct));
+          unit.hp -= dmg;
+          room.damageNumbers.push({ x: unit.x, y: unit.y - 25, value: dmg, time: now, side: stack.appliedBy });
+        }
+      }
+      if (unit.hp <= 0) toKill.push({ id: unitId, unit, side: unit.poisonStacks[0].appliedBy });
+    }
+
+    // Burn tick
+    if (unit.hp > 0 && unit.burnStacks && unit.burnStacks.length > 0) {
+      let totalBurnDmg = 0;
+      for (const stack of unit.burnStacks) {
+        if (now - stack.lastTick >= 1000) {
+          stack.lastTick = now;
+          totalBurnDmg += stack.dmgPerSecond;
+        }
+      }
+      if (totalBurnDmg > 0) {
+        unit.hp -= totalBurnDmg;
+        room.damageNumbers.push({ x: unit.x, y: unit.y - 25, value: totalBurnDmg, time: now, side: unit.burnStacks[0].appliedBy });
+        if (unit.hp <= 0) toKill.push({ id: unitId, unit, side: unit.burnStacks[0].appliedBy });
+      }
+    }
+  }
+
+  // Handle debuff deaths
+  for (const { id, unit, side } of toKill) {
+    if (!room.units.has(id)) continue;
+    const pseudoAttacker = { side, isHero: false, id: -1, specials: null };
+    handleDeath(room, { id, type: 'unit' }, unit, pseudoAttacker);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Auras (Thrall heal, Void Walker attack speed reduction)
+// ═══════════════════════════════════════════════════════════════════════
+function updateAuras(room, now, dt) {
+  for (const [, unit] of room.units) {
+    if (unit.hp <= 0) continue;
+
+    // Thrall heal aura: heal allies 5% max HP every 2s
+    if (unit.specials && unit.specials.healAura) {
+      if (!unit.lastHealAuraTick) unit.lastHealAuraTick = 0;
+      if (now - unit.lastHealAuraTick >= (unit.specials.healAura.tickInterval || 2000)) {
+        unit.lastHealAuraTick = now;
+        const range = unit.specials.healAura.range;
+        const healPct = unit.specials.healAura.pct;
+        for (const [, ally] of room.units) {
+          if (ally.side !== unit.side || ally.hp <= 0 || ally.id === unit.id) continue;
+          if (ally.hp >= ally.maxHp) continue;
+          if (dist(unit, ally) <= range) {
+            const healAmt = Math.max(1, Math.floor(ally.maxHp * healPct));
+            ally.hp = Math.min(ally.maxHp, ally.hp + healAmt);
+          }
+        }
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Summoner Updates (Warlock void walker + spell shield)
+// ═══════════════════════════════════════════════════════════════════════
+function updateSummoners(room, now) {
+  for (const [, unit] of room.units) {
+    if (unit.hp <= 0 || !unit.specials || !unit.specials.isSummoner) continue;
+
+    // Summon void walker
+    if (unit.specials.summon && now >= unit.nextSummonTime) {
+      const charData = getPlayerData(room, unit.side).character;
+      const summonDef = charData.summonedUnits ? charData.summonedUnits[unit.specials.summon.unitId] : null;
+      if (summonDef) {
+        const vw = createSummonedUnit(summonDef, unit.side, unit.characterId,
+          unit.x + (unit.side === 'left' ? -20 : 20),
+          unit.laneY,
+          unit.lane, unit.laneY);
+        room.units.set(vw.id, vw);
+        room.effects.push({ type: 'summon', x: unit.x, y: unit.y, time: now, duration: 500 });
+      }
+      unit.nextSummonTime = now + unit.specials.summon.cooldown;
+    }
+
+    // Spell shield: place on nearest ally without a shield every 10s
+    if (unit.specials.spellShield) {
+      if (!unit.lastShieldTime) unit.lastShieldTime = 0;
+      if (now - unit.lastShieldTime >= unit.specials.spellShield.cooldown) {
+        const range = unit.specials.spellShield.range;
+        let bestAlly = null;
+        let bestDist = range;
+        for (const [, ally] of room.units) {
+          if (ally.side !== unit.side || ally.hp <= 0 || ally.id === unit.id) continue;
+          if (ally.spellShield && ally.spellShield > 0) continue;
+          const d = dist(unit, ally);
+          if (d < bestDist) { bestDist = d; bestAlly = ally; }
+        }
+        if (bestAlly) {
+          bestAlly.spellShield = 1;
+          unit.lastShieldTime = now;
+          room.effects.push({ type: 'spell_shield', x: bestAlly.x, y: bestAlly.y, time: now, duration: 500 });
+        }
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Slow Pool Updates
+// ═══════════════════════════════════════════════════════════════════════
+function updateSlowPools(room, now) {
+  room.slowPools = room.slowPools.filter(p => now < p.expireTime);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Path Clamping — keep ground units on cobblestone (home territory or lane)
 // ═══════════════════════════════════════════════════════════════════════
 function clampToPath(unit) {
@@ -1193,6 +1472,17 @@ function gameTick() {
         unit.hp = Math.min(unit.maxHp, unit.hp + charData.passive.value * dt);
       }
 
+      // Slow pool speed modifier
+      const origSpeed = unit.speed;
+      let speedMult = 1.0;
+      for (const pool of room.slowPools) {
+        if (pool.side === unit.side) continue; // pool only slows enemies
+        if (dist(unit, pool) <= pool.radius) {
+          speedMult = Math.min(speedMult, 1 - pool.slowPct);
+        }
+      }
+      unit.speed = Math.max(1, Math.floor(origSpeed * speedMult));
+
       // Movement zones — side-aware so units don't get stuck at enemy stairs
       const inOwnBase = (unit.side === 'left' && unit.x <= GC.P1_BASE_MAX_X) ||
                         (unit.side === 'right' && unit.x >= GC.P2_BASE_MIN_X);
@@ -1202,12 +1492,24 @@ function gameTick() {
       const laneHalfW = GC.LANE_WIDTH / 2 + 30;
       const onLaneY = Math.abs(unit.y - unit.laneY) < laneHalfW;
 
-      // Outpost attack speed buff
+      // Outpost attack speed buff + Void Walker aura
       const buffs = getOutpostBuffs(room, unit.side);
-      const effectiveAS = Math.floor(unit.attackSpeed * buffs.attackSpeedMult);
+      let asMult = buffs.attackSpeedMult;
+      // Check for enemy void walker attack speed aura
+      for (const [, other] of room.units) {
+        if (other.side === unit.side || other.hp <= 0) continue;
+        if (other.specials && other.specials.attackSpeedAura && dist(unit, other) <= other.specials.attackSpeedAura.range) {
+          asMult *= (1 + other.specials.attackSpeedAura.reduction);
+          break; // Only apply once
+        }
+      }
+      const effectiveAS = Math.floor(unit.attackSpeed * asMult);
 
-      // Find the nearest reachable enemy
-      const found = findTarget(room, unit);
+      // Non-combat units (e.g., Warlock) don't target enemies
+      let found = null;
+      if (unit.damage > 0) {
+        found = findTarget(room, unit);
+      }
       if (found) {
         unit.targetId = found.id;
         unit.targetType = found.type;
@@ -1315,6 +1617,9 @@ function gameTick() {
         unit.y = clamp(unit.y, 20, GC.MAP_HEIGHT - 20);
         clampToPath(unit);
       }
+
+      // Restore original speed after slow pool modifier
+      unit.speed = origSpeed;
     }
 
     for (const id of unitsToRemove) room.units.delete(id);
@@ -1385,6 +1690,18 @@ function gameTick() {
       clampToPath(u);
     }
 
+    // ─── Debuff Ticks (Poison, Burn) ──────────────────────────────
+    updateDebuffs(room, now);
+
+    // ─── Auras (Thrall heal) ──────────────────────────────────────
+    updateAuras(room, now, dt);
+
+    // ─── Summoner Updates (Warlock) ───────────────────────────────
+    updateSummoners(room, now);
+
+    // ─── Slow Pool Cleanup ────────────────────────────────────────
+    updateSlowPools(room, now);
+
     // ─── Clean up ────────────────────────────────────────────────
     room.projectiles = room.projectiles.filter(p => now - p.time < 400);
     room.damageNumbers = room.damageNumbers.filter(d => now - d.time < 1200);
@@ -1418,7 +1735,11 @@ function serializeState(room, now, playerSide) {
       attackSpeed: Math.floor(u.attackSpeed * buffs.attackSpeedMult),
       xp: u.xp, rank: u.rank,
       xpToNext: u.rank < 3 ? RANK_THRESHOLDS[u.rank] : RANK_THRESHOLDS[2],
-      unitLevel: u.unitLevel || 1
+      unitLevel: u.unitLevel || 1,
+      isSummoned: u.isSummoned || false,
+      spellShield: u.spellShield || 0,
+      poisoned: (u.poisonStacks && u.poisonStacks.length > 0) ? u.poisonStacks.length : 0,
+      burning: (u.burnStacks && u.burnStacks.length > 0) ? u.burnStacks.length : 0
     });
   }
 
@@ -1491,6 +1812,7 @@ function serializeState(room, now, playerSide) {
     })),
     damageNumbers: room.damageNumbers.map(d => ({ x: d.x, y: d.y, value: d.value, time: d.time })),
     effects: room.effects,
+    slowPools: room.slowPools.map(p => ({ x: p.x, y: p.y, radius: p.radius, side: p.side, expireTime: p.expireTime })),
     outposts: {
       north: { x: room.outposts.north.x, y: room.outposts.north.y, controlledBy: room.outposts.north.controlledBy, captureProgress: { ...room.outposts.north.captureProgress } },
       south: { x: room.outposts.south.x, y: room.outposts.south.y, controlledBy: room.outposts.south.controlledBy, captureProgress: { ...room.outposts.south.captureProgress } }

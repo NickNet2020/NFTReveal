@@ -22,7 +22,8 @@ const Renderer = (() => {
     iron_admiral:   { primary: '#1a8a7a', secondary: '#2ecc71', dark: '#0e524a', banner: '#7ddfb8' },
     golden_lord:    { primary: '#d4a017', secondary: '#f1c40f', dark: '#7d6010', banner: '#fae68c' },
     shadow_priest:  { primary: '#8e44ad', secondary: '#bb6bd9', dark: '#5b2c6f', banner: '#d4a5e8' },
-    forest_warden:  { primary: '#27ae60', secondary: '#58d68d', dark: '#1a7a42', banner: '#a3e4be' }
+    forest_warden:  { primary: '#27ae60', secondary: '#58d68d', dark: '#1a7a42', banner: '#a3e4be' },
+    orc_warchief:   { primary: '#5a7a2e', secondary: '#8fbc3b', dark: '#344a1a', banner: '#b5d76e' }
   };
 
   // Unit type visual configs

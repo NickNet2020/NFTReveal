@@ -587,6 +587,120 @@ const CHARACTERS = {
     ],
     l3Eligible: ['grove', 'beastiary'],
     general: { name: 'Grove General', description: 'Forest war commander' }
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 7. THE ORCS - Savage horde, fast spawning, unique unit abilities
+  // ─────────────────────────────────────────────────────────────────────
+  orc_warchief: {
+    id: 'orc_warchief',
+    name: 'The Orcs',
+    title: 'Horde of the Broken Lands',
+    description: 'A savage horde from the broken wastelands. Orc buildings spawn units faster than any other faction, overwhelming enemies with sheer numbers and brutal special abilities.',
+    lore: 'From the shattered plains they came — half-breeds, goblins, trolls, and dark warlocks united under one war banner.',
+    color: '#5a7a2e',
+    accentColor: '#8fbc3b',
+    darkColor: '#344a1a',
+    passive: {
+      name: 'War Drums',
+      description: 'All buildings spawn units 15% faster',
+      type: 'spawn_speed',
+      value: 0.15
+    },
+    hero: {
+      id: 'warchief', name: 'The Warchief', type: 'infantry',
+      hp: 850, damage: 40, speed: 50, range: 42, attackSpeed: 1100,
+      description: 'A towering orc chieftain who crushes foes with a massive war hammer'
+    },
+    buildings: [
+      {
+        id: 'war_pit', name: 'War Pit', cost: 100, hp: 450, income: 2,
+        spawnInterval: 4900, unit: 'half_orc',
+        description: 'Breeds fearsome half-orc warriors with unnatural resilience.',
+        levelNames: ['War Pit', 'Blood Pit', 'Pit of Carnage']
+      },
+      {
+        id: 'goblin_den', name: 'Goblin Den', cost: 130, hp: 350, income: 2,
+        spawnInterval: 5880, unit: 'goblin',
+        description: 'Spawns pairs of crafty goblins who fight dirty for coin.',
+        levelNames: ['Goblin Den', 'Goblin Warren', 'Goblin Undercity']
+      },
+      {
+        id: 'troll_cave', name: 'Troll Cave', cost: 150, hp: 400, income: 2,
+        spawnInterval: 6370, unit: 'troll',
+        description: 'Houses venomous trolls who hurl poisoned javelins.',
+        levelNames: ['Troll Cave', 'Venom Grotto', 'Plague Cavern']
+      },
+      {
+        id: 'thrall_sanctum', name: 'Thrall Sanctum', cost: 280, hp: 600, income: 3,
+        spawnInterval: 10780, unit: 'thrall',
+        description: 'A dark temple where mighty thralls channel storm and healing magic.',
+        levelNames: ['Thrall Sanctum', 'Storm Temple', 'Sanctum of Thunder']
+      },
+      {
+        id: 'warlock_spire', name: 'Warlock Spire', cost: 380, hp: 420, income: 4,
+        spawnInterval: 14700, unit: 'warlock',
+        description: 'A tower of dark sorcery where warlocks summon demons from the void.',
+        levelNames: ['Warlock Spire', 'Void Citadel', 'Tower of Damnation']
+      },
+      {
+        id: 'gold_mine', name: 'Gold Mine', cost: 200, hp: 300, income: 10,
+        description: 'Boosts your income by +10 gold every 5 seconds.'
+      },
+      {
+        id: 'orc_watchtower', name: 'Orc Watchtower', cost: 140, hp: 530, income: 1,
+        isTower: true, towerDamage: 22, towerRange: 260, towerAttackSpeed: 2000,
+        description: 'A crude but effective watchtower that hurls boulders at intruders.'
+      }
+    ],
+    units: [
+      {
+        id: 'half_orc', name: 'Half Orc', type: 'infantry',
+        hp: 65, damage: 10, speed: 38, range: 28, attackSpeed: 1400,
+        description: 'Savage half-breed warriors who heal from the blood they spill',
+        specials: { lifesteal: 0.10 }
+      },
+      {
+        id: 'goblin', name: 'Goblin', type: 'infantry',
+        hp: 30, damage: 6, speed: 50, range: 24, attackSpeed: 950,
+        description: 'Sneaky goblins that fight in pairs and profit from killing',
+        specials: { doubleSpawn: true, killGoldBonus: 4, deathGoldToEnemy: 2, deathSlowPool: { slowPct: 0.30, duration: 3000, radius: 60 } }
+      },
+      {
+        id: 'troll', name: 'Troll Javelineer', type: 'ranged',
+        hp: 28, damage: 5, speed: 32, range: 180, attackSpeed: 2400,
+        description: 'Fast-attacking trolls who apply deadly venom to their targets',
+        specials: { poison: { maxStacks: 5, dmgPct: 0.03, tickInterval: 2000 } }
+      },
+      {
+        id: 'thrall', name: 'Thrall', type: 'siege',
+        hp: 300, damage: 22, speed: 14, range: 40, attackSpeed: 3000,
+        description: 'Mighty orc shamans who call lightning and heal their allies',
+        specials: { chainLightning: { chance: 0.10, bounces: 2, range: 120 }, healAura: { pct: 0.05, range: 150, tickInterval: 2000 } }
+      },
+      {
+        id: 'warlock', name: 'Warlock', type: 'flying',
+        hp: 55, damage: 0, speed: 35, range: 0, attackSpeed: 0,
+        description: 'Dark summoner who calls void walkers and shields allies',
+        specials: { isSummoner: true, summon: { unitId: 'void_walker', cooldown: 45000, firstSummonMax: 10000 }, spellShield: { cooldown: 10000, range: 150 } }
+      }
+    ],
+    summonedUnits: {
+      void_walker: {
+        id: 'void_walker', name: 'Void Walker', type: 'infantry',
+        hp: 200, damage: 18, speed: 25, range: 35, attackSpeed: 2200,
+        description: 'Summoned demon with a slowing aura that spawns imps on death',
+        specials: { attackSpeedAura: { reduction: 0.20, range: 100 }, onDeathSpawn: { unitId: 'imp', count: 2 } }
+      },
+      imp: {
+        id: 'imp', name: 'Imp', type: 'infantry',
+        hp: 15, damage: 4, speed: 55, range: 28, attackSpeed: 800,
+        description: 'Tiny demon whose attacks inflict stacking fire damage',
+        specials: { burnOnHit: { dmgPerSecond: 2 } }
+      }
+    },
+    l3Eligible: ['war_pit', 'thrall_sanctum'],
+    general: { name: 'Orc General', description: 'Orc war commander' }
   }
 };
 
