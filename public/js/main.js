@@ -479,9 +479,9 @@
       const newShots = projs - prevProjectileCount;
       for (let i = 0; i < Math.min(newShots, 3); i++) {
         setTimeout(() => {
-          // Ranged/tower shots vs melee
-          const p = data.projectiles[i];
+          const p = data.projectiles[data.projectiles.length - 1 - i];
           if (p && p.isTower) AudioManager.playTowerShot();
+          else if (p && p.attackerType === 'flying') AudioManager.playFlyingAttack();
           else AudioManager.playArrowFire();
         }, i * 40);
       }
@@ -491,10 +491,15 @@
     // Melee clash: fire when damage numbers appear (non-projectile combat)
     const dmgNums = data.damageNumbers || [];
     if (dmgNums.length > 0) {
-      // Sample a few recent damage numbers to play sword sounds
       const recent = dmgNums.filter(d => Date.now() - d.time < 100);
       if (recent.length > 0) {
-        AudioManager.playSwordClash();
+        // Pick sound based on the attacker's unit type
+        const sample = recent[0];
+        const aType = sample.attackerType || 'infantry';
+        if (aType === 'cavalry') AudioManager.playCavalryAttack();
+        else if (aType === 'siege') AudioManager.playSiegeAttack();
+        else if (aType === 'flying') AudioManager.playFlyingAttack();
+        else AudioManager.playInfantryAttack();
       }
     }
 

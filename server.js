@@ -637,13 +637,14 @@ function dealDamage(room, attacker, targetInfo, isHero) {
 
   target.hp -= dmg;
 
-  room.damageNumbers.push({ x: target.x, y: target.y - 20, value: dmg, time: Date.now(), side: attacker.side });
+  room.damageNumbers.push({ x: target.x, y: target.y - 20, value: dmg, time: Date.now(), side: attacker.side, attackerType: attacker.unitType || 'infantry' });
 
   // Projectile for ranged
   if (attacker.unitType === 'ranged' || attacker.unitType === 'flying') {
     room.projectiles.push({
       x: attacker.x, y: attacker.y, tx: target.x, ty: target.y,
-      time: Date.now(), side: attacker.side, characterId: attacker.characterId
+      time: Date.now(), side: attacker.side, characterId: attacker.characterId,
+      attackerType: attacker.unitType
     });
   }
 
@@ -1319,15 +1320,21 @@ function gameTick() {
     for (const id of unitsToRemove) room.units.delete(id);
 
     // ─── Unit Collision Separation ────────────────────────────────
-    const UNIT_RADIUS = { infantry: 12, ranged: 11, cavalry: 16, siege: 20, flying: 0 };
-    const unitArr = [];
+    // Ground units collide with ground, flying units collide with flying only
+    const UNIT_RADIUS = { infantry: 12, ranged: 11, cavalry: 16, siege: 20, flying: 14 };
+    const groundArr = [];
+    const flyingArr = [];
     for (const [, u] of room.units) {
-      if (u.hp > 0 && u.unitType !== 'flying') unitArr.push(u);
+      if (u.hp <= 0) continue;
+      if (u.unitType === 'flying') flyingArr.push(u);
+      else groundArr.push(u);
     }
-    for (let i = 0; i < unitArr.length; i++) {
-      for (let j = i + 1; j < unitArr.length; j++) {
-        const a = unitArr[i];
-        const b = unitArr[j];
+
+    // Ground-vs-ground collision
+    for (let i = 0; i < groundArr.length; i++) {
+      for (let j = i + 1; j < groundArr.length; j++) {
+        const a = groundArr[i];
+        const b = groundArr[j];
         const minD = (UNIT_RADIUS[a.unitType] || 12) + (UNIT_RADIUS[b.unitType] || 12);
         const dx = b.x - a.x;
         const dy = b.y - a.y;
@@ -1348,8 +1355,33 @@ function gameTick() {
       }
     }
 
-    // Re-clamp to cobblestone paths after collision separation
-    for (const u of unitArr) {
+    // Flying-vs-flying collision (they phase through ground but not each other)
+    for (let i = 0; i < flyingArr.length; i++) {
+      for (let j = i + 1; j < flyingArr.length; j++) {
+        const a = flyingArr[i];
+        const b = flyingArr[j];
+        const minD = UNIT_RADIUS.flying * 2;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < minD && d > 0.1) {
+          const overlap = (minD - d) / 2;
+          const nx = dx / d;
+          const ny = dy / d;
+          a.x -= nx * overlap * 0.5;
+          a.y -= ny * overlap * 0.5;
+          b.x += nx * overlap * 0.5;
+          b.y += ny * overlap * 0.5;
+          a.x = clamp(a.x, 20, GC.MAP_WIDTH - 20);
+          a.y = clamp(a.y, 20, GC.MAP_HEIGHT - 20);
+          b.x = clamp(b.x, 20, GC.MAP_WIDTH - 20);
+          b.y = clamp(b.y, 20, GC.MAP_HEIGHT - 20);
+        }
+      }
+    }
+
+    // Re-clamp to cobblestone paths after collision separation (ground only)
+    for (const u of groundArr) {
       clampToPath(u);
     }
 

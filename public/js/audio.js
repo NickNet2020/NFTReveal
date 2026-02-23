@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════
 // Castle Fight - Procedural Audio System (Web Audio API)
-// Enhanced medieval sounds with battle cries, improved arrows, coin chimes
+// Unit-type-specific combat sounds, cha-ching gold, medieval soundtrack
 // ═══════════════════════════════════════════════════════════════════════
 
 const AudioManager = (() => {
@@ -41,7 +41,8 @@ const AudioManager = (() => {
 
   function isEnabled() { return enabled; }
 
-  // Utility: play a short noise burst with bandpass filter
+  // ─── Utility helpers ───────────────────────────────────────────
+
   function noiseBurst(duration, freq, Q, gainVal, dest) {
     if (!ctx || !enabled) return;
     const bufSize = Math.floor(ctx.sampleRate * duration);
@@ -63,7 +64,6 @@ const AudioManager = (() => {
     src.start();
   }
 
-  // Utility: play a tone with envelope
   function playTone(freq, duration, type, gainVal, dest) {
     if (!ctx || !enabled) return;
     const osc = ctx.createOscillator();
@@ -78,7 +78,6 @@ const AudioManager = (() => {
     osc.stop(ctx.currentTime + duration);
   }
 
-  // Utility: frequency sweep (for whoosh effects)
   function freqSweep(startFreq, endFreq, duration, type, gainVal, dest) {
     if (!ctx || !enabled) return;
     const osc = ctx.createOscillator();
@@ -94,7 +93,6 @@ const AudioManager = (() => {
     osc.stop(ctx.currentTime + duration);
   }
 
-  // Utility: highpass noise burst (for impact/thud sounds)
   function impactNoise(duration, freq, gainVal, dest) {
     if (!ctx || !enabled) return;
     const bufSize = Math.floor(ctx.sampleRate * duration);
@@ -116,30 +114,138 @@ const AudioManager = (() => {
     src.start();
   }
 
-  // ─── Sound Effects ──────────────────────────────────────────────
+  // ─── Combat Sounds (by unit type) ──────────────────────────────
 
-  function playSwordClash() {
+  // Infantry: deep small grunts with rare sword clash
+  function playInfantryAttack() {
     if (!ctx || !enabled) return;
-    // Metallic ring: high-frequency noise with resonance
-    noiseBurst(0.08, 3500 + Math.random() * 2500, 5, 0.35);
-    // Metal impact tone
-    playTone(900 + Math.random() * 600, 0.06, 'sawtooth', 0.12);
-    // Secondary clang
-    setTimeout(() => {
-      noiseBurst(0.04, 4000 + Math.random() * 1000, 8, 0.15);
-    }, 20);
-    // Low thud of bodies colliding
-    playTone(120 + Math.random() * 40, 0.08, 'sine', 0.06);
+    // Low-pitched grunt: short sawtooth burst with formant filter
+    const baseFreq = 90 + Math.random() * 40;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.7, ctx.currentTime + 0.1);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 400;
+    filter.Q.value = 2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0, ctx.currentTime);
+    g.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    osc.connect(filter);
+    filter.connect(g);
+    g.connect(sfxGain);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12);
+
+    // Low thud of melee impact
+    playTone(60 + Math.random() * 30, 0.06, 'sine', 0.06);
+
+    // Rare sword clash (1 in 8 chance)
+    if (Math.random() < 0.125) {
+      setTimeout(() => {
+        noiseBurst(0.06, 3500 + Math.random() * 2000, 6, 0.15);
+        playTone(800 + Math.random() * 400, 0.04, 'sawtooth', 0.06);
+      }, 30);
+    }
   }
 
+  // Cavalry: spear hitting metal — sharp metallic clang
+  function playCavalryAttack() {
+    if (!ctx || !enabled) return;
+    // Sharp metallic impact: high-pitched resonant ping
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1200 + Math.random() * 600, t);
+    osc.frequency.exponentialRampToValueAtTime(400, t + 0.15);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    osc.connect(g);
+    g.connect(sfxGain);
+    osc.start(t);
+    osc.stop(t + 0.15);
+
+    // Metal-on-metal noise burst
+    noiseBurst(0.05, 4000 + Math.random() * 2000, 8, 0.2);
+
+    // Heavy impact thud (horse momentum)
+    playTone(80 + Math.random() * 30, 0.1, 'sine', 0.08);
+  }
+
+  // Siege: heavy crushing impact
+  function playSiegeAttack() {
+    if (!ctx || !enabled) return;
+    // Deep thud
+    playTone(50 + Math.random() * 20, 0.2, 'sine', 0.15);
+    // Wood/stone crunch
+    noiseBurst(0.1, 600, 1.5, 0.2);
+    setTimeout(() => {
+      noiseBurst(0.08, 300, 1, 0.1);
+    }, 50);
+  }
+
+  // Flying (dragons/eagles): growl/screech + fire breath
+  function playFlyingAttack() {
+    if (!ctx || !enabled) return;
+    const r = Math.random();
+    if (r < 0.5) {
+      // Growl/screech: sawtooth sweep up then down
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(200 + Math.random() * 100, t);
+      osc.frequency.linearRampToValueAtTime(500 + Math.random() * 200, t + 0.06);
+      osc.frequency.exponentialRampToValueAtTime(150, t + 0.2);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 800;
+      filter.Q.value = 3;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0, t);
+      g.gain.linearRampToValueAtTime(0.12, t + 0.02);
+      g.gain.setValueAtTime(0.12, t + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      osc.connect(filter);
+      filter.connect(g);
+      g.connect(sfxGain);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    } else {
+      // Fire breath / peck: noise burst with sharp attack
+      const t = ctx.currentTime;
+      const bufSize = Math.floor(ctx.sampleRate * 0.15);
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(2000, t);
+      filter.frequency.exponentialRampToValueAtTime(600, t + 0.15);
+      filter.Q.value = 1.5;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.15, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+      src.connect(filter);
+      filter.connect(g);
+      g.connect(sfxGain);
+      src.start(t);
+
+      // Accompanying low rumble (fire)
+      playTone(80 + Math.random() * 40, 0.12, 'sawtooth', 0.06);
+    }
+  }
+
+  // Ranged/Arrow: low-pitched whoosh soaring through the air
   function playArrowFire() {
     if (!ctx || !enabled) return;
-    // Arrow whoosh: frequency sweep from high to low
-    freqSweep(2000 + Math.random() * 500, 400, 0.15, 'sine', 0.06);
-    // Bowstring snap: quick high-freq noise
-    noiseBurst(0.03, 6000 + Math.random() * 2000, 8, 0.15);
-    // Air rush: filtered noise swooping down
-    const bufSize = Math.floor(ctx.sampleRate * 0.18);
+    const t = ctx.currentTime;
+    // Low-pitched whoosh: swept filtered noise
+    const bufSize = Math.floor(ctx.sampleRate * 0.25);
     const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
@@ -147,34 +253,42 @@ const AudioManager = (() => {
     src.buffer = buf;
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(4000, ctx.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.15);
-    filter.Q.value = 2;
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.setValueAtTime(0.14, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    // Low pitch sweep: start at mid, sweep down
+    filter.frequency.setValueAtTime(800 + Math.random() * 200, t);
+    filter.frequency.exponentialRampToValueAtTime(200, t + 0.25);
+    filter.Q.value = 1.5;
+    const g = ctx.createGain();
+    // Fade in slightly then out — soaring effect
+    g.gain.setValueAtTime(0.02, t);
+    g.gain.linearRampToValueAtTime(0.14, t + 0.04);
+    g.gain.setValueAtTime(0.14, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
     src.connect(filter);
-    filter.connect(gain);
-    gain.connect(sfxGain);
-    src.start();
-    // Distant thwack on impact
-    setTimeout(() => {
-      impactNoise(0.04, 1500, 0.08);
-      playTone(300 + Math.random() * 100, 0.04, 'triangle', 0.04);
-    }, 80 + Math.random() * 40);
+    filter.connect(g);
+    g.connect(sfxGain);
+    src.start(t);
+
+    // Subtle low-frequency body to the whoosh
+    freqSweep(300 + Math.random() * 100, 100, 0.2, 'sine', 0.04);
   }
+
+  // Generic melee (fallback — used for heroes, etc.)
+  function playSwordClash() {
+    if (!ctx || !enabled) return;
+    noiseBurst(0.08, 3500 + Math.random() * 2500, 5, 0.25);
+    playTone(900 + Math.random() * 600, 0.06, 'sawtooth', 0.1);
+    playTone(120 + Math.random() * 40, 0.08, 'sine', 0.05);
+  }
+
+  // ─── Other Sound Effects ───────────────────────────────────────
 
   function playBuildingPlace() {
     if (!ctx || !enabled) return;
-    // Heavy stone placement thud
     playTone(100, 0.4, 'sine', 0.25);
     noiseBurst(0.2, 300, 1.5, 0.2);
-    // Wooden creak
     setTimeout(() => {
       freqSweep(180, 220, 0.15, 'sawtooth', 0.06);
     }, 80);
-    // Settling stones
     setTimeout(() => {
       noiseBurst(0.12, 500, 2, 0.1);
       playTone(160, 0.2, 'sine', 0.1);
@@ -183,12 +297,9 @@ const AudioManager = (() => {
 
   function playBuildingDestroy() {
     if (!ctx || !enabled) return;
-    // Massive crash
     noiseBurst(0.6, 500, 0.8, 0.5);
     playTone(60, 0.8, 'sawtooth', 0.3);
-    // Crumbling
     setTimeout(() => noiseBurst(0.4, 250, 1, 0.35), 100);
-    // Debris settling
     setTimeout(() => {
       noiseBurst(0.3, 800, 2, 0.15);
       playTone(50, 0.5, 'sine', 0.1);
@@ -197,19 +308,15 @@ const AudioManager = (() => {
 
   function playUnitDeath() {
     if (!ctx || !enabled) return;
-    // Body fall thud
     noiseBurst(0.08, 1200, 2, 0.15);
     playTone(250, 0.1, 'sawtooth', 0.08);
-    // Armor clatter
     setTimeout(() => noiseBurst(0.06, 3000, 4, 0.06), 40);
 
-    // 1/100 chance for death cry — a vocalized wail
+    // 1/100 chance for death cry
     if (Math.random() < 0.01) {
       setTimeout(() => {
         if (!ctx || !enabled) return;
-        // Simulate a human cry with multiple formant-like tones
         const baseFreq = 180 + Math.random() * 120;
-        // Fundamental cry
         const osc1 = ctx.createOscillator();
         osc1.type = 'sawtooth';
         osc1.frequency.setValueAtTime(baseFreq * 1.5, ctx.currentTime);
@@ -224,7 +331,6 @@ const AudioManager = (() => {
         osc1.start();
         osc1.stop(ctx.currentTime + 0.5);
 
-        // Second harmonic (vocal quality)
         const osc2 = ctx.createOscillator();
         osc2.type = 'triangle';
         osc2.frequency.setValueAtTime(baseFreq * 2.5, ctx.currentTime);
@@ -238,66 +344,91 @@ const AudioManager = (() => {
         osc2.start();
         osc2.stop(ctx.currentTime + 0.4);
 
-        // Breathy noise layer
         noiseBurst(0.35, baseFreq * 3, 3, 0.06);
       }, 60);
     }
   }
 
+  // Gold income: cha-ching cash register sound
   function playGoldGain() {
     if (!ctx || !enabled) return;
-    // Subtle coin chime — very quiet metallic clink
-    // First coin
     const t = ctx.currentTime;
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'sine';
-    osc1.frequency.value = 2800;
-    const g1 = ctx.createGain();
-    g1.gain.setValueAtTime(0.03, t);
-    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-    osc1.connect(g1);
-    g1.connect(sfxGain);
-    osc1.start(t);
-    osc1.stop(t + 0.08);
 
-    // Second coin (slightly different pitch, delayed)
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'sine';
-    osc2.frequency.value = 3200;
-    const g2 = ctx.createGain();
-    g2.gain.setValueAtTime(0.025, t + 0.05);
-    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-    osc2.connect(g2);
-    g2.connect(sfxGain);
-    osc2.start(t + 0.05);
-    osc2.stop(t + 0.12);
+    // Initial bell ding (cash register bell)
+    const bell = ctx.createOscillator();
+    bell.type = 'sine';
+    bell.frequency.value = 3200;
+    const bellG = ctx.createGain();
+    bellG.gain.setValueAtTime(0.06, t);
+    bellG.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    bell.connect(bellG);
+    bellG.connect(sfxGain);
+    bell.start(t);
+    bell.stop(t + 0.15);
 
-    // Tiny metallic shimmer noise
-    const bufSize = Math.floor(ctx.sampleRate * 0.06);
-    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < bufSize; i++) d[i] = Math.random() * 2 - 1;
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = 5000;
-    filter.Q.value = 10;
-    const g3 = ctx.createGain();
-    g3.gain.setValueAtTime(0.02, t + 0.03);
-    g3.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-    src.connect(filter);
-    filter.connect(g3);
-    g3.connect(sfxGain);
-    src.start(t + 0.03);
+    // Second harmonic bell
+    const bell2 = ctx.createOscillator();
+    bell2.type = 'sine';
+    bell2.frequency.value = 4800;
+    const bellG2 = ctx.createGain();
+    bellG2.gain.setValueAtTime(0.03, t);
+    bellG2.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    bell2.connect(bellG2);
+    bellG2.connect(sfxGain);
+    bell2.start(t);
+    bell2.stop(t + 0.1);
+
+    // Mechanical clack (the drawer opening) — short noise click
+    const clackSize = Math.floor(ctx.sampleRate * 0.02);
+    const clackBuf = ctx.createBuffer(1, clackSize, ctx.sampleRate);
+    const clackData = clackBuf.getChannelData(0);
+    for (let i = 0; i < clackSize; i++) clackData[i] = Math.random() * 2 - 1;
+    const clackSrc = ctx.createBufferSource();
+    clackSrc.buffer = clackBuf;
+    const clackFilter = ctx.createBiquadFilter();
+    clackFilter.type = 'highpass';
+    clackFilter.frequency.value = 3000;
+    const clackG = ctx.createGain();
+    clackG.gain.setValueAtTime(0.05, t + 0.01);
+    clackG.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    clackSrc.connect(clackFilter);
+    clackFilter.connect(clackG);
+    clackG.connect(sfxGain);
+    clackSrc.start(t + 0.01);
+
+    // Coin jingle follow-up
+    setTimeout(() => {
+      if (!ctx || !enabled) return;
+      const t2 = ctx.currentTime;
+      // Two quick coin clinks
+      const c1 = ctx.createOscillator();
+      c1.type = 'sine';
+      c1.frequency.value = 5000;
+      const cg1 = ctx.createGain();
+      cg1.gain.setValueAtTime(0.02, t2);
+      cg1.gain.exponentialRampToValueAtTime(0.001, t2 + 0.04);
+      c1.connect(cg1);
+      cg1.connect(sfxGain);
+      c1.start(t2);
+      c1.stop(t2 + 0.04);
+
+      const c2 = ctx.createOscillator();
+      c2.type = 'sine';
+      c2.frequency.value = 5800;
+      const cg2 = ctx.createGain();
+      cg2.gain.setValueAtTime(0.015, t2 + 0.03);
+      cg2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.06);
+      c2.connect(cg2);
+      cg2.connect(sfxGain);
+      c2.start(t2 + 0.03);
+      c2.stop(t2 + 0.06);
+    }, 60);
   }
 
   function playHeroAttack() {
     if (!ctx || !enabled) return;
-    // Heavy weapon swing
     freqSweep(600, 200, 0.12, 'sawtooth', 0.15);
     noiseBurst(0.1, 2500, 3, 0.4);
-    // Impact
     setTimeout(() => {
       playTone(150, 0.15, 'sine', 0.2);
       noiseBurst(0.08, 1500, 2, 0.2);
@@ -306,16 +437,13 @@ const AudioManager = (() => {
 
   function playRescueStrike() {
     if (!ctx || !enabled) return;
-    // Deep rumble buildup
     playTone(80, 1.2, 'sine', 0.35);
     freqSweep(60, 200, 0.8, 'sawtooth', 0.2);
-    // Massive shockwave
     noiseBurst(1.0, 800, 0.8, 0.5);
     setTimeout(() => {
       playTone(120, 0.8, 'sine', 0.3);
       noiseBurst(0.5, 400, 1, 0.3);
     }, 200);
-    // Echoing aftermath
     setTimeout(() => {
       noiseBurst(0.6, 300, 1.5, 0.15);
       playTone(60, 1.0, 'sine', 0.1);
@@ -324,26 +452,20 @@ const AudioManager = (() => {
 
   function playTowerShot() {
     if (!ctx || !enabled) return;
-    // Mechanical launch
     noiseBurst(0.04, 3000, 6, 0.15);
-    // Projectile whoosh
     freqSweep(800 + Math.random() * 200, 400, 0.12, 'triangle', 0.1);
-    // String tension release
     playTone(500 + Math.random() * 200, 0.06, 'sawtooth', 0.06);
   }
 
   function playHeroDeath() {
     if (!ctx || !enabled) return;
-    // Dramatic death
     playTone(250, 0.6, 'sawtooth', 0.3);
     playTone(180, 0.8, 'sine', 0.2);
     noiseBurst(0.5, 700, 1, 0.25);
-    // Death wail
     setTimeout(() => {
       freqSweep(350, 120, 0.6, 'sawtooth', 0.15);
       noiseBurst(0.3, 1200, 2, 0.1);
     }, 200);
-    // Heavy armor fall
     setTimeout(() => {
       playTone(80, 0.5, 'sine', 0.15);
       noiseBurst(0.2, 2000, 3, 0.1);
@@ -352,15 +474,13 @@ const AudioManager = (() => {
 
   function playVictory() {
     if (!ctx || !enabled) return;
-    // Triumphant fanfare
-    const notes = [392, 494, 587, 784, 988]; // G B D G B
+    const notes = [392, 494, 587, 784, 988];
     notes.forEach((n, i) => {
       setTimeout(() => {
         playTone(n, 0.5, 'sine', 0.2);
-        playTone(n * 0.5, 0.5, 'sine', 0.08); // octave below
+        playTone(n * 0.5, 0.5, 'sine', 0.08);
       }, i * 180);
     });
-    // Final chord
     setTimeout(() => {
       playTone(784, 1.0, 'sine', 0.2);
       playTone(988, 1.0, 'sine', 0.15);
@@ -370,7 +490,6 @@ const AudioManager = (() => {
 
   function playDefeat() {
     if (!ctx || !enabled) return;
-    // Mournful descending tones
     const notes = [350, 300, 260, 220, 175];
     notes.forEach((n, i) => {
       setTimeout(() => {
@@ -378,7 +497,6 @@ const AudioManager = (() => {
         playTone(n * 0.5, 0.6, 'sine', 0.06);
       }, i * 250);
     });
-    // Final low drone
     setTimeout(() => {
       playTone(100, 1.5, 'sine', 0.1);
       noiseBurst(0.8, 200, 1, 0.05);
@@ -390,7 +508,6 @@ const AudioManager = (() => {
     if (!ctx || !enabled) return;
     stopMusic();
 
-    // === Layer 1: Deep drone foundation ===
     // Root drone (D2 = 73.4 Hz)
     const drone = ctx.createOscillator();
     drone.type = 'sine';
@@ -413,10 +530,10 @@ const AudioManager = (() => {
     drone2.start();
     musicNodes.push(drone2, droneGain2);
 
-    // Octave drone with slight detune for richness
+    // Detuned drone for phasing richness
     const drone3 = ctx.createOscillator();
     drone3.type = 'sine';
-    drone3.frequency.value = 74.2; // slightly detuned for phasing
+    drone3.frequency.value = 74.2;
     const droneGain3 = ctx.createGain();
     droneGain3.gain.value = 0.06;
     drone3.connect(droneGain3);
@@ -424,7 +541,7 @@ const AudioManager = (() => {
     drone3.start();
     musicNodes.push(drone3, droneGain3);
 
-    // === Layer 2: Ambient wind ===
+    // Ambient wind
     const windBuf = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate);
     const windData = windBuf.getChannelData(0);
     for (let i = 0; i < windData.length; i++) windData[i] = Math.random() * 2 - 1;
@@ -443,7 +560,6 @@ const AudioManager = (() => {
     windSrc.start();
     musicNodes.push(windSrc, windFilter, windGain);
 
-    // Wind modulation (slow breathing effect)
     const windLfo = ctx.createOscillator();
     windLfo.type = 'sine';
     windLfo.frequency.value = 0.08;
@@ -454,7 +570,6 @@ const AudioManager = (() => {
     windLfo.start();
     musicNodes.push(windLfo, windLfoGain);
 
-    // Wind volume swell
     const windVolLfo = ctx.createOscillator();
     windVolLfo.type = 'sine';
     windVolLfo.frequency.value = 0.03;
@@ -465,13 +580,8 @@ const AudioManager = (() => {
     windVolLfo.start();
     musicNodes.push(windVolLfo, windVolLfoGain);
 
-    // === Layer 3: War drums (periodic) ===
     playDrumLoop();
-
-    // === Layer 4: Melodic phrases (periodic haunting melody) ===
     playMelodyLoop();
-
-    // === Layer 5: Distant battle ambience ===
     playBattleAmbience();
   }
 
@@ -479,28 +589,21 @@ const AudioManager = (() => {
   function playDrumLoop() {
     if (drumInterval) clearInterval(drumInterval);
     let beatPhase = 0;
-
     drumInterval = setInterval(() => {
       if (!ctx || !enabled) return;
       beatPhase = (beatPhase + 1) % 4;
-
-      // Vary the drum pattern for interest
       if (beatPhase === 0) {
-        // Heavy hit
         playTone(55, 0.5, 'sine', 0.1, musicGain);
         noiseBurst(0.08, 120, 1, 0.06, musicGain);
       } else if (beatPhase === 1) {
-        // Lighter hit
         playTone(65, 0.3, 'sine', 0.06, musicGain);
       } else if (beatPhase === 2) {
-        // Double hit
         playTone(55, 0.4, 'sine', 0.08, musicGain);
         setTimeout(() => {
           if (!ctx || !enabled) return;
           playTone(70, 0.25, 'sine', 0.05, musicGain);
         }, 300);
       } else {
-        // Accent with rim hit
         playTone(50, 0.5, 'sine', 0.09, musicGain);
         noiseBurst(0.03, 3000, 6, 0.03, musicGain);
         setTimeout(() => {
@@ -514,27 +617,22 @@ const AudioManager = (() => {
   let melodyInterval = null;
   function playMelodyLoop() {
     if (melodyInterval) clearInterval(melodyInterval);
-    // Medieval minor scale phrases in D minor
-    // D E F G A Bb C D = 293 330 349 392 440 466 523 587
     const phrases = [
-      [293, 349, 330, 293],         // D F E D
-      [440, 392, 349, 293],         // A G F D
-      [293, 330, 392, 349],         // D E G F
-      [466, 440, 392, 349, 293],    // Bb A G F D
-      [587, 523, 466, 440],         // D5 C Bb A
-      [293, 392, 440, 349]          // D G A F
+      [293, 349, 330, 293],
+      [440, 392, 349, 293],
+      [293, 330, 392, 349],
+      [466, 440, 392, 349, 293],
+      [587, 523, 466, 440],
+      [293, 392, 440, 349]
     ];
     let phraseIdx = 0;
-
     melodyInterval = setInterval(() => {
       if (!ctx || !enabled) return;
       const phrase = phrases[phraseIdx % phrases.length];
       phraseIdx++;
-
       phrase.forEach((note, i) => {
         setTimeout(() => {
           if (!ctx || !enabled) return;
-          // Soft flute-like tone (sine + quiet triangle overtone)
           const osc = ctx.createOscillator();
           osc.type = 'sine';
           osc.frequency.value = note;
@@ -547,8 +645,6 @@ const AudioManager = (() => {
           g.connect(musicGain);
           osc.start();
           osc.stop(ctx.currentTime + 0.8);
-
-          // Subtle overtone
           const osc2 = ctx.createOscillator();
           osc2.type = 'triangle';
           osc2.frequency.value = note * 2;
@@ -562,18 +658,16 @@ const AudioManager = (() => {
           osc2.stop(ctx.currentTime + 0.5);
         }, i * 600);
       });
-    }, 12000); // New phrase every 12 seconds
+    }, 12000);
   }
 
   let ambienceInterval = null;
   function playBattleAmbience() {
     if (ambienceInterval) clearInterval(ambienceInterval);
-
     ambienceInterval = setInterval(() => {
       if (!ctx || !enabled) return;
       const r = Math.random();
       if (r < 0.3) {
-        // Distant horn
         const osc = ctx.createOscillator();
         osc.type = 'sawtooth';
         osc.frequency.value = 130 + Math.random() * 50;
@@ -591,17 +685,14 @@ const AudioManager = (() => {
         osc.start();
         osc.stop(ctx.currentTime + 1.8);
       } else if (r < 0.5) {
-        // Distant crow caw
         freqSweep(800, 500, 0.15, 'sawtooth', 0.008, musicGain);
         setTimeout(() => {
           if (!ctx || !enabled) return;
           freqSweep(750, 450, 0.12, 'sawtooth', 0.006, musicGain);
         }, 200);
       } else if (r < 0.7) {
-        // Thunder-like rumble in distance
         noiseBurst(1.2, 100, 0.5, 0.02, musicGain);
       }
-      // Otherwise silence (for variety)
     }, 8000);
   }
 
@@ -618,7 +709,9 @@ const AudioManager = (() => {
 
   return {
     init, resume, toggle, isEnabled,
-    playSwordClash, playArrowFire, playBuildingPlace, playBuildingDestroy,
+    playSwordClash, playArrowFire, playInfantryAttack, playCavalryAttack,
+    playSiegeAttack, playFlyingAttack,
+    playBuildingPlace, playBuildingDestroy,
     playUnitDeath, playGoldGain, playHeroAttack, playRescueStrike,
     playTowerShot, playHeroDeath, playVictory, playDefeat,
     startMusic, stopMusic
