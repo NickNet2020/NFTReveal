@@ -74,6 +74,20 @@ function isVisibleTo(room, side, wx, wy) {
   if (side === 'left' && wx <= GC.P1_BASE_MAX_X) return true;
   if (side === 'right' && wx >= GC.P2_BASE_MIN_X) return true;
 
+  // Enemy base is fully revealed once you have any unit inside it
+  const inEnemyBase = (side === 'left' && wx >= GC.P2_BASE_MIN_X) ||
+                      (side === 'right' && wx <= GC.P1_BASE_MAX_X);
+  if (inEnemyBase) {
+    const enemyBaseMinX = side === 'left' ? GC.P2_BASE_MIN_X : GC.P1_BASE_MIN_X;
+    const enemyBaseMaxX = side === 'left' ? GC.P2_BASE_MAX_X : GC.P1_BASE_MAX_X;
+    for (const [, u] of room.units) {
+      if (u.side !== side) continue;
+      if (u.x >= enemyBaseMinX && u.x <= enemyBaseMaxX) return true;
+    }
+    const hero = side === 'left' ? room.hero1 : room.hero2;
+    if (hero && hero.hp > 0 && hero.x >= enemyBaseMinX && hero.x <= enemyBaseMaxX) return true;
+  }
+
   const castle = getCastle(room, side);
   if (dist({ x: wx, y: wy }, castle) < GC.FOG_CASTLE_RANGE) return true;
 

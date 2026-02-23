@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 const COMBAT_MODIFIERS = {
-  infantry: { infantry: 1.0, ranged: 0.9, cavalry: 0.7, siege: 1.5, flying: 0.8, building: 0.8, castle: 0.6 },
+  infantry: { infantry: 1.0, ranged: 0.9, cavalry: 0.7, siege: 1.5, flying: 0.0, building: 0.8, castle: 0.6 },
   ranged:   { infantry: 1.3, ranged: 1.0, cavalry: 0.6, siege: 0.9, flying: 1.2, building: 0.7, castle: 0.5 },
   cavalry:  { infantry: 1.3, ranged: 1.5, cavalry: 1.0, siege: 0.5, flying: 0.0, building: 0.9, castle: 0.7 },
   siege:    { infantry: 0.6, ranged: 0.6, cavalry: 1.5, siege: 1.0, flying: 0.0, building: 2.5, castle: 2.0 },
@@ -11,7 +11,7 @@ const COMBAT_MODIFIERS = {
 };
 
 const CAN_HIT_FLYING = {
-  infantry: true,
+  infantry: false,
   ranged: true,
   cavalry: false,
   siege: false,
