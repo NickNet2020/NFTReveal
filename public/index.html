@@ -110,7 +110,6 @@
       <div class="resource-item foundation-item" id="foundationItem">
         <span class="resource-icon foundation-icon">&#9670;</span>
         <span class="resource-value" id="foundationDisplay">1</span>
-        <button id="buyFoundationBtn" class="buy-foundation-btn" title="Buy Core Foundation (750g)">+</button>
       </div>
     </div>
 
@@ -121,6 +120,26 @@
         <!-- Populated by JS -->
       </div>
       <div class="panel-help">Click a building, then click in your base area to place it.</div>
+
+      <h3 class="panel-title resources-title">Resources</h3>
+      <div id="resourceShop">
+        <div class="resource-shop-item" id="foundationShopItem">
+          <div class="resource-shop-header">
+            <span class="resource-shop-name">&#9670; Core Foundation</span>
+            <span class="resource-shop-cost">750g</span>
+          </div>
+          <div class="resource-shop-desc">Buy to upgrade your production buildings to Level 3</div>
+          <button id="buyFoundationBtn" class="buy-foundation-btn-large" title="Buy Core Foundation (750g)">Buy Foundation</button>
+        </div>
+        <div class="resource-shop-item" id="goldMineShopItem">
+          <div class="resource-shop-header">
+            <span class="resource-shop-name">&#9733; Gold Mine</span>
+            <span class="resource-shop-cost">200g</span>
+          </div>
+          <div class="resource-shop-desc">Boosts your income by +10 gold every 5 seconds</div>
+          <button id="buyGoldMineBtn" class="buy-foundation-btn-large" title="Buy Gold Mine (200g)">Buy Gold Mine</button>
+        </div>
+      </div>
     </div>
 
     <!-- Rescue Strike Button -->

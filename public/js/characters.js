@@ -46,27 +46,32 @@ const CHARACTERS = {
       {
         id: 'barracks', name: 'Barracks', cost: 100, hp: 500, income: 2,
         spawnInterval: 4900, unit: 'shieldwall',
-        description: 'Trains hardened shield infantry to hold the front line.'
+        description: 'Trains hardened shield infantry to hold the front line.',
+        levelNames: ['Barracks', 'Ironclad Barracks', 'Frostguard Citadel']
       },
       {
         id: 'archery_range', name: 'Archery Range', cost: 130, hp: 400, income: 2,
         spawnInterval: 5880, unit: 'longbow',
-        description: 'Produces expert longbowmen with devastating range.'
+        description: 'Produces expert longbowmen with devastating range.',
+        levelNames: ['Archery Range', 'Sharpshooter Lodge', 'Hall of the Marksman']
       },
       {
         id: 'stables', name: 'War Stables', cost: 180, hp: 480, income: 3,
         spawnInterval: 7350, unit: 'warhorse',
-        description: 'Breeds mighty warhorses and trains their riders.'
+        description: 'Breeds mighty warhorses and trains their riders.',
+        levelNames: ['War Stables', 'Destrier Keep', 'Vanguard Stables']
       },
       {
         id: 'siege_workshop', name: 'Siege Workshop', cost: 260, hp: 600, income: 3,
         spawnInterval: 10780, unit: 'siege_tower',
-        description: 'Constructs massive siege towers to breach enemy walls.'
+        description: 'Constructs massive siege towers to breach enemy walls.',
+        levelNames: ['Siege Workshop', 'War Foundry', 'Titan Forge']
       },
       {
         id: 'falconry', name: 'Falconry', cost: 200, hp: 380, income: 2,
         spawnInterval: 8820, unit: 'snow_hawk',
-        description: 'Trains fierce snow hawks to strike from above.'
+        description: 'Trains fierce snow hawks to strike from above.',
+        levelNames: ['Falconry', 'Raptor Spire', 'Stormwing Eyrie']
       },
       {
         id: 'frost_tower', name: 'Frost Tower', cost: 150, hp: 600, income: 1,
@@ -132,27 +137,32 @@ const CHARACTERS = {
       {
         id: 'spear_hall', name: 'Spear Hall', cost: 100, hp: 420, income: 2,
         spawnInterval: 4900, unit: 'unsullied',
-        description: 'Trains disciplined spearmen who never break formation.'
+        description: 'Trains disciplined spearmen who never break formation.',
+        levelNames: ['Spear Hall', 'Unsullied Fortress', 'Obsidian Garrison']
       },
       {
         id: 'fire_temple', name: 'Fire Temple', cost: 160, hp: 380, income: 2,
         spawnInterval: 6860, unit: 'fire_mage',
-        description: 'Channels dark fire magic into devastating mages.'
+        description: 'Channels dark fire magic into devastating mages.',
+        levelNames: ['Fire Temple', 'Advanced Fire Temple', 'Inferno Sanctum']
       },
       {
         id: 'flame_stables', name: 'Flame Stables', cost: 170, hp: 440, income: 3,
         spawnInterval: 6860, unit: 'flame_rider',
-        description: 'Breeds fire-touched steeds for mounted assault.'
+        description: 'Breeds fire-touched steeds for mounted assault.',
+        levelNames: ['Flame Stables', 'Emberhorn Stables', 'Hellfire Paddock']
       },
       {
         id: 'scorpion_foundry', name: 'Scorpion Foundry', cost: 240, hp: 520, income: 3,
         spawnInterval: 9800, unit: 'scorpion',
-        description: 'Forges massive scorpion ballistas to shatter defenses.'
+        description: 'Forges massive scorpion ballistas to shatter defenses.',
+        levelNames: ['Scorpion Foundry', 'Dragonslayer Forge', 'Doom Armory']
       },
       {
         id: 'dragon_roost', name: 'Dragon Roost', cost: 300, hp: 450, income: 4,
         spawnInterval: 13720, unit: 'young_dragon',
-        description: 'Nurtures young dragons into terrifying war beasts.'
+        description: 'Nurtures young dragons into terrifying war beasts.',
+        levelNames: ['Dragon Roost', 'Wyrm Sanctuary', 'Dragon Spire']
       },
       {
         id: 'flame_spire', name: 'Flame Spire', cost: 160, hp: 500, income: 1,
@@ -218,27 +228,32 @@ const CHARACTERS = {
       {
         id: 'raider_camp', name: 'Raider Camp', cost: 90, hp: 400, income: 2,
         spawnInterval: 4410, unit: 'reaver',
-        description: 'Musters hardened ironborn reavers for the front.'
+        description: 'Musters hardened ironborn reavers for the front.',
+        levelNames: ['Raider Camp', 'Ironborn Stronghold', 'Reaver Fortress']
       },
       {
         id: 'crossbow_tower', name: 'Crossbow Tower', cost: 130, hp: 420, income: 2,
         spawnInterval: 5880, unit: 'crossbowman',
-        description: 'Trains marksmen with armor-piercing crossbows.'
+        description: 'Trains marksmen with armor-piercing crossbows.',
+        levelNames: ['Crossbow Tower', 'Salted Marksman Hall', 'Bolt Storm Bastion']
       },
       {
         id: 'chariot_works', name: 'Chariot Works', cost: 170, hp: 460, income: 3,
         spawnInterval: 6860, unit: 'war_chariot',
-        description: 'Builds devastating war chariots that trample foes.'
+        description: 'Builds devastating war chariots that trample foes.',
+        levelNames: ['Chariot Works', 'Iron Wheelhouse', 'Doomchariot Forge']
       },
       {
         id: 'ram_forge', name: 'Ram Forge', cost: 220, hp: 580, income: 3,
         spawnInterval: 8820, unit: 'battering_ram',
-        description: 'Forges iron-shod battering rams to break any gate.'
+        description: 'Forges iron-shod battering rams to break any gate.',
+        levelNames: ['Ram Forge', 'Ironclad Smithy', 'Kraken Forge']
       },
       {
         id: 'storm_rookery', name: 'Storm Rookery', cost: 190, hp: 360, income: 2,
         spawnInterval: 7840, unit: 'storm_petrel',
-        description: 'Breeds fierce storm birds for aerial harassment.'
+        description: 'Breeds fierce storm birds for aerial harassment.',
+        levelNames: ['Storm Rookery', 'Tempest Aviary', 'Thunderwing Spire']
       },
       {
         id: 'harpoon_tower', name: 'Harpoon Tower', cost: 140, hp: 550, income: 1,
@@ -304,27 +319,32 @@ const CHARACTERS = {
       {
         id: 'sellsword_camp', name: 'Sellsword Camp', cost: 90, hp: 380, income: 3,
         spawnInterval: 4900, unit: 'sellsword',
-        description: 'Hires cheap but effective mercenary soldiers.'
+        description: 'Hires cheap but effective mercenary soldiers.',
+        levelNames: ['Sellsword Camp', 'Mercenary Barracks', 'Golden Company Hall']
       },
       {
         id: 'guild_hall', name: 'Arbalist Guild', cost: 140, hp: 400, income: 3,
         spawnInterval: 6370, unit: 'arbalist',
-        description: 'Trains guild arbalists with devastating heavy crossbows.'
+        description: 'Trains guild arbalists with devastating heavy crossbows.',
+        levelNames: ['Arbalist Guild', 'Gilded Marksman Hall', 'Sharpshot Citadel']
       },
       {
         id: 'champions_arena', name: "Champion's Arena", cost: 200, hp: 480, income: 4,
         spawnInterval: 7840, unit: 'mounted_champion',
-        description: 'Produces elite mounted champions of the realm.'
+        description: 'Produces elite mounted champions of the realm.',
+        levelNames: ["Champion's Arena", 'Grand Tournament Hall', 'Legendary Colosseum']
       },
       {
         id: 'golden_foundry', name: 'Golden Foundry', cost: 270, hp: 520, income: 4,
         spawnInterval: 10780, unit: 'golden_trebuchet',
-        description: 'Constructs ornate but deadly golden trebuchets.'
+        description: 'Constructs ornate but deadly golden trebuchets.',
+        levelNames: ['Golden Foundry', 'Imperial War Works', 'Crown Siege Citadel']
       },
       {
         id: 'eagle_spire', name: 'Eagle Spire', cost: 210, hp: 360, income: 3,
         spawnInterval: 8330, unit: 'war_eagle',
-        description: 'Houses trained war eagles for aerial superiority.'
+        description: 'Houses trained war eagles for aerial superiority.',
+        levelNames: ['Eagle Spire', 'Gilded Eyrie', 'Royal Eagle Pinnacle']
       },
       {
         id: 'gilded_bastion', name: 'Gilded Bastion', cost: 170, hp: 520, income: 1,
@@ -390,27 +410,32 @@ const CHARACTERS = {
       {
         id: 'crypt', name: 'Crypt', cost: 80, hp: 360, income: 2,
         spawnInterval: 3920, unit: 'skeleton',
-        description: 'Raises skeleton warriors from the earth below.'
+        description: 'Raises skeleton warriors from the earth below.',
+        levelNames: ['Crypt', 'Tomb of the Risen', 'Necropolis']
       },
       {
         id: 'dark_altar', name: 'Dark Altar', cost: 120, hp: 340, income: 2,
         spawnInterval: 5390, unit: 'plague_archer',
-        description: 'Corrupts souls into plague-bearing archers.'
+        description: 'Corrupts souls into plague-bearing archers.',
+        levelNames: ['Dark Altar', 'Plague Shrine', 'Altar of Undeath']
       },
       {
         id: 'doom_stable', name: 'Doom Stables', cost: 190, hp: 440, income: 3,
         spawnInterval: 7840, unit: 'death_knight',
-        description: 'Summons dread knights upon undead steeds.'
+        description: 'Summons dread knights upon undead steeds.',
+        levelNames: ['Doom Stables', 'Dread Rider Crypt', 'Spectral Stables']
       },
       {
         id: 'bone_forge', name: 'Bone Forge', cost: 230, hp: 500, income: 3,
         spawnInterval: 9800, unit: 'bone_colossus',
-        description: 'Assembles colossal constructs from the bones of the fallen.'
+        description: 'Assembles colossal constructs from the bones of the fallen.',
+        levelNames: ['Bone Forge', 'Ossuary Foundry', 'Colossus Catacombs']
       },
       {
         id: 'shadow_aerie', name: 'Shadow Aerie', cost: 180, hp: 320, income: 2,
         spawnInterval: 7350, unit: 'wraith',
-        description: 'Unleashes incorporeal wraiths that haunt the skies.'
+        description: 'Unleashes incorporeal wraiths that haunt the skies.',
+        levelNames: ['Shadow Aerie', 'Wraith Spire', 'Phantom Pinnacle']
       },
       {
         id: 'dark_obelisk', name: 'Dark Obelisk', cost: 130, hp: 450, income: 1,
@@ -476,27 +501,32 @@ const CHARACTERS = {
       {
         id: 'grove', name: 'Sentinel Grove', cost: 100, hp: 450, income: 2,
         spawnInterval: 4900, unit: 'sentinel',
-        description: 'Grows woodland sentinels from the heart of the forest.'
+        description: 'Grows woodland sentinels from the heart of the forest.',
+        levelNames: ['Sentinel Grove', 'Ancient Wardenwood', 'Heart of the Forest']
       },
       {
         id: 'glade', name: 'Enchanted Glade', cost: 130, hp: 380, income: 2,
         spawnInterval: 5880, unit: 'elven_archer',
-        description: 'A mystical clearing where elven archers train.'
+        description: 'A mystical clearing where elven archers train.',
+        levelNames: ['Enchanted Glade', 'Starlight Glade', 'Moonbow Sanctuary']
       },
       {
         id: 'beastiary', name: 'Beastiary', cost: 180, hp: 460, income: 3,
         spawnInterval: 7350, unit: 'stag_rider',
-        description: 'Tames great stags as mounts for swift riders.'
+        description: 'Tames great stags as mounts for swift riders.',
+        levelNames: ['Beastiary', 'Wild Warden Lodge', 'Primal Beastiary']
       },
       {
         id: 'ancient_oak', name: 'Ancient Oak', cost: 250, hp: 650, income: 3,
         spawnInterval: 11760, unit: 'treant',
-        description: 'Awakens ancient treants from slumbering oaks.'
+        description: 'Awakens ancient treants from slumbering oaks.',
+        levelNames: ['Ancient Oak', 'Elder Heartwood', 'World Tree Sapling']
       },
       {
         id: 'eagle_nest', name: 'Eagle Nest', cost: 200, hp: 370, income: 2,
         spawnInterval: 8330, unit: 'great_eagle',
-        description: 'Home to great eagles that patrol the forest canopy.'
+        description: 'Home to great eagles that patrol the forest canopy.',
+        levelNames: ['Eagle Nest', 'Windcaller Aerie', 'Skywarden Eyrie']
       },
       {
         id: 'thornwood_tower', name: 'Thornwood Tower', cost: 150, hp: 580, income: 1,
@@ -581,6 +611,8 @@ const GAME_CONSTANTS = {
   L3_HP_MULT: 1.6,
   L3_DMG_MULT: 1.5,
   CORE_FOUNDATION_COST: 750,
+  GOLD_MINE_COST: 200,
+  GOLD_MINE_INCOME: 10,
   GENERAL_HP: 500,
   GENERAL_DAMAGE: 25,
   GENERAL_SPEED: 45,

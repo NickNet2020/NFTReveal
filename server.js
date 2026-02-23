@@ -537,7 +537,7 @@ function findTarget(room, unit) {
   }
 
   const enemyHero = getHero(room, enemySide);
-  if (enemyHero && enemyHero.hp > 0 && isReachable(enemyHero)) {
+  if (enemyHero && enemyHero.hp > 0 && isReachable(enemyHero) && canAttackTarget(unit.unitType, enemyHero.unitType || 'infantry')) {
     const d = dist(unit, enemyHero);
     if (d <= detRange && d < nearestDist) { nearestDist = d; nearest = { id: enemyHero.id, type: 'hero' }; }
   }
@@ -1194,9 +1194,20 @@ function gameTick() {
       if (found) {
         unit.targetId = found.id;
         unit.targetType = found.type;
+      } else {
+        // No valid target found — clear stale target so unit doesn't chase an unreachable enemy
+        unit.targetId = null;
+        unit.targetType = null;
       }
 
-      const targetPos = unit.targetId ? getTargetPos(room, { id: unit.targetId, type: unit.targetType }) : null;
+      let targetPos = unit.targetId ? getTargetPos(room, { id: unit.targetId, type: unit.targetType }) : null;
+
+      // Validate target: if we can't attack this target type (e.g. cavalry vs flying), drop it
+      if (targetPos && targetPos.unitType && !canAttackTarget(unit.unitType, targetPos.unitType)) {
+        unit.targetId = null;
+        unit.targetType = null;
+        targetPos = null;
+      }
 
       if (targetPos && targetPos.hp > 0) {
         const d = dist(unit, targetPos);
@@ -1577,6 +1588,22 @@ io.on('connection', (socket) => {
       socket.emit('foundationResult', { success: true, count: playerData.coreFoundations });
     } else {
       socket.emit('foundationResult', { success: false, reason: 'Not enough gold' });
+    }
+  });
+
+  socket.on('buyGoldMine', () => {
+    const roomId = playerRooms.get(socket.id);
+    if (!roomId) return;
+    const room = gameRooms.get(roomId);
+    if (!room || room.state !== 'playing') return;
+    const side = room.player1.socketId === socket.id ? 'left' : 'right';
+    const playerData = getPlayerData(room, side);
+    if (playerData.gold >= GC.GOLD_MINE_COST) {
+      playerData.gold -= GC.GOLD_MINE_COST;
+      playerData.income += GC.GOLD_MINE_INCOME;
+      socket.emit('goldMineResult', { success: true, income: playerData.income });
+    } else {
+      socket.emit('goldMineResult', { success: false, reason: 'Not enough gold' });
     }
   });
 

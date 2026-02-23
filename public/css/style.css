@@ -673,6 +673,78 @@ body {
   line-height: 1.4;
 }
 
+/* ─── Resource Shop (below buildings) ───────────────────────────────── */
+
+.resources-title {
+  margin-top: 12px;
+}
+
+#resourceShop {
+  margin-top: 4px;
+}
+
+.resource-shop-item {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(201, 168, 76, 0.15);
+  border-radius: 2px;
+}
+
+.resource-shop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.resource-shop-name {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+
+.resource-shop-cost {
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #d4a017;
+}
+
+.resource-shop-desc {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.buy-foundation-btn-large {
+  width: 100%;
+  padding: 5px 0;
+  background: rgba(201, 168, 76, 0.15);
+  border: 1px solid rgba(201, 168, 76, 0.35);
+  color: var(--gold-light);
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.buy-foundation-btn-large:hover {
+  background: rgba(201, 168, 76, 0.3);
+  border-color: var(--gold);
+}
+
+.buy-foundation-btn-large.cant-afford {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 /* ─── Rescue Strike ─────────────────────────────────────────────────── */
 
 #rescueStrikeContainer {

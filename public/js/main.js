@@ -32,6 +32,7 @@
   const passiveText = document.getElementById('passiveText');
   const foundationDisplay = document.getElementById('foundationDisplay');
   const buyFoundationBtn = document.getElementById('buyFoundationBtn');
+  const buyGoldMineBtn = document.getElementById('buyGoldMineBtn');
   const gameOverTitle = document.getElementById('gameOverTitle');
   const gameOverSub = document.getElementById('gameOverSub');
   const gameOverDuration = document.getElementById('gameOverDuration');
@@ -202,6 +203,9 @@
         item.classList.toggle('cant-afford', gold < bDef.cost);
       }
     });
+    // Resource shop affordability
+    if (buyFoundationBtn) buyFoundationBtn.classList.toggle('cant-afford', gold < GAME_CONSTANTS.CORE_FOUNDATION_COST);
+    if (buyGoldMineBtn) buyGoldMineBtn.classList.toggle('cant-afford', gold < GAME_CONSTANTS.GOLD_MINE_COST);
   }
 
   // ─── Event Listeners ──────────────────────────────────────────
@@ -234,6 +238,12 @@
     buyFoundationBtn.addEventListener('click', () => {
       if (!gameActive) return;
       socket.emit('buyFoundation');
+    });
+
+    // Buy gold mine
+    buyGoldMineBtn.addEventListener('click', () => {
+      if (!gameActive) return;
+      socket.emit('buyGoldMine');
     });
 
     // Keyboard
@@ -448,6 +458,15 @@
         AudioManager.playGoldGain();
       } else {
         showToast(data.reason || 'Cannot buy foundation');
+      }
+    });
+
+    socket.on('goldMineResult', (data) => {
+      if (data.success) {
+        showToast(`Gold Mine purchased! (+${GAME_CONSTANTS.GOLD_MINE_INCOME}g/5s income)`);
+        AudioManager.playGoldGain();
+      } else {
+        showToast(data.reason || 'Cannot buy Gold Mine');
       }
     });
 
@@ -687,6 +706,20 @@
       }
     }
 
+    // Try castles (within 80 world units — castles are large)
+    const castles = [gameState.castle1, gameState.castle2].filter(c => c && c.hp > 0);
+    for (const c of castles) {
+      const dx = c.x - wx;
+      const dy = c.y - wy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 80 && d < closestDist) {
+        closestDist = d;
+        const side = (c.x < GAME_CONSTANTS.MAP_WIDTH / 2) ? 'left' : 'right';
+        const charId = side === mySide ? myCharacterId : opponentCharacterId;
+        closest = { type: 'castle', data: { ...c, side, characterId: charId } };
+      }
+    }
+
     if (closest) {
       if (closest.type === 'unit' || closest.type === 'hero' || closest.type === 'general') {
         selectedUnitId = closest.data.id;
@@ -702,6 +735,12 @@
         selectedUnitName = null;
         Renderer.setSelectedUnit(null);
         showBanner(closest.data, 'outpost');
+      } else if (closest.type === 'castle') {
+        selectedBuildingId = null;
+        selectedUnitId = null;
+        selectedUnitName = null;
+        Renderer.setSelectedUnit(null);
+        showBanner(closest.data, 'castle');
       } else {
         selectedBuildingId = closest.data.id;
         selectedUnitId = null;
@@ -818,8 +857,10 @@
       renderBuildingBanner(ctx, data, charData, primary, W, H);
     } else if (selType === 'outpost') {
       renderOutpostBanner(ctx, data, W, H);
-    } else if (selType === 'general') {
-      renderGeneralBanner(ctx, data, charData, primary, W, H);
+    } else if (selType === 'castle') {
+      renderCastleBanner(ctx, data, charData, primary, W, H);
+    // } else if (selType === 'general') {
+    //   renderGeneralBanner(ctx, data, charData, primary, W, H);  // STASHED — may revisit later
     } else {
       renderUnitBanner(ctx, data, charData, primary, W, H, selType);
     }
@@ -1010,9 +1051,11 @@
     ctx.font = 'bold 14px Cinzel, serif';
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'left';
-    const nameStr = bDef ? bDef.name : 'Building';
-    const levelStr = bLevel >= 2 ? ` (Lv.${bLevel})` : '';
-    ctx.fillText(nameStr + levelStr, IX, 30, IW);
+    // Use themed level names if available
+    const nameStr = (bDef && bDef.levelNames && bDef.levelNames[bLevel - 1])
+      ? bDef.levelNames[bLevel - 1]
+      : (bDef ? bDef.name : 'Building');
+    ctx.fillText(nameStr, IX, 30, IW);
 
     ctx.font = '10px Cinzel, serif';
     ctx.fillStyle = primary;
@@ -1083,7 +1126,9 @@
           ctx.font = 'bold 10px Cinzel, serif';
           ctx.fillStyle = '#e6c766';
           ctx.textAlign = 'left';
-          ctx.fillText(`\u2B06 Upgrade to L${nextLevel} — ${upgCost}g`, IX + 6, upgY + 9);
+          const upgName = (bDef.levelNames && bDef.levelNames[nextLevel - 1])
+            ? bDef.levelNames[nextLevel - 1] : `Level ${nextLevel}`;
+          ctx.fillText(`\u2B06 ${upgName} — ${upgCost}g`, IX + 6, upgY + 9);
 
           if (upgradeNote) {
             ctx.font = '8px Cinzel, serif';
@@ -1207,6 +1252,159 @@
       if (gameState.outposts.south && gameState.outposts.south.controlledBy === mySide) ownedCount++;
     }
     ctx.fillText(`You control: ${ownedCount} outpost(s)`, IX, 136);
+
+    ctx.textAlign = 'left';
+  }
+
+  function renderCastleBanner(ctx, castle, charData, primary, W, H) {
+    // Full-height castle illustration on left
+    const PW = 120, PH = H - 20;
+    const PX = 10, PY = 10;
+
+    ctx.fillStyle = '#0a0806';
+    ctx.fillRect(PX, PY, PW, PH);
+
+    const cx = PX + PW / 2;
+    const scale = PW / 120;
+    function s(v) { return v * scale; }
+
+    // Castle illustration
+    const baseY = PY + PH - s(20);
+    // Main keep
+    ctx.fillStyle = '#5a5550';
+    ctx.fillRect(cx - s(28), baseY - s(80), s(56), s(82));
+    // Stone texture
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = s(0.5);
+    for (let row = 0; row < 9; row++) {
+      const ry = baseY - s(80) + row * s(9);
+      ctx.beginPath(); ctx.moveTo(cx - s(28), ry); ctx.lineTo(cx + s(28), ry); ctx.stroke();
+    }
+    // Central tower
+    ctx.fillStyle = '#666';
+    ctx.fillRect(cx - s(14), baseY - s(110), s(28), s(34));
+    // Crenellations on tower
+    for (let i = -1; i <= 1; i++) {
+      ctx.fillRect(cx + i * s(8) - s(4), baseY - s(118), s(8), s(10));
+    }
+    // Side towers
+    ctx.fillStyle = '#5e5a55';
+    ctx.fillRect(cx - s(40), baseY - s(60), s(16), s(62));
+    ctx.fillRect(cx + s(24), baseY - s(60), s(16), s(62));
+    // Side crenellations
+    ctx.fillStyle = '#6a6560';
+    ctx.fillRect(cx - s(42), baseY - s(66), s(6), s(8));
+    ctx.fillRect(cx - s(32), baseY - s(66), s(6), s(8));
+    ctx.fillRect(cx + s(26), baseY - s(66), s(6), s(8));
+    ctx.fillRect(cx + s(36), baseY - s(66), s(6), s(8));
+    // Gate
+    ctx.fillStyle = '#2a2520';
+    ctx.beginPath();
+    ctx.arc(cx, baseY - s(22), s(12), Math.PI, 0);
+    ctx.lineTo(cx + s(12), baseY);
+    ctx.lineTo(cx - s(12), baseY);
+    ctx.fill();
+    // Gate bars
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = s(1.5);
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(cx + i * s(4), baseY - s(22));
+      ctx.lineTo(cx + i * s(4), baseY);
+      ctx.stroke();
+    }
+    // Windows
+    ctx.fillStyle = '#d4a017';
+    ctx.globalAlpha = 0.4;
+    ctx.fillRect(cx - s(20), baseY - s(60), s(6), s(8));
+    ctx.fillRect(cx + s(14), baseY - s(60), s(6), s(8));
+    ctx.fillRect(cx - s(6), baseY - s(98), s(4), s(6));
+    ctx.fillRect(cx + s(2), baseY - s(98), s(4), s(6));
+    ctx.globalAlpha = 1;
+    // Flag
+    const flagColor = primary || '#888';
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(cx, baseY - s(130), s(2), s(20));
+    ctx.fillStyle = flagColor;
+    ctx.beginPath();
+    ctx.moveTo(cx + s(2), baseY - s(130));
+    ctx.lineTo(cx + s(18), baseY - s(124));
+    ctx.lineTo(cx + s(2), baseY - s(116));
+    ctx.fill();
+
+    // Portrait border
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(PX, PY, PW, PH);
+
+    // Info panel
+    const IX = PX + PW + 10;
+    const IW = W - IX - 12;
+    const isMine = castle.side === mySide;
+
+    ctx.font = 'bold 14px Cinzel, serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'left';
+    const castleName = charData ? charData.name : 'Castle';
+    ctx.fillText(castleName, IX, 30, IW);
+
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = isMine ? '#4a8c3f' : '#b22222';
+    ctx.fillText(isMine ? 'YOUR CASTLE' : 'ENEMY CASTLE', IX, 44);
+
+    if (charData) {
+      ctx.fillStyle = primary;
+      ctx.fillText(charData.title || '', IX, 58);
+    }
+
+    // Separator
+    ctx.fillStyle = 'rgba(201, 168, 76, 0.3)';
+    ctx.fillRect(IX, 66, IW, 1);
+
+    // HP
+    const sY = 82;
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('HP', IX, sY);
+    ctx.fillStyle = '#4a8c3f';
+    ctx.font = 'bold 11px Cinzel, serif';
+    ctx.fillText(`${Math.ceil(castle.hp)} / ${castle.maxHp}`, IX + 26, sY);
+
+    // HP bar
+    const hpBarY = sY + 8;
+    const hpBarW = IW;
+    const hpBarH = 10;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(IX, hpBarY, hpBarW, hpBarH);
+    const hpPct = Math.max(0, castle.hp / castle.maxHp);
+    const hpColor = hpPct > 0.5 ? '#4a8c3f' : hpPct > 0.25 ? '#d4a017' : '#c0392b';
+    ctx.fillStyle = hpColor;
+    ctx.fillRect(IX, hpBarY, hpBarW * hpPct, hpBarH);
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(IX, hpBarY, hpBarW * hpPct, hpBarH / 2);
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(IX, hpBarY, hpBarW, hpBarH);
+
+    // Passive info (for your castle)
+    if (isMine && charData && charData.passive) {
+      const pY = hpBarY + 24;
+      ctx.font = 'bold 10px Cinzel, serif';
+      ctx.fillStyle = '#c9a84c';
+      ctx.fillText('Passive: ' + charData.passive.name, IX, pY);
+      ctx.font = '9px Cinzel, serif';
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(charData.passive.description, IX, pY + 14, IW);
+    }
+
+    // Castle defense info
+    const defY = H - 42;
+    ctx.font = '10px Cinzel, serif';
+    ctx.fillStyle = '#888';
+    ctx.fillText('DEFENSE', IX, defY);
+    ctx.fillStyle = '#c9a84c';
+    ctx.font = 'bold 10px Cinzel, serif';
+    ctx.fillText('Castle Arrows (Range: 350)', IX + 56, defY);
 
     ctx.textAlign = 'left';
   }
@@ -2534,7 +2732,7 @@
         if (gameState.general2 && gameState.general2.id === selectedUnitId) unit = gameState.general2;
       }
       if (!unit || unit.hp <= 0) { deselectAll(); return; }
-      const selType = unit.isHero ? 'hero' : unit.isGeneral ? 'general' : 'unit';
+      const selType = unit.isHero ? 'hero' : 'unit'; // generals now use unit banner
       renderBanner(unit, selType);
     } else if (selectedBuildingId && gameState.buildings) {
       const building = gameState.buildings.find(b => b.id === selectedBuildingId);
