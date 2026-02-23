@@ -507,7 +507,7 @@ const Renderer = (() => {
     ctx.fill();
 
     // Draw building based on the unit type it produces
-    drawBuildingStructure(ctx, bData.typeId, z, palette, bData.characterId);
+    drawBuildingStructure(ctx, bData.typeId, z, palette, bData.characterId, bData.level || 1);
 
     // Ownership indicator
     if (isMySide) {
@@ -529,75 +529,84 @@ const Renderer = (() => {
         isMySide ? 'friendly' : 'enemy');
     }
 
-    // Building level indicator (L2/L3 badge)
+    // L2/L3 upgraded building visual enhancements (no badge)
     if (bData.level && bData.level >= 2 && bData.constructed) {
-      const badgeX = pos.x + 18 * z;
-      const badgeY = pos.y - 28 * z;
-      const badgeR = 8 * z;
-
-      // Badge background
-      const badgeColor = bData.level === 3 ? '#ffd700' : '#c0c0c0';
-      const badgeDark = bData.level === 3 ? '#b8860b' : '#808080';
-      ctx.fillStyle = badgeDark;
-      ctx.beginPath();
-      ctx.arc(badgeX, badgeY, badgeR + 1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = badgeColor;
-      ctx.beginPath();
-      ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Level text
-      ctx.font = `bold ${9 * z}px Cinzel, serif`;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = bData.level === 3 ? '#2a1500' : '#222';
-      ctx.fillText(`L${bData.level}`, badgeX, badgeY + 3.5 * z);
-      ctx.textAlign = 'left';
-
-      // L3 glow
+      // L3 golden glow around entire building
       if (bData.level === 3) {
-        const glow = ctx.createRadialGradient(badgeX, badgeY, 0, badgeX, badgeY, badgeR * 2);
-        glow.addColorStop(0, 'rgba(255, 215, 0, 0.2)');
+        const glow = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, 35 * z);
+        glow.addColorStop(0, 'rgba(255, 215, 0, 0.12)');
         glow.addColorStop(1, 'rgba(255, 215, 0, 0)');
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(badgeX, badgeY, badgeR * 2, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, 35 * z, 0, Math.PI * 2);
         ctx.fill();
       }
     }
   }
 
-  function drawBuildingStructure(ctx, typeId, z, palette, charId) {
+  function drawBuildingStructure(ctx, typeId, z, palette, charId, level) {
     // Generic building with character color accents
     // Categorize by what unit it produces - find the building def
     const charData = CHARACTERS[charId];
     const bDef = charData ? charData.buildings.find(b => b.id === typeId) : null;
     const unitDef = charData && bDef ? charData.units.find(u => u.id === bDef.unit) : null;
     const unitType = unitDef ? unitDef.type : 'infantry';
+    const lvl = level || 1;
+
+    // Scale factor for upgraded buildings (slightly bigger)
+    const upgScale = lvl >= 3 ? 1.12 : lvl >= 2 ? 1.06 : 1.0;
+    if (upgScale > 1) {
+      ctx.scale(upgScale, upgScale);
+    }
 
     // Gold Mine special case
     if (typeId === 'gold_mine') {
-      drawGoldMineBuilding(ctx, z, palette);
+      drawGoldMineBuilding(ctx, z, palette, lvl);
+      if (upgScale > 1) ctx.scale(1/upgScale, 1/upgScale);
       return;
     }
 
     // Building style varies by unit type produced
     if (unitType === 'infantry') {
-      drawBarracksBuilding(ctx, z, palette);
+      drawBarracksBuilding(ctx, z, palette, lvl);
     } else if (unitType === 'ranged') {
-      drawRangedBuilding(ctx, z, palette);
+      drawRangedBuilding(ctx, z, palette, lvl);
     } else if (unitType === 'cavalry') {
-      drawStablesBuilding(ctx, z, palette);
+      drawStablesBuilding(ctx, z, palette, lvl);
     } else if (unitType === 'siege') {
-      drawSiegeBuilding(ctx, z, palette);
+      drawSiegeBuilding(ctx, z, palette, lvl);
     } else if (unitType === 'flying') {
-      drawFlyingBuilding(ctx, z, palette);
+      drawFlyingBuilding(ctx, z, palette, lvl);
     } else {
-      drawBarracksBuilding(ctx, z, palette);
+      drawBarracksBuilding(ctx, z, palette, lvl);
     }
+
+    // Upgraded building accents
+    if (lvl >= 2) {
+      // Reinforced trim on building
+      const trimColor = lvl === 3 ? '#d4a017' : '#999';
+      ctx.strokeStyle = trimColor;
+      ctx.lineWidth = 1 * z;
+      ctx.beginPath();
+      ctx.arc(0, -5 * z, 24 * z, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // L3 banner flags on corners
+      if (lvl === 3) {
+        ctx.fillStyle = palette.primary;
+        ctx.fillRect(16 * z, -30 * z, 2 * z, 10 * z);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(18 * z, -30 * z, 6 * z, 4 * z);
+        ctx.fillRect(-24 * z, -30 * z, 2 * z, 10 * z);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(-30 * z, -30 * z, 6 * z, 4 * z);
+      }
+    }
+
+    if (upgScale > 1) ctx.scale(1/upgScale, 1/upgScale);
   }
 
-  function drawBarracksBuilding(ctx, z, palette) {
+  function drawBarracksBuilding(ctx, z, palette, lvl) {
     // Stone barracks with wooden door
     const wallG = ctx.createLinearGradient(-18 * z, -25 * z, 18 * z, 15 * z);
     wallG.addColorStop(0, '#5a5045');
@@ -648,9 +657,18 @@ const Renderer = (() => {
     // Banner
     ctx.fillStyle = palette.primary;
     ctx.fillRect(-20 * z, -28 * z, 5 * z, 10 * z);
+
+    // L2+ stone crenellations on top
+    if (lvl >= 2) {
+      ctx.fillStyle = '#5a5045';
+      ctx.fillRect(-20 * z, -20 * z, 5 * z, 3 * z);
+      ctx.fillRect(-10 * z, -20 * z, 5 * z, 3 * z);
+      ctx.fillRect(5 * z, -20 * z, 5 * z, 3 * z);
+      ctx.fillRect(15 * z, -20 * z, 5 * z, 3 * z);
+    }
   }
 
-  function drawRangedBuilding(ctx, z, palette) {
+  function drawRangedBuilding(ctx, z, palette, lvl) {
     // Open archery range / tower
     ctx.fillStyle = '#4d4234';
     ctx.fillRect(-16 * z, -12 * z, 32 * z, 27 * z);
@@ -686,9 +704,16 @@ const Renderer = (() => {
     ctx.fillStyle = '#111';
     ctx.fillRect(-14 * z, -7 * z, 1.5 * z, 6 * z);
     ctx.fillRect(12.5 * z, -7 * z, 1.5 * z, 6 * z);
+
+    // L2+ extra arrow slits and wider pillars
+    if (lvl >= 2) {
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-6 * z, -7 * z, 1.5 * z, 6 * z);
+      ctx.fillRect(4.5 * z, -7 * z, 1.5 * z, 6 * z);
+    }
   }
 
-  function drawStablesBuilding(ctx, z, palette) {
+  function drawStablesBuilding(ctx, z, palette, lvl) {
     // Barn-like stables
     ctx.fillStyle = '#5c4033';
     ctx.fillRect(-20 * z, -10 * z, 40 * z, 25 * z);
@@ -727,9 +752,17 @@ const Renderer = (() => {
     ctx.lineTo(22 * z, 8 * z);
     ctx.lineTo(22 * z, 15 * z);
     ctx.stroke();
+
+    // L2+ reinforced fence with iron posts
+    if (lvl >= 2) {
+      ctx.fillStyle = '#666';
+      ctx.fillRect(-22 * z, 8 * z, 2 * z, 7 * z);
+      ctx.fillRect(20 * z, 8 * z, 2 * z, 7 * z);
+      ctx.fillRect(-1 * z, 8 * z, 2 * z, 7 * z);
+    }
   }
 
-  function drawSiegeBuilding(ctx, z, palette) {
+  function drawSiegeBuilding(ctx, z, palette, lvl) {
     // Heavy stone forge/workshop
     ctx.fillStyle = '#4a4240';
     ctx.fillRect(-22 * z, -15 * z, 44 * z, 30 * z);
@@ -766,9 +799,22 @@ const Renderer = (() => {
     fireG.addColorStop(1, 'rgba(255, 80, 0, 0)');
     ctx.fillStyle = fireG;
     ctx.fillRect(-20 * z, -10 * z, 40 * z, 25 * z);
+
+    // L2+ second chimney and extra reinforcement
+    if (lvl >= 2) {
+      ctx.fillStyle = '#3a3a3a';
+      ctx.fillRect(-16 * z, -28 * z, 7 * z, 13 * z);
+      // Metal bands
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 1.5 * z;
+      ctx.beginPath();
+      ctx.moveTo(-25 * z, -10 * z);
+      ctx.lineTo(25 * z, -10 * z);
+      ctx.stroke();
+    }
   }
 
-  function drawFlyingBuilding(ctx, z, palette) {
+  function drawFlyingBuilding(ctx, z, palette, lvl) {
     // Tall tower / roost / nest
     ctx.fillStyle = '#4d4540';
     ctx.fillRect(-10 * z, -10 * z, 20 * z, 25 * z);
@@ -810,9 +856,17 @@ const Renderer = (() => {
     ctx.lineTo(8 * z, -37 * z + bob + wingAngle * 5 * z);
     ctx.lineTo(6 * z, -33 * z + bob);
     ctx.fill();
+
+    // L2+ second bird and taller structure
+    if (lvl >= 2) {
+      ctx.fillStyle = palette.primary;
+      ctx.beginPath();
+      ctx.ellipse(-4 * z, -34 * z + bob * 0.8, 3.5 * z, 2 * z, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
-  function drawGoldMineBuilding(ctx, z, palette) {
+  function drawGoldMineBuilding(ctx, z, palette, lvl) {
     // Mine entrance - rocky hill
     ctx.fillStyle = '#5a5045';
     ctx.beginPath();
@@ -878,6 +932,40 @@ const Renderer = (() => {
     ctx.beginPath(); ctx.arc(-2 * z, 6 * z, 1.5 * z, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = `rgba(255, 215, 0, ${(1 - sparkle) * 0.3})`;
     ctx.beginPath(); ctx.arc(3 * z, 3 * z, 1 * z, 0, Math.PI * 2); ctx.fill();
+
+    // L2 upgraded gold mine: ore cart, extra nuggets, reinforced beams
+    if (lvl >= 2) {
+      // Additional gold piles
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath(); ctx.arc(-16 * z, 5 * z, 2.5 * z, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(16 * z, 7 * z, 2 * z, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-18 * z, 10 * z, 1.8 * z, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e6c200';
+      ctx.beginPath(); ctx.arc(12 * z, 12 * z, 2.2 * z, 0, Math.PI * 2); ctx.fill();
+      // Mining cart
+      ctx.fillStyle = '#555';
+      ctx.fillRect(15 * z, 0 * z, 8 * z, 5 * z);
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath();
+      ctx.moveTo(16 * z, 0 * z);
+      ctx.lineTo(19 * z, -3 * z);
+      ctx.lineTo(22 * z, 0 * z);
+      ctx.fill();
+      // Cart wheels
+      ctx.fillStyle = '#444';
+      ctx.beginPath(); ctx.arc(17 * z, 5 * z, 1.5 * z, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(21 * z, 5 * z, 1.5 * z, 0, Math.PI * 2); ctx.fill();
+      // Iron-reinforced beams
+      ctx.fillStyle = '#777';
+      ctx.fillRect(-11 * z, -4 * z, 1.5 * z, 19 * z);
+      ctx.fillRect(9.5 * z, -4 * z, 1.5 * z, 19 * z);
+      // Extra sparkles
+      const sparkle2 = 0.3 + Math.cos(time * 7) * 0.3;
+      ctx.fillStyle = `rgba(255, 215, 0, ${sparkle2 * 0.5})`;
+      ctx.beginPath(); ctx.arc(5 * z, 8 * z, 1.5 * z, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255, 215, 0, ${(1 - sparkle2) * 0.4})`;
+      ctx.beginPath(); ctx.arc(-6 * z, 10 * z, 1.2 * z, 0, Math.PI * 2); ctx.fill();
+    }
   }
 
   // ─── Draw General ──────────────────────────────────────────────
@@ -1126,8 +1214,23 @@ const Renderer = (() => {
     const dir = facingRight ? 1 : -1;
     ctx.scale(dir, 1);
 
-    // Draw based on unit type
-    if (uData.unitType === 'infantry') {
+    // Draw based on unit type — Orc-specific sprites override generic ones
+    const isOrc = uData.characterId === 'orc_warchief';
+    if (isOrc && uData.typeId === 'half_orc') {
+      drawHalfOrcUnit(ctx, z, palette, uData);
+    } else if (isOrc && uData.typeId === 'goblin') {
+      drawGoblinUnit(ctx, z, palette, uData);
+    } else if (isOrc && uData.typeId === 'troll') {
+      drawTrollUnit(ctx, z, palette, uData);
+    } else if (isOrc && uData.typeId === 'thrall') {
+      drawThrallUnit(ctx, z, palette, uData);
+    } else if (isOrc && uData.typeId === 'warlock') {
+      drawWarlockUnit(ctx, z, palette, uData);
+    } else if (isOrc && uData.typeId === 'void_walker') {
+      drawVoidWalkerUnit(ctx, z, palette, uData);
+    } else if (isOrc && uData.typeId === 'imp') {
+      drawImpUnit(ctx, z, palette, uData);
+    } else if (uData.unitType === 'infantry') {
       drawInfantryUnit(ctx, z, palette, uData);
     } else if (uData.unitType === 'ranged') {
       drawRangedUnit(ctx, z, palette, uData);
@@ -1139,6 +1242,28 @@ const Renderer = (() => {
       drawFlyingUnit(ctx, z, palette, uData);
     }
 
+    // Slowed feet effect — orange liquidy feet
+    if (uData.slowed && uData.unitType !== 'flying') {
+      ctx.scale(dir, 1); // Undo mirror for symmetric feet
+      const feetY = vis.size * 0.4 * z;
+      const drip = Math.sin(time * 6 + uData.id) * 1.5 * z;
+      ctx.fillStyle = 'rgba(210, 140, 40, 0.7)';
+      ctx.beginPath();
+      ctx.ellipse(-3 * z, feetY + 2 * z, 4 * z, 2.5 * z + drip * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(3 * z, feetY + 2 * z, 4 * z, 2.5 * z - drip * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Drip streaks
+      ctx.fillStyle = 'rgba(210, 140, 40, 0.4)';
+      ctx.beginPath();
+      ctx.ellipse(-2 * z, feetY + 4 * z + drip, 1.5 * z, 2 * z, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(4 * z, feetY + 3.5 * z - drip * 0.5, 1 * z, 1.5 * z, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
 
     // Health bar
@@ -1146,6 +1271,26 @@ const Renderer = (() => {
     if (uData.hp < uData.maxHp) {
       drawHealthBar(pos.x, barY, 20 * z, uData.hp, uData.maxHp,
         isMySide ? 'friendly' : 'enemy');
+    }
+
+    // Debuff icons above unit
+    let debuffY = barY - 6 * z;
+    if (uData.poisoned && uData.poisoned > 0) {
+      drawPoisonIcon(pos.x - 5 * z, debuffY, z, uData.poisoned);
+      debuffY -= 10 * z;
+    }
+    if (uData.burning && uData.burning > 0) {
+      drawBurnIcon(pos.x + 5 * z, debuffY + (uData.poisoned ? 10 * z : 0), z, uData.burning);
+    }
+
+    // Spell shield glow
+    if (uData.spellShield && uData.spellShield > 0) {
+      const shieldPulse = 0.5 + Math.sin(time * 4) * 0.3;
+      ctx.strokeStyle = `rgba(100, 180, 255, ${shieldPulse.toFixed(2)})`;
+      ctx.lineWidth = 1.5 * z;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y + yOffset, (vis.size + 3) * z, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
     // Rank cosmetic indicator above unit
@@ -1468,6 +1613,675 @@ const Renderer = (() => {
     ctx.fill();
   }
 
+  // ─── Orc Unit: Half Orc (infantry with axe) ────────────────────
+  function drawHalfOrcUnit(ctx, z, palette, uData) {
+    const bob = Math.sin(time * 6 + uData.id * 2) * 1.5 * z;
+    // Body armor (heavier, greenish-brown)
+    ctx.fillStyle = palette.primary;
+    ctx.fillRect(-4.5 * z, -9 * z + bob, 9 * z, 11 * z);
+    // Chest plate detail
+    ctx.fillStyle = palette.dark;
+    ctx.fillRect(-3 * z, -7 * z + bob, 6 * z, 4 * z);
+    // Head (greenish tint)
+    ctx.fillStyle = '#8a9a5a';
+    ctx.beginPath();
+    ctx.arc(0, -12 * z + bob, 3.8 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Helmet (iron with horn nubs)
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.arc(0, -13 * z + bob, 3.8 * z, Math.PI, 0);
+    ctx.fill();
+    // Small horn nubs
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    ctx.moveTo(-3 * z, -16 * z + bob);
+    ctx.lineTo(-4.5 * z, -19 * z + bob);
+    ctx.lineTo(-1.5 * z, -16 * z + bob);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(3 * z, -16 * z + bob);
+    ctx.lineTo(4.5 * z, -19 * z + bob);
+    ctx.lineTo(1.5 * z, -16 * z + bob);
+    ctx.fill();
+    // Eyes (angry)
+    ctx.fillStyle = '#cc3300';
+    ctx.fillRect(-2 * z, -12.5 * z + bob, 1.2 * z, 0.8 * z);
+    ctx.fillRect(1 * z, -12.5 * z + bob, 1.2 * z, 0.8 * z);
+    // Shield
+    ctx.fillStyle = palette.dark;
+    ctx.beginPath();
+    ctx.ellipse(-5.5 * z, -4 * z + bob, 3 * z, 5 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = palette.secondary;
+    ctx.lineWidth = 0.5 * z;
+    ctx.stroke();
+    // AXE (distinctive from sword)
+    const swingAng = uData.state === 'fighting' ? Math.sin(time * 10) * 0.5 : 0;
+    ctx.save();
+    ctx.rotate(swingAng);
+    // Axe handle
+    ctx.strokeStyle = '#6B4226';
+    ctx.lineWidth = 1.5 * z;
+    ctx.beginPath();
+    ctx.moveTo(5 * z, -4 * z + bob);
+    ctx.lineTo(11 * z, -16 * z + bob);
+    ctx.stroke();
+    // Axe head (curved blade)
+    ctx.fillStyle = '#999';
+    ctx.beginPath();
+    ctx.moveTo(10 * z, -14 * z + bob);
+    ctx.quadraticCurveTo(15 * z, -17 * z + bob, 13 * z, -20 * z + bob);
+    ctx.lineTo(9 * z, -17 * z + bob);
+    ctx.fill();
+    // Axe edge highlight
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 0.5 * z;
+    ctx.beginPath();
+    ctx.moveTo(10 * z, -14 * z + bob);
+    ctx.quadraticCurveTo(15 * z, -17 * z + bob, 13 * z, -20 * z + bob);
+    ctx.stroke();
+    ctx.restore();
+    // Legs (thick)
+    ctx.fillStyle = '#4a3a2a';
+    ctx.fillRect(-3.5 * z, 2 * z + bob, 3 * z, 5.5 * z);
+    ctx.fillRect(0.5 * z, 2 * z + bob, 3 * z, 5.5 * z);
+  }
+
+  // ─── Orc Unit: Goblin (smaller, with sack) ───────────────────
+  function drawGoblinUnit(ctx, z, palette, uData) {
+    const scl = 0.7; // Smaller than normal infantry
+    const bob = Math.sin(time * 8 + uData.id * 3) * 1.2 * z;
+    // Body (hunched)
+    ctx.fillStyle = '#5a6a2a';
+    ctx.fillRect(-3 * z * scl, -5 * z * scl + bob, 6 * z * scl, 7 * z * scl);
+    // Head (large relative to body)
+    ctx.fillStyle = '#7a8a3a';
+    ctx.beginPath();
+    ctx.arc(0, -8 * z * scl + bob, 3 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    // Pointed ears
+    ctx.fillStyle = '#6a7a2a';
+    ctx.beginPath();
+    ctx.moveTo(-3 * z * scl, -9 * z * scl + bob);
+    ctx.lineTo(-6 * z * scl, -11 * z * scl + bob);
+    ctx.lineTo(-2 * z * scl, -7 * z * scl + bob);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(3 * z * scl, -9 * z * scl + bob);
+    ctx.lineTo(6 * z * scl, -11 * z * scl + bob);
+    ctx.lineTo(2 * z * scl, -7 * z * scl + bob);
+    ctx.fill();
+    // Eyes (beady, yellow)
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath();
+    ctx.arc(-1.2 * z * scl, -8 * z * scl + bob, 0.7 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1.2 * z * scl, -8 * z * scl + bob, 0.7 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(-1.2 * z * scl, -8 * z * scl + bob, 0.3 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1.2 * z * scl, -8 * z * scl + bob, 0.3 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    // Snaggle tooth
+    ctx.fillStyle = '#eee';
+    ctx.fillRect(-0.5 * z * scl, -5.5 * z * scl + bob, 1 * z * scl, 1.2 * z * scl);
+    // Small dagger
+    const swg = uData.state === 'fighting' ? Math.sin(time * 12) * 0.4 : 0;
+    ctx.save();
+    ctx.rotate(swg);
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 0.8 * z;
+    ctx.beginPath();
+    ctx.moveTo(4 * z * scl, -4 * z * scl + bob);
+    ctx.lineTo(7 * z * scl, -9 * z * scl + bob);
+    ctx.stroke();
+    ctx.restore();
+    // SACK on back (burlap colored)
+    ctx.fillStyle = '#8B7355';
+    ctx.beginPath();
+    ctx.ellipse(-3 * z * scl, -2 * z * scl + bob, 3 * z * scl, 3.5 * z * scl, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // Sack tie
+    ctx.strokeStyle = '#6B5335';
+    ctx.lineWidth = 0.6 * z;
+    ctx.beginPath();
+    ctx.moveTo(-3 * z * scl, -5.5 * z * scl + bob);
+    ctx.lineTo(-4 * z * scl, -6 * z * scl + bob);
+    ctx.stroke();
+    // Sack texture lines
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 0.3 * z;
+    ctx.beginPath();
+    ctx.moveTo(-5 * z * scl, -3 * z * scl + bob);
+    ctx.lineTo(-1 * z * scl, -1 * z * scl + bob);
+    ctx.stroke();
+    // Legs (short)
+    ctx.fillStyle = '#5a6a2a';
+    ctx.fillRect(-2.5 * z * scl, 2 * z * scl + bob, 2 * z * scl, 4 * z * scl);
+    ctx.fillRect(0.5 * z * scl, 2 * z * scl + bob, 2 * z * scl, 4 * z * scl);
+  }
+
+  // ─── Orc Unit: Troll Javelineer (holding javelins, purple tips) ─
+  function drawTrollUnit(ctx, z, palette, uData) {
+    const bob = Math.sin(time * 5 + uData.id * 3) * 1 * z;
+    // Body (large, lean, bluish-green)
+    ctx.fillStyle = '#4a6a5a';
+    ctx.fillRect(-4 * z, -10 * z + bob, 8 * z, 13 * z);
+    // Loincloth
+    ctx.fillStyle = '#5c4033';
+    ctx.beginPath();
+    ctx.moveTo(-4 * z, 2 * z + bob);
+    ctx.lineTo(0, 5 * z + bob);
+    ctx.lineTo(4 * z, 2 * z + bob);
+    ctx.fill();
+    // Head
+    ctx.fillStyle = '#5a8a6a';
+    ctx.beginPath();
+    ctx.ellipse(0, -13 * z + bob, 3.5 * z, 4 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Long nose
+    ctx.fillStyle = '#5a8a6a';
+    ctx.beginPath();
+    ctx.moveTo(2 * z, -13 * z + bob);
+    ctx.lineTo(5 * z, -12 * z + bob);
+    ctx.lineTo(2 * z, -11.5 * z + bob);
+    ctx.fill();
+    // Eyes (mean, narrow)
+    ctx.fillStyle = '#ff6600';
+    ctx.fillRect(-2 * z, -14 * z + bob, 1.5 * z, 0.8 * z);
+    ctx.fillRect(0.5 * z, -14 * z + bob, 1.5 * z, 0.8 * z);
+    // Tusks
+    ctx.fillStyle = '#ddd';
+    ctx.beginPath();
+    ctx.moveTo(-1.5 * z, -10 * z + bob);
+    ctx.lineTo(-2 * z, -8 * z + bob);
+    ctx.lineTo(-0.5 * z, -10 * z + bob);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(1.5 * z, -10 * z + bob);
+    ctx.lineTo(2 * z, -8 * z + bob);
+    ctx.lineTo(0.5 * z, -10 * z + bob);
+    ctx.fill();
+    // Javelin bundle (held in off-hand, 2-3 javelins on back)
+    ctx.strokeStyle = '#6B4226';
+    ctx.lineWidth = 1 * z;
+    ctx.beginPath();
+    ctx.moveTo(-5 * z, -6 * z + bob);
+    ctx.lineTo(-3 * z, -20 * z + bob);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-4 * z, -5 * z + bob);
+    ctx.lineTo(-1 * z, -19 * z + bob);
+    ctx.stroke();
+    // Purple tips on back javelins
+    ctx.fillStyle = '#8844aa';
+    ctx.beginPath();
+    ctx.moveTo(-3 * z, -20 * z + bob);
+    ctx.lineTo(-3.8 * z, -22 * z + bob);
+    ctx.lineTo(-2.2 * z, -22 * z + bob);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-1 * z, -19 * z + bob);
+    ctx.lineTo(-1.8 * z, -21 * z + bob);
+    ctx.lineTo(-0.2 * z, -21 * z + bob);
+    ctx.fill();
+    // Throwing javelin (active, in attack hand)
+    const throwAng = uData.state === 'fighting' ? Math.sin(time * 10) * 0.6 : 0.3;
+    ctx.save();
+    ctx.rotate(throwAng - 0.3);
+    ctx.strokeStyle = '#6B4226';
+    ctx.lineWidth = 1.2 * z;
+    ctx.beginPath();
+    ctx.moveTo(4 * z, -2 * z + bob);
+    ctx.lineTo(12 * z, -18 * z + bob);
+    ctx.stroke();
+    // Purple poison drop on javelin tip
+    ctx.fillStyle = '#9955cc';
+    ctx.beginPath();
+    ctx.moveTo(12 * z, -18 * z + bob);
+    ctx.lineTo(11 * z, -21 * z + bob);
+    ctx.lineTo(13 * z, -21 * z + bob);
+    ctx.fill();
+    // Poison drip
+    const drip = Math.sin(time * 4 + uData.id) * 0.5 * z;
+    ctx.fillStyle = 'rgba(153, 85, 204, 0.6)';
+    ctx.beginPath();
+    ctx.ellipse(12 * z, -17 * z + bob + drip, 0.8 * z, 1.2 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // Legs (long, lanky)
+    ctx.fillStyle = '#4a6a5a';
+    ctx.fillRect(-3 * z, 3 * z + bob, 2.5 * z, 6 * z);
+    ctx.fillRect(0.5 * z, 3 * z + bob, 2.5 * z, 6 * z);
+  }
+
+  // ─── Orc Unit: Thrall (large siege unit with hammer + armor) ──
+  function drawThrallUnit(ctx, z, palette, uData) {
+    const rumble = Math.sin(time * 4 + uData.id) * 1 * z;
+    const scale = 1.3; // Larger than normal
+    const sz = z * scale;
+    // Legs (heavy armored)
+    ctx.fillStyle = '#3a3a30';
+    ctx.fillRect(-4 * sz, 4 * sz + rumble, 3.5 * sz, 7 * sz);
+    ctx.fillRect(0.5 * sz, 4 * sz + rumble, 3.5 * sz, 7 * sz);
+    // Leg armor plates
+    ctx.fillStyle = '#555';
+    ctx.fillRect(-4 * sz, 4 * sz + rumble, 3.5 * sz, 2 * sz);
+    ctx.fillRect(0.5 * sz, 4 * sz + rumble, 3.5 * sz, 2 * sz);
+    // Body (massive armored torso)
+    const armorGrad = ctx.createLinearGradient(-6 * sz, -12 * sz, 6 * sz, 4 * sz);
+    armorGrad.addColorStop(0, '#4a5a2a');
+    armorGrad.addColorStop(0.5, '#3a4a1a');
+    armorGrad.addColorStop(1, '#4a5a2a');
+    ctx.fillStyle = armorGrad;
+    ctx.fillRect(-6 * sz, -12 * sz + rumble, 12 * sz, 16 * sz);
+    // Big armor plates on chest
+    ctx.fillStyle = '#666';
+    ctx.fillRect(-5 * sz, -10 * sz + rumble, 4 * sz, 6 * sz);
+    ctx.fillRect(1 * sz, -10 * sz + rumble, 4 * sz, 6 * sz);
+    // Metal rivets
+    ctx.fillStyle = '#888';
+    ctx.beginPath(); ctx.arc(-3 * sz, -9 * sz + rumble, 0.5 * sz, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3 * sz, -9 * sz + rumble, 0.5 * sz, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-3 * sz, -6 * sz + rumble, 0.5 * sz, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(3 * sz, -6 * sz + rumble, 0.5 * sz, 0, Math.PI * 2); ctx.fill();
+    // Belt
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(-6 * sz, 1 * sz + rumble, 12 * sz, 2.5 * sz);
+    ctx.fillStyle = '#d4a017';
+    ctx.fillRect(-1 * sz, 0.5 * sz + rumble, 2 * sz, 3 * sz);
+    // Shoulder pauldrons (big)
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.ellipse(-7 * sz, -10 * sz + rumble, 4 * sz, 3 * sz, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(7 * sz, -10 * sz + rumble, 4 * sz, 3 * sz, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    // Pauldron spikes
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    ctx.moveTo(-8 * sz, -13 * sz + rumble);
+    ctx.lineTo(-9 * sz, -16 * sz + rumble);
+    ctx.lineTo(-7 * sz, -13 * sz + rumble);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(8 * sz, -13 * sz + rumble);
+    ctx.lineTo(9 * sz, -16 * sz + rumble);
+    ctx.lineTo(7 * sz, -13 * sz + rumble);
+    ctx.fill();
+    // Head (orcish, strong jaw)
+    ctx.fillStyle = '#7a8a4a';
+    ctx.beginPath();
+    ctx.arc(0, -16 * sz + rumble, 4.5 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    // Eyes (glowing blue-white, storm magic)
+    ctx.fillStyle = '#aaddff';
+    ctx.beginPath();
+    ctx.arc(-1.5 * sz, -16.5 * sz + rumble, 1 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1.5 * sz, -16.5 * sz + rumble, 1 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    // Eye glow
+    ctx.fillStyle = 'rgba(170, 220, 255, 0.3)';
+    ctx.beginPath();
+    ctx.arc(0, -16.5 * sz + rumble, 3 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    // War paint lines under eyes
+    ctx.strokeStyle = '#3a4a1a';
+    ctx.lineWidth = 0.6 * sz;
+    ctx.beginPath();
+    ctx.moveTo(-3 * sz, -15 * sz + rumble);
+    ctx.lineTo(-4 * sz, -13 * sz + rumble);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(3 * sz, -15 * sz + rumble);
+    ctx.lineTo(4 * sz, -13 * sz + rumble);
+    ctx.stroke();
+    // HAMMER (massive war hammer)
+    const hammerSwing = uData.state === 'fighting' ? Math.sin(time * 8) * 0.7 : 0;
+    ctx.save();
+    ctx.rotate(hammerSwing);
+    // Handle
+    ctx.strokeStyle = '#6B4226';
+    ctx.lineWidth = 2 * sz;
+    ctx.beginPath();
+    ctx.moveTo(7 * sz, -6 * sz + rumble);
+    ctx.lineTo(16 * sz, -22 * sz + rumble);
+    ctx.stroke();
+    // Hammer head (blocky iron)
+    ctx.fillStyle = '#666';
+    ctx.fillRect(13 * sz, -26 * sz + rumble, 7 * sz, 8 * sz);
+    // Hammer face detail
+    ctx.fillStyle = '#888';
+    ctx.fillRect(18 * sz, -25 * sz + rumble, 2 * sz, 6 * sz);
+    // Lightning rune on hammer
+    ctx.strokeStyle = '#aaddff';
+    ctx.lineWidth = 0.5 * sz;
+    const runePulse = 0.5 + Math.sin(time * 5) * 0.5;
+    ctx.globalAlpha = runePulse;
+    ctx.beginPath();
+    ctx.moveTo(15 * sz, -25 * sz + rumble);
+    ctx.lineTo(16.5 * sz, -22.5 * sz + rumble);
+    ctx.lineTo(15 * sz, -22.5 * sz + rumble);
+    ctx.lineTo(17 * sz, -20 * sz + rumble);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ─── Orc Unit: Warlock (wizard with hat, gown, staff) ─────────
+  function drawWarlockUnit(ctx, z, palette, uData) {
+    const bob = Math.sin(time * 3 + uData.id * 2) * 1 * z;
+    const float = Math.sin(time * 2) * 2 * z;
+    // Gown (long flowing robe)
+    const gownGrad = ctx.createLinearGradient(0, -8 * z, 0, 8 * z);
+    gownGrad.addColorStop(0, '#2a1a3a');
+    gownGrad.addColorStop(1, '#1a0a2a');
+    ctx.fillStyle = gownGrad;
+    ctx.beginPath();
+    ctx.moveTo(-4 * z, -6 * z + bob + float);
+    ctx.lineTo(-6 * z, 7 * z + bob + float);
+    ctx.lineTo(6 * z, 7 * z + bob + float);
+    ctx.lineTo(4 * z, -6 * z + bob + float);
+    ctx.fill();
+    // Gown trim (glowing purple)
+    ctx.strokeStyle = '#8844aa';
+    ctx.lineWidth = 0.6 * z;
+    ctx.beginPath();
+    ctx.moveTo(-6 * z, 7 * z + bob + float);
+    ctx.lineTo(6 * z, 7 * z + bob + float);
+    ctx.stroke();
+    // Body/chest
+    ctx.fillStyle = '#3a2a4a';
+    ctx.fillRect(-3.5 * z, -6 * z + bob + float, 7 * z, 8 * z);
+    // Rune emblem on chest
+    ctx.strokeStyle = '#9966cc';
+    ctx.lineWidth = 0.4 * z;
+    ctx.beginPath();
+    ctx.arc(0, -3 * z + bob + float, 2 * z, 0, Math.PI * 2);
+    ctx.stroke();
+    // Head (shadowed face)
+    ctx.fillStyle = '#7a8a4a';
+    ctx.beginPath();
+    ctx.arc(0, -10 * z + bob + float, 3 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Glowing eyes
+    ctx.fillStyle = '#aa44ff';
+    ctx.beginPath();
+    ctx.arc(-1 * z, -10.5 * z + bob + float, 0.7 * z, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1.5 * z, -10.5 * z + bob + float, 0.7 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // BIG WIZARD HAT
+    ctx.fillStyle = '#2a1a3a';
+    ctx.beginPath();
+    ctx.moveTo(-5 * z, -12 * z + bob + float);
+    ctx.lineTo(0, -28 * z + bob + float);
+    ctx.lineTo(5 * z, -12 * z + bob + float);
+    ctx.fill();
+    // Hat brim
+    ctx.fillStyle = '#3a2a4a';
+    ctx.beginPath();
+    ctx.ellipse(0, -12 * z + bob + float, 6 * z, 1.5 * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Hat band with rune
+    ctx.fillStyle = '#8844aa';
+    ctx.fillRect(-4.5 * z, -14 * z + bob + float, 9 * z, 1.5 * z);
+    // Hat tip star
+    const starPulse = 0.5 + Math.sin(time * 4) * 0.5;
+    ctx.fillStyle = `rgba(170, 100, 255, ${starPulse.toFixed(2)})`;
+    ctx.beginPath();
+    ctx.arc(0, -28 * z + bob + float, 1.5 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // STAFF (held in right hand)
+    ctx.strokeStyle = '#5a4a3a';
+    ctx.lineWidth = 1.5 * z;
+    ctx.beginPath();
+    ctx.moveTo(5 * z, -4 * z + bob + float);
+    ctx.lineTo(7 * z, -22 * z + bob + float);
+    ctx.stroke();
+    // Staff orb
+    ctx.fillStyle = '#7733aa';
+    ctx.beginPath();
+    ctx.arc(7 * z, -23 * z + bob + float, 2 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Staff orb glow
+    const orbPulse = 0.3 + Math.sin(time * 3 + 1) * 0.2;
+    const orbGlow = ctx.createRadialGradient(7 * z, -23 * z + bob + float, 0, 7 * z, -23 * z + bob + float, 5 * z);
+    orbGlow.addColorStop(0, `rgba(140, 80, 200, ${orbPulse.toFixed(2)})`);
+    orbGlow.addColorStop(1, 'rgba(140, 80, 200, 0)');
+    ctx.fillStyle = orbGlow;
+    ctx.beginPath();
+    ctx.arc(7 * z, -23 * z + bob + float, 5 * z, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ─── Orc Unit: Void Walker (big purple genie with armor) ──────
+  function drawVoidWalkerUnit(ctx, z, palette, uData) {
+    const hover = Math.sin(time * 2 + uData.id) * 3 * z;
+    const scale = 1.4;
+    const sz = z * scale;
+    // Ghostly lower body (genie tail — wispy, no legs)
+    const tailGrad = ctx.createLinearGradient(0, 0 + hover, 0, 12 * sz + hover);
+    tailGrad.addColorStop(0, 'rgba(120, 60, 180, 0.8)');
+    tailGrad.addColorStop(1, 'rgba(120, 60, 180, 0)');
+    ctx.fillStyle = tailGrad;
+    ctx.beginPath();
+    ctx.moveTo(-5 * sz, 0 + hover);
+    const tailWave = Math.sin(time * 3 + uData.id) * 3 * sz;
+    ctx.quadraticCurveTo(-3 * sz, 6 * sz + hover, tailWave, 12 * sz + hover);
+    ctx.quadraticCurveTo(3 * sz, 6 * sz + hover, 5 * sz, 0 + hover);
+    ctx.fill();
+    // Torso (large, purple, muscular)
+    const bodyGrad = ctx.createLinearGradient(-6 * sz, -14 * sz, 6 * sz, 0);
+    bodyGrad.addColorStop(0, '#7733aa');
+    bodyGrad.addColorStop(0.5, '#9955cc');
+    bodyGrad.addColorStop(1, '#7733aa');
+    ctx.fillStyle = bodyGrad;
+    ctx.fillRect(-6 * sz, -12 * sz + hover, 12 * sz, 12 * sz);
+    // Armor chest plate
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.moveTo(-4 * sz, -10 * sz + hover);
+    ctx.lineTo(0, -12 * sz + hover);
+    ctx.lineTo(4 * sz, -10 * sz + hover);
+    ctx.lineTo(3 * sz, -4 * sz + hover);
+    ctx.lineTo(-3 * sz, -4 * sz + hover);
+    ctx.fill();
+    // Armor detail lines
+    ctx.strokeStyle = '#777';
+    ctx.lineWidth = 0.5 * sz;
+    ctx.beginPath();
+    ctx.moveTo(0, -12 * sz + hover);
+    ctx.lineTo(0, -4 * sz + hover);
+    ctx.stroke();
+    // Shoulder guards
+    ctx.fillStyle = '#666';
+    ctx.beginPath();
+    ctx.ellipse(-7 * sz, -10 * sz + hover, 3 * sz, 2 * sz, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(7 * sz, -10 * sz + hover, 3 * sz, 2 * sz, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // Arms (big, purple)
+    ctx.fillStyle = '#8844bb';
+    ctx.fillRect(-8 * sz, -9 * sz + hover, 3 * sz, 8 * sz);
+    ctx.fillRect(5 * sz, -9 * sz + hover, 3 * sz, 8 * sz);
+    // Fists
+    ctx.fillStyle = '#9955cc';
+    ctx.beginPath();
+    ctx.arc(-7 * sz, 0 + hover, 2 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(6 * sz, 0 + hover, 2 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    // Head (bald, fierce)
+    ctx.fillStyle = '#9955cc';
+    ctx.beginPath();
+    ctx.arc(0, -16 * sz + hover, 4 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    // Eyes (glowing yellow-white)
+    ctx.fillStyle = '#ffffaa';
+    ctx.beginPath();
+    ctx.ellipse(-1.5 * sz, -16.5 * sz + hover, 1.2 * sz, 0.7 * sz, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(1.5 * sz, -16.5 * sz + hover, 1.2 * sz, 0.7 * sz, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Ethereal glow around body
+    ctx.globalAlpha = 0.15 + Math.sin(time * 2) * 0.08;
+    const auraGrad = ctx.createRadialGradient(0, -6 * sz + hover, 0, 0, -6 * sz + hover, 14 * sz);
+    auraGrad.addColorStop(0, 'rgba(140, 80, 220, 0.3)');
+    auraGrad.addColorStop(1, 'rgba(140, 80, 220, 0)');
+    ctx.fillStyle = auraGrad;
+    ctx.beginPath();
+    ctx.arc(0, -6 * sz + hover, 14 * sz, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // ─── Orc Unit: Imp (small red skinned with horns) ─────────────
+  function drawImpUnit(ctx, z, palette, uData) {
+    const scl = 0.6;
+    const bob = Math.sin(time * 10 + uData.id * 4) * 1.5 * z;
+    // Body (small, red)
+    ctx.fillStyle = '#cc3322';
+    ctx.fillRect(-3 * z * scl, -5 * z * scl + bob, 6 * z * scl, 7 * z * scl);
+    // Head (round, red)
+    ctx.fillStyle = '#dd4433';
+    ctx.beginPath();
+    ctx.arc(0, -8 * z * scl + bob, 3 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    // Horns (curved, dark)
+    ctx.fillStyle = '#441111';
+    ctx.beginPath();
+    ctx.moveTo(-2 * z * scl, -10 * z * scl + bob);
+    ctx.quadraticCurveTo(-5 * z * scl, -14 * z * scl + bob, -3 * z * scl, -15 * z * scl + bob);
+    ctx.lineTo(-1.5 * z * scl, -11 * z * scl + bob);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(2 * z * scl, -10 * z * scl + bob);
+    ctx.quadraticCurveTo(5 * z * scl, -14 * z * scl + bob, 3 * z * scl, -15 * z * scl + bob);
+    ctx.lineTo(1.5 * z * scl, -11 * z * scl + bob);
+    ctx.fill();
+    // Eyes (glowing yellow, mischievous)
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath();
+    ctx.arc(-1 * z * scl, -8.5 * z * scl + bob, 0.8 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1 * z * scl, -8.5 * z * scl + bob, 0.8 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    // Pupils
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(-1 * z * scl, -8.5 * z * scl + bob, 0.3 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(1 * z * scl, -8.5 * z * scl + bob, 0.3 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    // Grin
+    ctx.strokeStyle = '#881100';
+    ctx.lineWidth = 0.4 * z;
+    ctx.beginPath();
+    ctx.arc(0, -7 * z * scl + bob, 1.5 * z * scl, 0.2, Math.PI - 0.2);
+    ctx.stroke();
+    // Claws
+    const swg = uData.state === 'fighting' ? Math.sin(time * 14) * 0.3 : 0;
+    ctx.save();
+    ctx.rotate(swg);
+    ctx.strokeStyle = '#aa2211';
+    ctx.lineWidth = 0.6 * z;
+    ctx.beginPath();
+    ctx.moveTo(4 * z * scl, -4 * z * scl + bob);
+    ctx.lineTo(6 * z * scl, -6 * z * scl + bob);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(4 * z * scl, -3 * z * scl + bob);
+    ctx.lineTo(6.5 * z * scl, -4 * z * scl + bob);
+    ctx.stroke();
+    ctx.restore();
+    // Legs (tiny, red)
+    ctx.fillStyle = '#bb2211';
+    ctx.fillRect(-2 * z * scl, 2 * z * scl + bob, 1.5 * z * scl, 3.5 * z * scl);
+    ctx.fillRect(0.5 * z * scl, 2 * z * scl + bob, 1.5 * z * scl, 3.5 * z * scl);
+    // Fire wisps around body
+    const fireAlpha = 0.3 + Math.sin(time * 6 + uData.id) * 0.2;
+    ctx.fillStyle = `rgba(255, 100, 0, ${fireAlpha.toFixed(2)})`;
+    ctx.beginPath();
+    ctx.arc(3 * z * scl, -3 * z * scl + bob + Math.sin(time * 8) * z, 1 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255, 200, 0, ${(fireAlpha * 0.7).toFixed(2)})`;
+    ctx.beginPath();
+    ctx.arc(-3 * z * scl, -1 * z * scl + bob + Math.cos(time * 7) * z, 0.8 * z * scl, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ─── Debuff Icons ─────────────────────────────────────────────
+  function drawPoisonIcon(x, y, z, stacks) {
+    // Poison skull/droplet icon
+    ctx.fillStyle = '#44bb44';
+    ctx.beginPath();
+    ctx.arc(x, y, 4 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Skull face
+    ctx.fillStyle = '#115511';
+    ctx.beginPath();
+    ctx.arc(x - 1 * z, y - 0.5 * z, 0.6 * z, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + 1 * z, y - 0.5 * z, 0.6 * z, 0, Math.PI * 2);
+    ctx.fill();
+    // Drip
+    ctx.fillStyle = '#44bb44';
+    ctx.beginPath();
+    ctx.moveTo(x, y + 4 * z);
+    ctx.lineTo(x - 1 * z, y + 6 * z);
+    ctx.lineTo(x + 1 * z, y + 6 * z);
+    ctx.fill();
+    // Stack count
+    if (stacks > 1) {
+      ctx.font = `bold ${6 * z}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(stacks, x, y + 2.5 * z);
+    }
+  }
+
+  function drawBurnIcon(x, y, z, stacks) {
+    // Fire icon
+    ctx.fillStyle = '#ff6600';
+    ctx.beginPath();
+    ctx.moveTo(x, y - 4 * z);
+    ctx.quadraticCurveTo(x + 3 * z, y - 1 * z, x + 2 * z, y + 2 * z);
+    ctx.quadraticCurveTo(x, y + 4 * z, x - 2 * z, y + 2 * z);
+    ctx.quadraticCurveTo(x - 3 * z, y - 1 * z, x, y - 4 * z);
+    ctx.fill();
+    // Inner flame
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath();
+    ctx.moveTo(x, y - 2 * z);
+    ctx.quadraticCurveTo(x + 1.5 * z, y, x + 1 * z, y + 1.5 * z);
+    ctx.quadraticCurveTo(x, y + 2.5 * z, x - 1 * z, y + 1.5 * z);
+    ctx.quadraticCurveTo(x - 1.5 * z, y, x, y - 2 * z);
+    ctx.fill();
+    // Stack count
+    if (stacks > 1) {
+      ctx.font = `bold ${6 * z}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(stacks, x, y + 2 * z);
+    }
+  }
+
   // ─── Health Bar ─────────────────────────────────────────────────
   function drawHealthBar(x, y, w, hp, maxHp, type) {
     const pct = Math.max(0, hp / maxHp);
@@ -1550,12 +2364,20 @@ const Renderer = (() => {
       ctx.font = `bold ${Math.max(10, 13 * z)}px Cinzel, serif`;
       ctx.textAlign = 'center';
 
-      // Shadow
-      ctx.fillStyle = '#000';
-      ctx.fillText('-' + d.value, pos.x + 1, pos.y + 1);
-      // Text
-      ctx.fillStyle = '#ff4444';
-      ctx.fillText('-' + d.value, pos.x, pos.y);
+      if (d.isHeal) {
+        // Green heal numbers
+        ctx.fillStyle = '#000';
+        ctx.fillText('+' + d.value, pos.x + 1, pos.y + 1);
+        ctx.fillStyle = '#44dd44';
+        ctx.fillText('+' + d.value, pos.x, pos.y);
+      } else {
+        // Shadow
+        ctx.fillStyle = '#000';
+        ctx.fillText('-' + d.value, pos.x + 1, pos.y + 1);
+        // Text
+        ctx.fillStyle = '#ff4444';
+        ctx.fillText('-' + d.value, pos.x, pos.y);
+      }
 
       ctx.globalAlpha = 1;
     }
@@ -1605,6 +2427,131 @@ const Renderer = (() => {
       } else if (e.type === 'death') {
         if (elapsed < 100) {
           particles.deathEffect(e.x, e.y, e.unitType);
+          // Goblin death: orange ooze puddle effect
+          if (e.typeId === 'goblin') {
+            particles.emit({
+              x: e.x, y: e.y, count: 8, spread: 15,
+              vx: 0, vy: 5, vxSpread: 20, vySpread: 10,
+              life: 500, size: 3, sizeEnd: 1,
+              color: '#d48c28', alpha: 0.8, alphaEnd: 0,
+              gravity: 20, shape: 'circle'
+            });
+          }
+        }
+      } else if (e.type === 'chain_lightning') {
+        // Draw lightning bolt between two points
+        if (!isVisible(e.x, e.y, 200)) continue;
+        const fromPos = worldToScreen(e.x, e.y);
+        const toPos = worldToScreen(e.tx, e.ty);
+        const z = camera.zoom;
+        const alpha = 1 - progress;
+        ctx.strokeStyle = `rgba(170, 220, 255, ${alpha.toFixed(2)})`;
+        ctx.lineWidth = (3 - progress * 2) * z;
+        ctx.beginPath();
+        ctx.moveTo(fromPos.x, fromPos.y);
+        // Jagged lightning path (3 segments)
+        const midX1 = fromPos.x + (toPos.x - fromPos.x) * 0.33 + (Math.sin(time * 20 + e.x) * 8 * z);
+        const midY1 = fromPos.y + (toPos.y - fromPos.y) * 0.33 + (Math.cos(time * 20 + e.y) * 8 * z);
+        const midX2 = fromPos.x + (toPos.x - fromPos.x) * 0.66 + (Math.cos(time * 20 + e.tx) * 6 * z);
+        const midY2 = fromPos.y + (toPos.y - fromPos.y) * 0.66 + (Math.sin(time * 20 + e.ty) * 6 * z);
+        ctx.lineTo(midX1, midY1);
+        ctx.lineTo(midX2, midY2);
+        ctx.lineTo(toPos.x, toPos.y);
+        ctx.stroke();
+        // Glow
+        ctx.strokeStyle = `rgba(255, 255, 255, ${(alpha * 0.5).toFixed(2)})`;
+        ctx.lineWidth = (1.5 - progress) * z;
+        ctx.beginPath();
+        ctx.moveTo(fromPos.x, fromPos.y);
+        ctx.lineTo(midX1, midY1);
+        ctx.lineTo(midX2, midY2);
+        ctx.lineTo(toPos.x, toPos.y);
+        ctx.stroke();
+      } else if (e.type === 'heal_particle') {
+        // Green healing particles rising up
+        if (!isVisible(e.x, e.y, 40)) continue;
+        const pos = worldToScreen(e.x, e.y);
+        const z = camera.zoom;
+        const alpha = 1 - progress;
+        for (let i = 0; i < 3; i++) {
+          const px = pos.x + Math.sin(time * 5 + i * 2.1 + e.x) * 6 * z;
+          const py = pos.y - progress * 25 * z - i * 5 * z;
+          ctx.fillStyle = `rgba(80, 220, 80, ${(alpha * 0.6).toFixed(2)})`;
+          ctx.beginPath();
+          ctx.arc(px, py, (2 - progress * 1.5) * z, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (e.type === 'summon') {
+        // Purple void rift summoning animation
+        if (!isVisible(e.x, e.y, 60)) continue;
+        const pos = worldToScreen(e.x, e.y);
+        const z = camera.zoom;
+        const alpha = 1 - progress;
+        const riftR = (5 + progress * 15) * z;
+        // Rift circle
+        ctx.strokeStyle = `rgba(140, 60, 200, ${alpha.toFixed(2)})`;
+        ctx.lineWidth = (3 - progress * 2) * z;
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y, riftR, riftR * 0.4, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        // Inner glow
+        const riftGrad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, riftR);
+        riftGrad.addColorStop(0, `rgba(100, 40, 180, ${(alpha * 0.4).toFixed(2)})`);
+        riftGrad.addColorStop(1, 'rgba(100, 40, 180, 0)');
+        ctx.fillStyle = riftGrad;
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y, riftR, riftR * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (e.type === 'slow_pool') {
+        // Orange ooze puddle on ground
+        if (!isVisible(e.x, e.y, 80)) continue;
+        const pos = worldToScreen(e.x, e.y);
+        const z = camera.zoom;
+        const alpha = Math.min(1, (1 - progress) * 2);
+        const poolR = 60 * z * Math.min(1, progress * 5 + 0.5);
+        // Puddle
+        const puddleGrad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, poolR);
+        puddleGrad.addColorStop(0, `rgba(210, 140, 40, ${(0.35 * alpha).toFixed(2)})`);
+        puddleGrad.addColorStop(0.6, `rgba(180, 110, 30, ${(0.25 * alpha).toFixed(2)})`);
+        puddleGrad.addColorStop(1, 'rgba(180, 110, 30, 0)');
+        ctx.fillStyle = puddleGrad;
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y, poolR, poolR * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Bubbles
+        const bubbleAlpha = alpha * 0.5;
+        ctx.fillStyle = `rgba(230, 160, 50, ${bubbleAlpha.toFixed(2)})`;
+        for (let i = 0; i < 3; i++) {
+          const bx = pos.x + Math.sin(time * 2 + i * 2.5) * poolR * 0.4;
+          const by = pos.y + Math.cos(time * 1.5 + i * 3.2) * poolR * 0.2;
+          ctx.beginPath();
+          ctx.arc(bx, by, (1 + Math.sin(time * 3 + i)) * z, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (e.type === 'spell_shield') {
+        // Blue shield effect
+        if (!isVisible(e.x, e.y, 40)) continue;
+        const pos = worldToScreen(e.x, e.y);
+        const z = camera.zoom;
+        const alpha = 1 - progress;
+        ctx.strokeStyle = `rgba(100, 180, 255, ${alpha.toFixed(2)})`;
+        ctx.lineWidth = 2 * z;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, (8 + progress * 5) * z, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (e.type === 'spell_shield_break') {
+        // Shield shattering
+        if (!isVisible(e.x, e.y, 40)) continue;
+        const pos = worldToScreen(e.x, e.y);
+        const z = camera.zoom;
+        const alpha = 1 - progress;
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2;
+          const dist = progress * 15 * z;
+          ctx.fillStyle = `rgba(100, 180, 255, ${(alpha * 0.6).toFixed(2)})`;
+          ctx.beginPath();
+          ctx.arc(pos.x + Math.cos(angle) * dist, pos.y + Math.sin(angle) * dist, (2 - progress * 1.5) * z, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
     }
@@ -1952,6 +2899,38 @@ const Renderer = (() => {
     const sortedBuildings = [...allBuildings].sort((a, b) => a.y - b.y);
     for (const b of sortedBuildings) {
       drawBuilding(b);
+    }
+
+    // Slow pools (goblin death puddles) — drawn before units so they appear on ground
+    if (state.slowPools) {
+      const now = Date.now();
+      for (const pool of state.slowPools) {
+        if (!isVisible(pool.x, pool.y, pool.radius + 20)) continue;
+        const pos = worldToScreen(pool.x, pool.y);
+        const z = camera.zoom;
+        const poolR = (pool.radius || 60) * z;
+        const timeLeft = pool.expireTime - now;
+        const fadeAlpha = Math.min(1, timeLeft / 500); // Fade in last 500ms
+        // Orange ooze puddle
+        const puddleGrad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, poolR);
+        puddleGrad.addColorStop(0, `rgba(210, 140, 40, ${(0.35 * fadeAlpha).toFixed(3)})`);
+        puddleGrad.addColorStop(0.5, `rgba(180, 110, 30, ${(0.25 * fadeAlpha).toFixed(3)})`);
+        puddleGrad.addColorStop(1, 'rgba(180, 110, 30, 0)');
+        ctx.fillStyle = puddleGrad;
+        ctx.beginPath();
+        ctx.ellipse(pos.x, pos.y, poolR, poolR * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Surface bubbles
+        const bAlpha = fadeAlpha * 0.4;
+        ctx.fillStyle = `rgba(230, 160, 50, ${bAlpha.toFixed(3)})`;
+        for (let i = 0; i < 4; i++) {
+          const bx = pos.x + Math.sin(time * 1.5 + i * 2.1) * poolR * 0.35;
+          const by = pos.y + Math.cos(time * 1.2 + i * 2.8) * poolR * 0.15;
+          ctx.beginPath();
+          ctx.arc(bx, by, (1.2 + Math.sin(time * 3 + i) * 0.5) * z, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
     }
 
     // Command outposts

@@ -662,13 +662,13 @@ const CHARACTERS = {
       },
       {
         id: 'goblin', name: 'Goblin', type: 'infantry',
-        hp: 30, damage: 6, speed: 50, range: 24, attackSpeed: 950,
+        hp: 30, damage: 8, speed: 50, range: 24, attackSpeed: 950,
         description: 'Sneaky goblins that fight in pairs and profit from killing',
         specials: { doubleSpawn: true, killGoldBonus: 4, deathGoldToEnemy: 2, deathSlowPool: { slowPct: 0.30, duration: 3000, radius: 60 } }
       },
       {
         id: 'troll', name: 'Troll Javelineer', type: 'ranged',
-        hp: 28, damage: 5, speed: 32, range: 180, attackSpeed: 2400,
+        hp: 28, damage: 7, speed: 32, range: 180, attackSpeed: 2400,
         description: 'Fast-attacking trolls who apply deadly venom to their targets',
         specials: { poison: { maxStacks: 5, dmgPct: 0.03, tickInterval: 2000 } }
       },
@@ -676,10 +676,10 @@ const CHARACTERS = {
         id: 'thrall', name: 'Thrall', type: 'siege',
         hp: 300, damage: 22, speed: 14, range: 40, attackSpeed: 3000,
         description: 'Mighty orc shamans who call lightning and heal their allies',
-        specials: { chainLightning: { chance: 0.10, bounces: 2, range: 120 }, healAura: { pct: 0.05, range: 150, tickInterval: 2000 } }
+        specials: { chainLightning: { chance: 0.10, bounces: 2, range: 120 }, onAttackHeal: { missingHpPct: 0.05, maxAllies: 2, range: 80 } }
       },
       {
-        id: 'warlock', name: 'Warlock', type: 'flying',
+        id: 'warlock', name: 'Warlock', type: 'infantry',
         hp: 55, damage: 0, speed: 35, range: 0, attackSpeed: 0,
         description: 'Dark summoner who calls void walkers and shields allies',
         specials: { isSummoner: true, summon: { unitId: 'void_walker', cooldown: 45000, firstSummonMax: 10000 }, spellShield: { cooldown: 10000, range: 150 } }
@@ -719,7 +719,7 @@ const GAME_CONSTANTS = {
   INTEREST_RATE: 0.02,
   STARTING_GOLD: 70,
   CASTLE_HP: 8000,
-  RESCUE_STRIKE_RADIUS: 500,
+  RESCUE_STRIKE_RADIUS: 900,
   LANE_TOP_Y: 450,
   LANE_BOT_Y: 1150,
   LANE_WIDTH: 120,

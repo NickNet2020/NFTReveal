@@ -513,11 +513,14 @@ function upgradeBuilding(room, side, buildingId) {
   const bDef = charData.buildings.find(b => b.id === building.typeId);
   if (!bDef) return { success: false, reason: 'Invalid building' };
 
-  if (building.level >= 3) return { success: false, reason: 'Already max level' };
+  // Gold mine can only upgrade to L2
+  const isGoldMine = building.typeId === 'gold_mine';
+  if (isGoldMine && building.level >= 2) return { success: false, reason: 'Already max level' };
+  if (!isGoldMine && building.level >= 3) return { success: false, reason: 'Already max level' };
 
   const targetLevel = building.level + 1;
 
-  if (targetLevel === 3) {
+  if (!isGoldMine && targetLevel === 3) {
     // L3 requires l3Eligible check and core foundation
     if (!charData.l3Eligible || !charData.l3Eligible.includes(building.typeId)) {
       return { success: false, reason: 'This building cannot reach Level 3' };
@@ -536,13 +539,21 @@ function upgradeBuilding(room, side, buildingId) {
   }
 
   playerData.gold -= upgradeCost;
-  if (targetLevel === 3) playerData.coreFoundations--;
+  if (!isGoldMine && targetLevel === 3) playerData.coreFoundations--;
 
   building.level = targetLevel;
-  // Upgrade spawn interval
-  building.spawnInterval = targetLevel >= 2 ? GC.L2_SPAWN_INTERVAL : GC.BASE_SPAWN_INTERVAL;
-  if (charData.passive.type === 'spawn_speed') {
-    building.spawnInterval = Math.floor(building.spawnInterval * (1 - charData.passive.value));
+
+  // Gold mine upgrade: double the income
+  if (isGoldMine) {
+    const oldIncome = building.income;
+    building.income = oldIncome * 2;
+    playerData.income += oldIncome; // Add the doubled portion
+  } else {
+    // Upgrade spawn interval for unit-producing buildings
+    building.spawnInterval = targetLevel >= 2 ? GC.L2_SPAWN_INTERVAL : GC.BASE_SPAWN_INTERVAL;
+    if (charData.passive.type === 'spawn_speed') {
+      building.spawnInterval = Math.floor(building.spawnInterval * (1 - charData.passive.value));
+    }
   }
 
   // Boost building HP
@@ -763,6 +774,43 @@ function dealDamage(room, attacker, targetInfo, isHero) {
     }
   }
 
+  // On-attack heal (Thrall — 5% of MISSING HP for self + up to 2 nearby allies, only vs units/heroes)
+  if (!isHero && attacker.specials && attacker.specials.onAttackHeal && (targetInfo.type === 'unit' || targetInfo.type === 'hero')) {
+    const healSpec = attacker.specials.onAttackHeal;
+    const missingPct = healSpec.missingHpPct;
+    const healRange = healSpec.range;
+    const maxAllies = healSpec.maxAllies;
+
+    // Heal self
+    if (attacker.hp < attacker.maxHp) {
+      const selfMissing = attacker.maxHp - attacker.hp;
+      const selfHeal = Math.max(1, Math.floor(selfMissing * missingPct));
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + selfHeal);
+      room.damageNumbers.push({ x: attacker.x, y: attacker.y - 20, value: selfHeal, time: Date.now(), isHeal: true });
+      room.effects.push({ type: 'heal_particle', x: attacker.x, y: attacker.y, time: Date.now(), duration: 600 });
+    }
+
+    // Heal nearby allies (max 2, closest first, excluding self)
+    const nearbyAllies = [];
+    for (const [, ally] of room.units) {
+      if (ally.side !== attacker.side || ally.hp <= 0 || ally.id === attacker.id) continue;
+      if (ally.hp >= ally.maxHp) continue;
+      const d = dist(attacker, ally);
+      if (d <= healRange) {
+        nearbyAllies.push({ unit: ally, dist: d });
+      }
+    }
+    nearbyAllies.sort((a, b) => a.dist - b.dist);
+    for (let i = 0; i < Math.min(maxAllies, nearbyAllies.length); i++) {
+      const ally = nearbyAllies[i].unit;
+      const allyMissing = ally.maxHp - ally.hp;
+      const allyHeal = Math.max(1, Math.floor(allyMissing * missingPct));
+      ally.hp = Math.min(ally.maxHp, ally.hp + allyHeal);
+      room.damageNumbers.push({ x: ally.x, y: ally.y - 20, value: allyHeal, time: Date.now(), isHeal: true });
+      room.effects.push({ type: 'heal_particle', x: ally.x, y: ally.y, time: Date.now(), duration: 600 });
+    }
+  }
+
   if (target.hp <= 0) {
     handleDeath(room, targetInfo, target, attacker);
   }
@@ -827,7 +875,7 @@ function handleDeath(room, targetInfo, target, attacker) {
     }
 
     room.units.delete(targetInfo.id);
-    room.effects.push({ type: 'death', x: target.x, y: target.y, unitType: target.unitType, time: Date.now(), duration: 1000 });
+    room.effects.push({ type: 'death', x: target.x, y: target.y, unitType: target.unitType, typeId: target.typeId, time: Date.now(), duration: 1000 });
   } else if (targetInfo.type === 'hero') {
     attackerOwner.kills++;
     room.effects.push({ type: 'hero_death', x: target.x, y: target.y, time: Date.now(), duration: 2000 });
@@ -1305,27 +1353,7 @@ function updateDebuffs(room, now) {
 // Auras (Thrall heal, Void Walker attack speed reduction)
 // ═══════════════════════════════════════════════════════════════════════
 function updateAuras(room, now, dt) {
-  for (const [, unit] of room.units) {
-    if (unit.hp <= 0) continue;
-
-    // Thrall heal aura: heal allies 5% max HP every 2s
-    if (unit.specials && unit.specials.healAura) {
-      if (!unit.lastHealAuraTick) unit.lastHealAuraTick = 0;
-      if (now - unit.lastHealAuraTick >= (unit.specials.healAura.tickInterval || 2000)) {
-        unit.lastHealAuraTick = now;
-        const range = unit.specials.healAura.range;
-        const healPct = unit.specials.healAura.pct;
-        for (const [, ally] of room.units) {
-          if (ally.side !== unit.side || ally.hp <= 0 || ally.id === unit.id) continue;
-          if (ally.hp >= ally.maxHp) continue;
-          if (dist(unit, ally) <= range) {
-            const healAmt = Math.max(1, Math.floor(ally.maxHp * healPct));
-            ally.hp = Math.min(ally.maxHp, ally.hp + healAmt);
-          }
-        }
-      }
-    }
-  }
+  // Aura effects processed here (heal aura moved to on-attack in dealDamage)
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1739,7 +1767,8 @@ function serializeState(room, now, playerSide) {
       isSummoned: u.isSummoned || false,
       spellShield: u.spellShield || 0,
       poisoned: (u.poisonStacks && u.poisonStacks.length > 0) ? u.poisonStacks.length : 0,
-      burning: (u.burnStacks && u.burnStacks.length > 0) ? u.burnStacks.length : 0
+      burning: (u.burnStacks && u.burnStacks.length > 0) ? u.burnStacks.length : 0,
+      slowed: room.slowPools.some(p => p.side !== u.side && Math.sqrt((u.x - p.x) ** 2 + (u.y - p.y) ** 2) <= p.radius)
     });
   }
 
@@ -1810,7 +1839,7 @@ function serializeState(room, now, playerSide) {
       x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(p.tx), ty: Math.round(p.ty),
       time: p.time, side: p.side, characterId: p.characterId, isTower: p.isTower || false
     })),
-    damageNumbers: room.damageNumbers.map(d => ({ x: d.x, y: d.y, value: d.value, time: d.time })),
+    damageNumbers: room.damageNumbers.map(d => ({ x: d.x, y: d.y, value: d.value, time: d.time, isHeal: d.isHeal || false })),
     effects: room.effects,
     slowPools: room.slowPools.map(p => ({ x: p.x, y: p.y, radius: p.radius, side: p.side, expireTime: p.expireTime })),
     outposts: {
