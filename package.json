@@ -8,9 +8,17 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "dotenv": "^17.3.1",
     "express": "^4.18.2",
-    "socket.io": "^4.7.2"
+    "socket.io": "^4.7.2",
+    "ws": "^8.19.0"
   },
-  "keywords": ["hormuz", "maritime", "AIS", "ship-tracking", "geospatial"],
+  "keywords": [
+    "hormuz",
+    "maritime",
+    "AIS",
+    "ship-tracking",
+    "geospatial"
+  ],
   "license": "MIT"
 }

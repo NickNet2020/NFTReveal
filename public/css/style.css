@@ -145,6 +145,23 @@ html, body {
 }
 .cmd-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--accent-blue); }
 
+.data-mode-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+.data-mode-badge.live-ais {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-green);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
 .live-indicator {
   display: flex;
   align-items: center;

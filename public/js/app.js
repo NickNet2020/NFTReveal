@@ -39,7 +39,8 @@
     conflictTimeline: document.getElementById('conflict-timeline'),
     insurancePremium: document.getElementById('insurance-premium'),
     blockadeStatus: document.getElementById('blockade-status'),
-    exportCsvBtn: document.getElementById('export-csv-btn')
+    exportCsvBtn: document.getElementById('export-csv-btn'),
+    dataModeBadge: document.getElementById('data-mode-badge')
   };
 
   // ─── Initialize ────────────────────────────────────────────────
@@ -148,6 +149,12 @@
     els.kpiDarkShips.textContent = `${m.shipCounts.dark} dark ships`;
     els.kpiBrent.textContent = `$${m.oilPrices.brent}`;
     els.kpiWti.textContent = m.oilPrices.wti;
+
+    // Data mode indicator
+    if (m.dataMode && els.dataModeBadge) {
+      els.dataModeBadge.textContent = m.dataMode;
+      els.dataModeBadge.className = 'data-mode-badge' + (m.dataMode === 'LIVE AIS' ? ' live-ais' : '');
+    }
 
     // Insurance & blockade
     els.insurancePremium.textContent = m.insurance;
