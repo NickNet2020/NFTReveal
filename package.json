@@ -1,7 +1,7 @@
 {
-  "name": "lordz-io-replica",
+  "name": "hormuz-tracker-pro",
   "version": "1.0.0",
-  "description": "A pixel-art multiplayer .io game inspired by Lordz.io",
+  "description": "Real-time Strait of Hormuz ship flow tracker and crisis monitoring dashboard",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,5 +10,7 @@
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.7.2"
-  }
+  },
+  "keywords": ["hormuz", "maritime", "AIS", "ship-tracking", "geospatial"],
+  "license": "MIT"
 }

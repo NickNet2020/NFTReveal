@@ -3,159 +3,216 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lordz.io - Pixel Conquest</title>
+  <title>HORMUZ TRACKER PRO - Real-Time Strait of Hormuz Ship Flow Monitor</title>
+  <meta name="description" content="Real-time monitoring of ship traffic through the Strait of Hormuz - hourly transit counts, cargo intelligence, military detection, and conflict escalation tracking.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="css/style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <!-- ─── Title / Join Screen ─── -->
-  <div id="menu-screen">
-    <div id="menu-container">
-      <div id="game-logo">
-        <div class="logo-crown">&#9813;</div>
-        <h1>LORDZ<span class="logo-dot">.</span>IO</h1>
-        <p class="subtitle">PIXEL CONQUEST</p>
-      </div>
-      <div id="join-form">
-        <input type="text" id="player-name" placeholder="Enter your name..." maxlength="16" autocomplete="off" />
-        <button id="play-btn">&#9876; PLAY &#9876;</button>
-      </div>
-      <div id="how-to-play">
-        <h3>HOW TO PLAY</h3>
-        <div class="controls-grid">
-          <div class="control-item"><span class="key">WASD</span> Move</div>
-          <div class="control-item"><span class="key">1</span> Buy Soldier (10g)</div>
-          <div class="control-item"><span class="key">2</span> Buy Horse (30g)</div>
-          <div class="control-item"><span class="key">3</span> Buy Wizard (50g)</div>
-          <div class="control-item"><span class="key">4</span> Buy Dragon (100g)</div>
-          <div class="control-item"><span class="key">Q</span> Build House (50g)</div>
-          <div class="control-item"><span class="key">E</span> Build Gold Mine (100g)</div>
-          <div class="control-item"><span class="key">5</span> Doom Castle (Lv.9)</div>
+  <!-- ─── Top Command Bar ─── -->
+  <header id="command-bar">
+    <div class="command-left">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 17l6-6 4 4 8-8"/>
+            <path d="M17 7h4v4"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1>HORMUZ TRACKER <span class="pro-badge">PRO</span></h1>
+          <span class="logo-subtitle">Strait of Hormuz Real-Time Ship Flow Monitor</span>
         </div>
       </div>
     </div>
-  </div>
-
-  <!-- ─── Death Screen ─── -->
-  <div id="death-screen" class="hidden">
-    <div id="death-container">
-      <h2>&#9760; YOU WERE SLAIN &#9760;</h2>
-      <p id="death-score">Score: 0</p>
-      <p class="respawn-text">Respawning...</p>
-    </div>
-  </div>
-
-  <!-- ─── Level Up Notification ─── -->
-  <div id="level-up-notification" class="hidden">
-    <div id="level-up-content">
-      <h2>&#9733; LEVEL UP &#9733;</h2>
-      <p id="level-up-name"></p>
-      <p id="level-up-bonus"></p>
-    </div>
-  </div>
-
-  <!-- ─── Game HUD ─── -->
-  <div id="game-hud" class="hidden">
-    <!-- Top bar -->
-    <div id="top-bar">
-      <div id="player-info">
-        <span id="hud-name"></span>
-        <span id="hud-level" class="badge"></span>
+    <div class="command-center">
+      <div id="strait-status-badge" class="status-badge status-partial">
+        <span class="status-dot"></span>
+        <span class="status-text">PARTIAL</span>
       </div>
-      <div id="resource-bar">
-        <div class="resource" id="hud-gold-container">
-          <span class="resource-icon">&#9733;</span>
-          <span id="hud-gold">0</span>
-        </div>
-        <div class="resource" id="hud-pop-container">
-          <span class="resource-icon">&#9819;</span>
-          <span id="hud-pop">0/5</span>
-        </div>
-        <div class="resource" id="hud-xp-container">
-          <span class="resource-icon">&#9734;</span>
-          <span id="hud-xp">0</span>
-        </div>
+      <div id="escalation-badge" class="escalation-badge escalation-elevated">
+        <span class="escalation-text">ELEVATED</span>
       </div>
     </div>
-
-    <!-- XP Bar -->
-    <div id="xp-bar-container">
-      <div id="xp-bar-fill"></div>
-      <span id="xp-bar-text"></span>
-    </div>
-
-    <!-- Bottom bar - Shop -->
-    <div id="bottom-bar">
-      <div class="shop-section">
-        <h4>UNITS</h4>
-        <div class="shop-items">
-          <div class="shop-item" data-action="buyUnit" data-type="soldier" data-key="1">
-            <span class="shop-key">1</span>
-            <span class="shop-name">Soldier</span>
-            <span class="shop-cost">10&#9733;</span>
-          </div>
-          <div class="shop-item" data-action="buyUnit" data-type="horse" data-key="2">
-            <span class="shop-key">2</span>
-            <span class="shop-name">Horse</span>
-            <span class="shop-cost">30&#9733;</span>
-          </div>
-          <div class="shop-item" data-action="buyUnit" data-type="wizard" data-key="3">
-            <span class="shop-key">3</span>
-            <span class="shop-name">Wizard</span>
-            <span class="shop-cost">50&#9733;</span>
-          </div>
-          <div class="shop-item" data-action="buyUnit" data-type="dragon" data-key="4">
-            <span class="shop-key">4</span>
-            <span class="shop-name">Dragon</span>
-            <span class="shop-cost">100&#9733;</span>
-          </div>
-        </div>
+    <div class="command-right">
+      <div class="time-display">
+        <span id="utc-time" class="utc-time">00:00:00 UTC</span>
+        <span class="local-label">ZULU TIME</span>
       </div>
-      <div class="shop-section">
-        <h4>BUILDINGS</h4>
-        <div class="shop-items">
-          <div class="shop-item" data-action="build" data-type="house" data-key="Q">
-            <span class="shop-key">Q</span>
-            <span class="shop-name">House</span>
-            <span class="shop-cost">50&#9733; +5 pop</span>
-          </div>
-          <div class="shop-item" data-action="build" data-type="goldmine" data-key="E">
-            <span class="shop-key">E</span>
-            <span class="shop-name">Gold Mine</span>
-            <span class="shop-cost">100&#9733;</span>
-          </div>
-          <div class="shop-item doom-castle-item" id="castle-shop-item" data-action="build" data-type="castle" data-key="5" style="display:none">
-            <span class="shop-key">5</span>
-            <span class="shop-name">&#9760; Doom Castle</span>
-            <span class="shop-cost">5000&#9733;</span>
-          </div>
-        </div>
+      <button id="export-csv-btn" class="cmd-btn" title="Export CSV">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        CSV
+      </button>
+      <div class="live-indicator">
+        <span class="live-dot"></span> LIVE
       </div>
     </div>
+  </header>
 
-    <!-- Leaderboard -->
-    <div id="leaderboard">
-      <h4>&#9876; LEADERBOARD</h4>
-      <div id="leaderboard-list"></div>
-    </div>
+  <!-- ─── Main Dashboard Grid ─── -->
+  <main id="dashboard">
+    <!-- ─── Left Column: Map ─── -->
+    <section id="map-section">
+      <div class="panel-header">
+        <h2>LIVE MARITIME MAP</h2>
+        <div class="map-controls">
+          <button class="map-btn active" data-layer="ships" title="Toggle Ships">Ships</button>
+          <button class="map-btn active" data-layer="heatmap" title="Toggle Heatmap">Heat</button>
+          <button class="map-btn active" data-layer="zones" title="Toggle Zones">Zones</button>
+          <button class="map-btn" data-layer="jamming" title="Toggle Jamming">Jam</button>
+        </div>
+      </div>
+      <div id="map-container"></div>
+      <div id="map-legend">
+        <span class="legend-item"><span class="dot" style="background:#ff8c00"></span> Tanker</span>
+        <span class="legend-item"><span class="dot" style="background:#00ccff"></span> LNG</span>
+        <span class="legend-item"><span class="dot" style="background:#3498db"></span> Container</span>
+        <span class="legend-item"><span class="dot" style="background:#8e44ad"></span> Bulk</span>
+        <span class="legend-item"><span class="dot" style="background:#ff0000"></span> Military</span>
+        <span class="legend-item"><span class="dot dark-dot"></span> Dark Ship</span>
+      </div>
+    </section>
 
-    <!-- Minimap -->
-    <canvas id="minimap" width="180" height="180"></canvas>
+    <!-- ─── Right Column: Metrics + Charts ─── -->
+    <section id="metrics-section">
+      <!-- KPI Cards Row -->
+      <div id="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">SHIPS THIS HOUR</div>
+          <div class="kpi-value" id="kpi-current-hour">--</div>
+          <div class="kpi-sub"><span id="kpi-inbound" class="inbound">--</span> in / <span id="kpi-outbound" class="outbound">--</span> out</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">24H TRANSITS</div>
+          <div class="kpi-value" id="kpi-24h-total">--</div>
+          <div class="kpi-sub">Avg <span id="kpi-avg-hour">--</span>/hr</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">SHIPS IN ZONE</div>
+          <div class="kpi-value" id="kpi-ships-zone">--</div>
+          <div class="kpi-sub" id="kpi-ship-breakdown">--</div>
+        </div>
+        <div class="kpi-card kpi-oil">
+          <div class="kpi-label">OIL FLOW (24H)</div>
+          <div class="kpi-value" id="kpi-oil-flow">--</div>
+          <div class="kpi-sub">million barrels</div>
+        </div>
+        <div class="kpi-card kpi-danger">
+          <div class="kpi-label">MILITARY</div>
+          <div class="kpi-value" id="kpi-military">--</div>
+          <div class="kpi-sub" id="kpi-dark-ships">-- dark ships</div>
+        </div>
+        <div class="kpi-card kpi-price">
+          <div class="kpi-label">BRENT CRUDE</div>
+          <div class="kpi-value" id="kpi-brent">--</div>
+          <div class="kpi-sub">WTI: $<span id="kpi-wti">--</span></div>
+        </div>
+      </div>
 
-    <!-- HP Bar -->
-    <div id="hp-bar-container">
-      <div id="hp-bar-fill"></div>
-    </div>
-  </div>
+      <!-- Charts -->
+      <div id="charts-row">
+        <div class="chart-panel">
+          <div class="panel-header">
+            <h3>HOURLY TRANSIT FLOW (24H)</h3>
+          </div>
+          <canvas id="transit-chart"></canvas>
+        </div>
+        <div class="chart-panel">
+          <div class="panel-header">
+            <h3>CARGO FLOW (BBL/HR)</h3>
+          </div>
+          <canvas id="cargo-chart"></canvas>
+        </div>
+      </div>
 
-  <!-- ─── Game Canvas ─── -->
-  <canvas id="game-canvas"></canvas>
+      <!-- Escalation Indicator -->
+      <div id="escalation-panel">
+        <div class="panel-header">
+          <h3>CONFLICT ESCALATION TRACKER</h3>
+        </div>
+        <div id="escalation-levels">
+          <div class="esc-level esc-normal" data-level="NORMAL">
+            <span class="esc-dot"></span>
+            <span class="esc-name">NORMAL</span>
+            <span class="esc-desc">&gt;50 ships/day</span>
+          </div>
+          <div class="esc-level esc-elevated" data-level="ELEVATED">
+            <span class="esc-dot"></span>
+            <span class="esc-name">ELEVATED</span>
+            <span class="esc-desc">&lt;20/day + jamming</span>
+          </div>
+          <div class="esc-level esc-critical" data-level="CRITICAL">
+            <span class="esc-dot"></span>
+            <span class="esc-name">CRITICAL</span>
+            <span class="esc-desc">Iran-only</span>
+          </div>
+          <div class="esc-level esc-war" data-level="WAR">
+            <span class="esc-dot"></span>
+            <span class="esc-name">WAR</span>
+            <span class="esc-desc">0 commercial</span>
+          </div>
+        </div>
+        <div id="insurance-info">
+          <span>War Risk Premium: <strong id="insurance-premium">--</strong></span>
+          <span>Blockade: <strong id="blockade-status">--</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Bottom Section: Transit Table + Alerts ─── -->
+    <section id="bottom-section">
+      <!-- Transit Table -->
+      <div id="transit-table-panel">
+        <div class="panel-header">
+          <h3>RECENT TRANSITS</h3>
+          <span class="record-count" id="transit-count">0 records</span>
+        </div>
+        <div class="table-scroll">
+          <table id="transit-table">
+            <thead>
+              <tr>
+                <th>TIME</th>
+                <th>MMSI</th>
+                <th>NAME</th>
+                <th>TYPE</th>
+                <th>FLAG</th>
+                <th>CARGO</th>
+                <th>DWT</th>
+                <th>SPEED</th>
+                <th>DEST</th>
+                <th>DIR</th>
+                <th>STATUS</th>
+              </tr>
+            </thead>
+            <tbody id="transit-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Alerts Feed -->
+      <div id="alerts-panel">
+        <div class="panel-header">
+          <h3>THREAT ALERTS</h3>
+          <span class="alert-count" id="alert-count">0</span>
+        </div>
+        <div id="alerts-feed"></div>
+
+        <!-- Conflict Timeline -->
+        <div class="panel-header" style="margin-top:12px">
+          <h3>CONFLICT TIMELINE</h3>
+        </div>
+        <div id="conflict-timeline"></div>
+      </div>
+    </section>
+  </main>
 
   <!-- ─── Scripts ─── -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="js/sprites.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/renderer.js"></script>
-  <script src="js/main.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

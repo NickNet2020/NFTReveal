@@ -8,960 +8,468 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static('public'));
 
-// ─── Game Constants ──────────────────────────────────────────────────
-const MAP_SIZE = 4000;
-const TICK_RATE = 20; // server ticks per second
-const TICK_MS = 1000 / TICK_RATE;
-const MAX_GOLD_COINS = 250;
-const GOLD_COIN_VALUE_MIN = 3;
-const GOLD_COIN_VALUE_MAX = 10;
-const VIEW_DISTANCE = 900;
-const PLAYER_SPEED = 130;
-const PLAYER_HP = 200;
-const PLAYER_HP_PER_LEVEL = 15;
-const PLAYER_COLLECT_RADIUS = 36;
-const BUILDING_PLACE_DIST = 80;
-const MAX_BOTS = 6;
-const BOT_THINK_INTERVAL = 1500;
-const DOOM_DURATION = 300000; // 300 seconds
-
-// ─── Unit Type Definitions ──────────────────────────────────────────
-const UNIT_TYPES = {
-  soldier: {
-    hp: 60, damage: 8, speed: 75, range: 38,
-    attackSpeed: 1000, cost: 10, pop: 1, xpValue: 10,
-    name: 'Foot Soldier'
-  },
-  horse: {
-    hp: 100, damage: 16, speed: 150, range: 42,
-    attackSpeed: 900, cost: 30, pop: 2, xpValue: 25,
-    name: 'Horse Knight'
-  },
-  wizard: {
-    hp: 40, damage: 30, speed: 55, range: 200,
-    attackSpeed: 1800, cost: 50, pop: 2, xpValue: 40,
-    name: 'Wizard'
-  },
-  dragon: {
-    hp: 250, damage: 45, speed: 100, range: 80,
-    attackSpeed: 1400, cost: 100, pop: 5, xpValue: 80,
-    name: 'Dragon'
-  }
+// ─── Strait of Hormuz Bounding Box ─────────────────────────────────
+const HORMUZ_BBOX = {
+  latMin: 26.0, latMax: 27.0,
+  lonMin: 55.8, lonMax: 56.8
 };
 
-// ─── Building Type Definitions ──────────────────────────────────────
-const BUILDING_TYPES = {
-  house: { hp: 250, cost: 50, popBonus: 5, size: 48, xpValue: 20, name: 'House' },
-  goldmine: { hp: 180, cost: 100, goldPerTick: 0.15, size: 48, xpValue: 30, name: 'Gold Mine' },
-  castle: { hp: 5000, cost: 5000, size: 90, xpValue: 500, name: 'Doom Castle' }
+// Transit detection boundaries
+const TRANSIT_ZONES = {
+  gulfOfOman: { latThreshold: 26.8, lonThreshold: 56.3, side: 'east' },
+  persianGulf: { latThreshold: 26.2, lonThreshold: 56.0, side: 'west' }
 };
 
-// ─── Level / XP Definitions ────────────────────────────────────────
-const LEVELS = [
-  { xp: 0, name: 'Peasant', bonus: null, desc: 'Starting rank' },
-  { xp: 100, name: 'Squire', bonus: 'battleCry', desc: 'Battle Cry: +8% troop damage' },
-  { xp: 300, name: 'Knight', bonus: 'swiftBoots', desc: 'Swift Boots: +10% troop speed' },
-  { xp: 600, name: 'Baron', bonus: 'fortify', desc: 'Fortify: +15% building HP' },
-  { xp: 1000, name: 'Earl', bonus: 'warDrums', desc: 'War Drums: +12% damage aura' },
-  { xp: 1800, name: 'Duke', bonus: 'goldRush', desc: 'Gold Rush: +25% gold income' },
-  { xp: 2800, name: 'Archduke', bonus: 'dragonMight', desc: "Dragon's Might: +18% dragon power" },
-  { xp: 4200, name: 'King', bonus: 'ironWill', desc: 'Iron Will: +12% troop HP' },
-  { xp: 6500, name: 'Emperor', bonus: 'regen', desc: 'Regeneration: troops heal 2 HP/s' },
-  { xp: 10000, name: 'Legend', bonus: 'legendary', desc: 'All bonuses enhanced + Doom Castle unlocked!' }
-];
-
-// ─── Decoration Definitions ─────────────────────────────────────────
-const TREE_COUNT = 120;
-const ROCK_COUNT = 80;
-let decorations = [];
-
-function generateDecorations() {
-  decorations = [];
-  for (let i = 0; i < TREE_COUNT; i++) {
-    decorations.push({
-      type: 'tree',
-      x: randRange(50, MAP_SIZE - 50),
-      y: randRange(50, MAP_SIZE - 50),
-      variant: Math.floor(Math.random() * 3)
-    });
-  }
-  for (let i = 0; i < ROCK_COUNT; i++) {
-    decorations.push({
-      type: 'rock',
-      x: randRange(50, MAP_SIZE - 50),
-      y: randRange(50, MAP_SIZE - 50),
-      variant: Math.floor(Math.random() * 3)
-    });
-  }
-}
-
-// ─── Game State ─────────────────────────────────────────────────────
-let nextId = 1;
-const players = new Map();
-const units = new Map();
-const buildings = new Map();
-let goldCoins = [];
-const projectiles = [];
-const damageNumbers = [];
-
-// ─── Doom Phase State ──────────────────────────────────────────────
-let doomPhase = {
-  active: false,
-  playerId: null,
-  playerName: null,
-  castleId: null,
-  castleX: 0,
-  castleY: 0,
-  startTime: null,
-  duration: DOOM_DURATION,
-  winner: null,
-  winTimer: null
+// ─── Ship Type Definitions ─────────────────────────────────────────
+const SHIP_TYPES = {
+  VLCC: { category: 'tanker', color: '#ff8c00', minDWT: 200000, maxDWT: 320000, minSpeed: 12, maxSpeed: 16, cargoFactor: 7.3 },
+  SUEZMAX: { category: 'tanker', color: '#ff6600', minDWT: 120000, maxDWT: 200000, minSpeed: 13, maxSpeed: 16, cargoFactor: 7.3 },
+  AFRAMAX: { category: 'tanker', color: '#ff9933', minDWT: 80000, maxDWT: 120000, minSpeed: 13, maxSpeed: 15, cargoFactor: 7.3 },
+  PRODUCT_TANKER: { category: 'tanker', color: '#ffaa44', minDWT: 30000, maxDWT: 80000, minSpeed: 13, maxSpeed: 16, cargoFactor: 7.0 },
+  LNG_CARRIER: { category: 'lng', color: '#00ccff', minDWT: 60000, maxDWT: 95000, minSpeed: 17, maxSpeed: 21, cargoFactor: null },
+  CONTAINER: { category: 'container', color: '#3498db', minDWT: 40000, maxDWT: 200000, minSpeed: 18, maxSpeed: 24, cargoFactor: null },
+  BULK_CARRIER: { category: 'bulk', color: '#8e44ad', minDWT: 50000, maxDWT: 180000, minSpeed: 12, maxSpeed: 15, cargoFactor: null },
+  NAVAL_FRIGATE: { category: 'military', color: '#ff0000', minDWT: 3000, maxDWT: 6000, minSpeed: 18, maxSpeed: 30, cargoFactor: null },
+  NAVAL_DESTROYER: { category: 'military', color: '#cc0000', minDWT: 6000, maxDWT: 10000, minSpeed: 20, maxSpeed: 33, cargoFactor: null },
+  NAVAL_CARRIER: { category: 'military', color: '#990000', minDWT: 40000, maxDWT: 100000, minSpeed: 25, maxSpeed: 33, cargoFactor: null }
 };
 
-// ─── Utility Functions ──────────────────────────────────────────────
-function genId() { return nextId++; }
-function dist(a, b) { return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2); }
-function angleTo(a, b) { return Math.atan2(b.y - a.y, b.x - a.x); }
-function randRange(min, max) { return Math.random() * (max - min) + min; }
-function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-function randName() {
-  const titles = ['Lord', 'King', 'Duke', 'Baron', 'Sir', 'Chief', 'Warlord', 'Commander'];
-  const names = ['Pixel', 'Storm', 'Blade', 'Shadow', 'Iron', 'Gold', 'Thunder', 'Frost', 'Flame', 'Dark', 'Steel', 'Brave', 'Swift', 'Stone', 'Oak'];
-  return titles[Math.floor(Math.random() * titles.length)] + ' ' + names[Math.floor(Math.random() * names.length)];
-}
+const FLAGS = ['Panama', 'Liberia', 'Marshall Islands', 'Hong Kong', 'Singapore', 'Bahamas', 'Malta', 'Greece', 'Japan', 'China', 'South Korea', 'India', 'UAE', 'Saudi Arabia', 'Kuwait', 'Qatar', 'Iraq', 'Iran', 'Norway', 'UK', 'USA', 'Turkey'];
 
-// ─── Level Bonuses Calculator ───────────────────────────────────────
-function getLevelBonuses(player) {
-  const b = {
-    damageMult: 1, speedMult: 1, buildingHpMult: 1,
-    goldMult: 1, dragonDamageMult: 1, hpMult: 1, regen: 0
-  };
-  for (let i = 1; i <= player.level; i++) {
-    const lvl = LEVELS[i];
-    if (!lvl || !lvl.bonus) continue;
-    const legendary = player.level >= 9 ? 1.25 : 1;
-    switch (lvl.bonus) {
-      case 'battleCry': b.damageMult += 0.08 * legendary; break;
-      case 'swiftBoots': b.speedMult += 0.10 * legendary; break;
-      case 'fortify': b.buildingHpMult += 0.15 * legendary; break;
-      case 'warDrums': b.damageMult += 0.12 * legendary; break;
-      case 'goldRush': b.goldMult += 0.25 * legendary; break;
-      case 'dragonMight': b.dragonDamageMult += 0.18 * legendary; break;
-      case 'ironWill': b.hpMult += 0.12 * legendary; break;
-      case 'regen': b.regen = 2 * legendary; break;
-    }
+const NAVAL_FLAGS = ['USN', 'Royal Navy', 'IRGC Navy', 'PLA Navy', 'Indian Navy', 'French Navy', 'Japan MSDF'];
+
+const IRAN_ENTITIES = ['NITC', 'IRISL', 'Hafiz Darya', 'Sahel Shipping', 'Darya Capital'];
+
+const SHIP_NAMES = {
+  tanker: ['PACIFIC VOYAGER', 'ARABIAN PEARL', 'GULF SPIRIT', 'OCEAN TITAN', 'SEA DRAGON', 'DESERT ROSE', 'GOLDEN HAWK', 'PERSIAN STAR', 'CAPE FORTUNE', 'EAGLE RAY', 'BLUE MARLIN', 'JADE EMPEROR', 'CRIMSON TIDE', 'SILVER WAVE', 'AMBER SUN', 'NOBLE HAWK', 'IRON DUKE', 'CORAL REEF', 'RUBY CROWN', 'EMERALD SEA', 'SAPPHIRE BAY', 'DIAMOND CREST', 'PEARL HARBOR', 'ONYX RUNNER', 'TOPAZ WIND', 'CRYSTAL DAWN', 'OPAL MIST', 'GARNET PEAK', 'AMETHYST FLOW', 'TANZANITE WAVE'],
+  lng: ['LNG PIONEER', 'ENERGY BRIDGE', 'DOHA SPIRIT', 'RAS LAFFAN', 'AL HAMLA', 'METHANE PRINCESS', 'GAS GENESIS', 'ARCTIC SPIRIT', 'CLEAN OCEAN', 'FLEX RAINBOW'],
+  container: ['MAERSK SEALAND', 'MSC OSCAR', 'CMA CGM MARCO', 'EVER GIVEN II', 'COSCO UNIVERSE', 'YANG MING UNITY', 'HAPAG LLOYD STAR', 'ONE COMMITMENT', 'ZIM ANTWERP', 'PIL GATEWAY'],
+  bulk: ['IRON PIONEER', 'CAPE BRAZIL', 'GRAIN MASTER', 'ORE GLORY', 'COAL TRADER', 'BULK JUPITER', 'STAR HORIZON', 'OCEAN PRIDE', 'PANAMAX DAWN', 'SUPRAMAX SPIRIT'],
+  military: ['USS EISENHOWER', 'USS BATAAN', 'USS MASON', 'HMS DIAMOND', 'IRIS ALBORZ', 'IRIS SAHAND', 'CHANGSHA 173', 'INS VISAKHAPATNAM', 'FS LANGUEDOC', 'JS IZUMO']
+};
+
+// ─── Mock Data Generator ───────────────────────────────────────────
+let nextMMSI = 200000000;
+let nextIMO = 9000000;
+let shipIdCounter = 1;
+
+function generateMMSI() { return nextMMSI + Math.floor(Math.random() * 500000000); }
+function generateIMO() { return nextIMO + Math.floor(Math.random() * 900000); }
+
+function randomInRange(min, max) { return Math.random() * (max - min) + min; }
+
+function generateShip(direction) {
+  const typeKeys = Object.keys(SHIP_TYPES);
+  // Weight towards tankers (60% tanker, 10% LNG, 15% container, 10% bulk, 5% military)
+  const weights = [0.20, 0.15, 0.10, 0.15, 0.10, 0.10, 0.05, 0.05, 0.03, 0.02, 0.05];
+  let r = Math.random();
+  let typeIdx = 0;
+  for (let i = 0; i < weights.length && i < typeKeys.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { typeIdx = i; break; }
   }
-  return b;
-}
+  const shipTypeKey = typeKeys[Math.min(typeIdx, typeKeys.length - 1)];
+  const shipType = SHIP_TYPES[shipTypeKey];
 
-// ─── Update Player Level ────────────────────────────────────────────
-function updateLevel(player) {
-  let newLevel = 0;
-  for (let i = LEVELS.length - 1; i >= 0; i--) {
-    if (player.xp >= LEVELS[i].xp) { newLevel = i; break; }
-  }
-  const prev = player.level;
-  player.level = newLevel;
-  if (newLevel > prev) {
-    // Gain HP on level up
-    const hpGain = (newLevel - prev) * PLAYER_HP_PER_LEVEL;
-    player.maxHp += hpGain;
-    player.hp = Math.min(player.hp + hpGain, player.maxHp);
-    return LEVELS[newLevel];
-  }
-  return null;
-}
+  const isMilitary = shipType.category === 'military';
+  const isIranLinked = !isMilitary && Math.random() < 0.12;
 
-// ─── Player Factory ─────────────────────────────────────────────────
-const TEAM_COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#e67e22','#1abc9c','#e91e63','#00bcd4','#ff5722'];
-let colorIndex = 0;
+  const flag = isMilitary
+    ? NAVAL_FLAGS[Math.floor(Math.random() * NAVAL_FLAGS.length)]
+    : (isIranLinked ? 'Iran' : FLAGS[Math.floor(Math.random() * FLAGS.length)]);
 
-function createPlayer(id, name, isBot = false) {
-  const p = {
-    id, name: name || randName(),
-    x: randRange(300, MAP_SIZE - 300), y: randRange(300, MAP_SIZE - 300),
-    vx: 0, vy: 0, speed: PLAYER_SPEED,
-    gold: 25, xp: 0, level: 0,
-    maxPop: 5, currentPop: 0,
-    color: TEAM_COLORS[colorIndex++ % TEAM_COLORS.length],
-    hp: PLAYER_HP, maxHp: PLAYER_HP,
-    isBot, score: 0,
-    lastAttackTime: 0, lastDamageTime: 0,
-    input: { x: 0, y: 0 },
-    alive: true, respawnTimer: 0
-  };
-  return p;
-}
+  const namePool = SHIP_NAMES[shipType.category] || SHIP_NAMES.tanker;
+  const name = namePool[Math.floor(Math.random() * namePool.length)] + (Math.random() > 0.5 ? ' ' + Math.floor(Math.random() * 9 + 1) : '');
 
-// ─── Gold Coin Spawning ─────────────────────────────────────────────
-function spawnGoldCoins() {
-  while (goldCoins.length < MAX_GOLD_COINS) {
-    goldCoins.push({
-      id: genId(),
-      x: randRange(80, MAP_SIZE - 80),
-      y: randRange(80, MAP_SIZE - 80),
-      value: Math.floor(randRange(GOLD_COIN_VALUE_MIN, GOLD_COIN_VALUE_MAX + 1))
-    });
-  }
-}
+  const dwt = Math.floor(randomInRange(shipType.minDWT, shipType.maxDWT));
+  const speed = +(randomInRange(shipType.minSpeed, shipType.maxSpeed)).toFixed(1);
 
-// ─── Create Unit ────────────────────────────────────────────────────
-function createUnit(ownerId, type, x, y) {
-  const def = UNIT_TYPES[type];
-  const player = players.get(ownerId);
-  if (!player || !def) return null;
-  if (player.gold < def.cost) return null;
-  if (player.currentPop + def.pop > player.maxPop) return null;
-
-  const bonuses = getLevelBonuses(player);
-  const maxHp = Math.floor(def.hp * bonuses.hpMult);
-
-  const unit = {
-    id: genId(), ownerId, type,
-    x: x + randRange(-30, 30), y: y + randRange(-30, 30),
-    vx: 0, vy: 0,
-    hp: maxHp, maxHp,
-    damage: def.damage, speed: def.speed, range: def.range,
-    attackSpeed: def.attackSpeed, cost: def.cost, pop: def.pop,
-    lastAttackTime: 0, targetId: null, targetType: null,
-    state: 'follow', // follow, attack, idle
-    xpValue: def.xpValue
-  };
-
-  player.gold -= def.cost;
-  player.currentPop += def.pop;
-  units.set(unit.id, unit);
-  return unit;
-}
-
-// ─── Create Building ────────────────────────────────────────────────
-function createBuilding(ownerId, type, x, y) {
-  const def = BUILDING_TYPES[type];
-  const player = players.get(ownerId);
-  if (!player || !def) return null;
-  if (player.gold < def.cost) return null;
-
-  // Check for nearby buildings collision
-  for (const [, b] of buildings) {
-    if (dist({ x, y }, b) < 60) return null;
-  }
-
-  // Castle-specific checks
-  if (type === 'castle') {
-    if (player.level < 9) return null; // Must be Legend (level index 9)
-    if (doomPhase.active) return null; // Only one doom castle at a time
-  }
-
-  const bonuses = getLevelBonuses(player);
-  const maxHp = type === 'castle' ? def.hp : Math.floor(def.hp * bonuses.buildingHpMult);
-
-  const building = {
-    id: genId(), ownerId, type,
-    x, y, hp: maxHp, maxHp,
-    size: def.size, xpValue: def.xpValue
-  };
-
-  player.gold -= def.cost;
-  if (type === 'house') {
-    player.maxPop += def.popBonus;
-  } else if (type === 'castle') {
-    // Activate DOOM PHASE
-    doomPhase.active = true;
-    doomPhase.playerId = ownerId;
-    doomPhase.playerName = player.name;
-    doomPhase.castleId = building.id;
-    doomPhase.castleX = x;
-    doomPhase.castleY = y;
-    doomPhase.startTime = Date.now();
-    doomPhase.winner = null;
-    doomPhase.winTimer = null;
-    console.log(`DOOM IMPENDING! ${player.name} placed a Doom Castle!`);
-  }
-  buildings.set(building.id, building);
-  return building;
-}
-
-// ─── Find Nearest Enemy ─────────────────────────────────────────────
-function findNearestEnemy(unit, searchRange) {
-  let nearest = null;
-  let nearestDist = searchRange;
-  const owner = players.get(unit.ownerId);
-  if (!owner) return null;
-
-  // During doom phase, non-castle-owner units prioritize the castle
-  const isDoomTarget = doomPhase.active && unit.ownerId !== doomPhase.playerId;
-  if (isDoomTarget) {
-    const castle = buildings.get(doomPhase.castleId);
-    if (castle && castle.hp > 0) {
-      const d = dist(unit, castle);
-      // Greatly increased range to seek castle (double normal range)
-      if (d < searchRange * 2) {
-        // 60% chance to prioritize castle over closer targets
-        if (Math.random() < 0.6 || d < searchRange) {
-          return { id: castle.id, type: 'building', x: castle.x, y: castle.y };
-        }
-      }
-    }
-  }
-
-  // Check enemy units
-  for (const [, other] of units) {
-    if (other.ownerId === unit.ownerId) continue;
-    if (other.hp <= 0) continue;
-    const d = dist(unit, other);
-    // During doom, enemies of the castle owner are found at longer range
-    const effectiveRange = (isDoomTarget && other.ownerId === doomPhase.playerId) ? nearestDist * 1.5 : nearestDist;
-    if (d < effectiveRange) {
-      nearestDist = d;
-      nearest = { id: other.id, type: 'unit', x: other.x, y: other.y };
-    }
-  }
-
-  // Check enemy buildings
-  for (const [, b] of buildings) {
-    if (b.ownerId === unit.ownerId) continue;
-    if (b.hp <= 0) continue;
-    const d = dist(unit, b);
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearest = { id: b.id, type: 'building', x: b.x, y: b.y };
-    }
-  }
-
-  // Check enemy players
-  for (const [, p] of players) {
-    if (p.id === unit.ownerId) continue;
-    if (!p.alive) continue;
-    const d = dist(unit, p);
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearest = { id: p.id, type: 'player', x: p.x, y: p.y };
-    }
-  }
-
-  return nearest;
-}
-
-// ─── Combat: Deal Damage ────────────────────────────────────────────
-function dealDamage(attacker, targetInfo, player) {
-  const bonuses = getLevelBonuses(player);
-  let dmg = attacker.damage * bonuses.damageMult;
-  if (attacker.type === 'dragon') dmg *= bonuses.dragonDamageMult;
-  dmg = Math.floor(dmg);
-
-  let target;
-  if (targetInfo.type === 'unit') {
-    target = units.get(targetInfo.id);
-  } else if (targetInfo.type === 'building') {
-    target = buildings.get(targetInfo.id);
-  } else if (targetInfo.type === 'player') {
-    target = players.get(targetInfo.id);
-  }
-
-  if (!target || target.hp <= 0) return;
-
-  target.hp -= dmg;
-  if (targetInfo.type === 'player') target.lastDamageTime = Date.now();
-
-  // Create damage number
-  damageNumbers.push({
-    x: target.x, y: target.y - 20,
-    value: dmg, time: Date.now(), ownerId: attacker.ownerId
-  });
-
-  // Create projectile for wizards
-  if (attacker.type === 'wizard') {
-    projectiles.push({
-      x: attacker.x, y: attacker.y,
-      tx: target.x, ty: target.y,
-      speed: 300, time: Date.now(),
-      color: '#9b59b6', ownerId: attacker.ownerId
-    });
-  }
-
-  // Check death
-  if (target.hp <= 0) {
-    if (targetInfo.type === 'unit') {
-      const deadUnit = units.get(targetInfo.id);
-      if (deadUnit) {
-        const deadOwner = players.get(deadUnit.ownerId);
-        if (deadOwner) deadOwner.currentPop -= deadUnit.pop;
-        player.xp += deadUnit.xpValue;
-        player.score += deadUnit.xpValue;
-        units.delete(targetInfo.id);
-      }
-    } else if (targetInfo.type === 'building') {
-      const deadBuilding = buildings.get(targetInfo.id);
-      if (deadBuilding) {
-        const deadOwner = players.get(deadBuilding.ownerId);
-        if (deadOwner && deadBuilding.type === 'house') {
-          deadOwner.maxPop -= BUILDING_TYPES.house.popBonus;
-          // Remove excess units if over pop
-          while (deadOwner.currentPop > deadOwner.maxPop) {
-            const ownerUnits = [...units.values()].filter(u => u.ownerId === deadOwner.id);
-            if (ownerUnits.length === 0) break;
-            const removeUnit = ownerUnits[ownerUnits.length - 1];
-            deadOwner.currentPop -= removeUnit.pop;
-            units.delete(removeUnit.id);
-          }
-        }
-        // Check if doom castle was destroyed
-        if (deadBuilding.type === 'castle' && doomPhase.active && doomPhase.castleId === targetInfo.id) {
-          doomPhase.active = false;
-          doomPhase.winner = null;
-          console.log(`Doom Castle destroyed by ${player.name}! Doom phase ended.`);
-          // Broadcast castle destroyed event
-          io.emit('doomCastleDestroyed', { destroyerName: player.name });
-        }
-        player.xp += deadBuilding.xpValue;
-        player.score += deadBuilding.xpValue;
-        buildings.delete(targetInfo.id);
-      }
-    } else if (targetInfo.type === 'player') {
-      const deadPlayer = players.get(targetInfo.id);
-      if (deadPlayer) {
-        deadPlayer.alive = false;
-        deadPlayer.respawnTimer = Date.now() + 5000;
-        player.xp += 50;
-        player.score += 50;
-        // Transfer some gold
-        const stolenGold = Math.floor(deadPlayer.gold * 0.3);
-        player.gold += stolenGold;
-        deadPlayer.gold -= stolenGold;
-      }
-    }
-    updateLevel(player);
-  }
-}
-
-// ─── Respawn Player ─────────────────────────────────────────────────
-function respawnPlayer(player) {
-  player.x = randRange(300, MAP_SIZE - 300);
-  player.y = randRange(300, MAP_SIZE - 300);
-  player.hp = player.maxHp;
-  player.alive = true;
-  player.respawnTimer = 0;
-}
-
-// ─── Bot AI ─────────────────────────────────────────────────────────
-const botTimers = new Map();
-
-function botThink(bot) {
-  if (!bot.alive) return;
-  const bonuses = getLevelBonuses(bot);
-
-  // Count bot's units and buildings
-  const myUnits = [...units.values()].filter(u => u.ownerId === bot.id);
-  const myBuildings = [...buildings.values()].filter(b => b.ownerId === bot.id);
-
-  // Priority 1: Collect gold (move toward nearest coin)
-  if (bot.gold < 30 || (myUnits.length === 0 && bot.gold < 50)) {
-    let nearestCoin = null;
-    let nearestDist = Infinity;
-    for (const coin of goldCoins) {
-      const d = dist(bot, coin);
-      if (d < nearestDist) { nearestDist = d; nearestCoin = coin; }
-    }
-    if (nearestCoin) {
-      const a = angleTo(bot, nearestCoin);
-      bot.input = { x: Math.cos(a), y: Math.sin(a) };
-      return;
-    }
-  }
-
-  // Priority 2: Build houses if we need more pop
-  if (bot.gold >= 50 && bot.maxPop - bot.currentPop < 3 && myBuildings.filter(b => b.type === 'house').length < 6) {
-    const bx = bot.x + randRange(-60, 60);
-    const by = bot.y + randRange(-60, 60);
-    createBuilding(bot.id, 'house', clamp(bx, 50, MAP_SIZE - 50), clamp(by, 50, MAP_SIZE - 50));
-  }
-
-  // Priority 3: Build gold mines
-  if (bot.gold >= 100 && myBuildings.filter(b => b.type === 'goldmine').length < 3 && Math.random() < 0.3) {
-    const bx = bot.x + randRange(-60, 60);
-    const by = bot.y + randRange(-60, 60);
-    createBuilding(bot.id, 'goldmine', clamp(bx, 50, MAP_SIZE - 50), clamp(by, 50, MAP_SIZE - 50));
-  }
-
-  // Priority 4: Buy units
-  if (bot.currentPop < bot.maxPop) {
-    if (bot.gold >= 100 && bot.level >= 5 && Math.random() < 0.2) {
-      createUnit(bot.id, 'dragon', bot.x, bot.y);
-    } else if (bot.gold >= 50 && bot.level >= 3 && Math.random() < 0.3) {
-      createUnit(bot.id, 'wizard', bot.x, bot.y);
-    } else if (bot.gold >= 30 && Math.random() < 0.4) {
-      createUnit(bot.id, 'horse', bot.x, bot.y);
-    } else if (bot.gold >= 10) {
-      createUnit(bot.id, 'soldier', bot.x, bot.y);
-    }
-  }
-
-  // Priority 5: During doom phase, move toward castle if not the castle owner
-  if (doomPhase.active && bot.id !== doomPhase.playerId && myUnits.length >= 2) {
-    const castle = buildings.get(doomPhase.castleId);
-    if (castle && castle.hp > 0) {
-      const d = dist(bot, castle);
-      if (d > 100) {
-        const a = angleTo(bot, castle);
-        bot.input = { x: Math.cos(a), y: Math.sin(a) };
-        return;
-      }
-    }
-  }
-
-  // Priority 6: Roam / attack nearby enemies
-  const nearestEnemy = findNearestPlayerOrUnit(bot);
-  if (nearestEnemy && myUnits.length >= 3) {
-    // Move toward enemy with army
-    const a = angleTo(bot, nearestEnemy);
-    bot.input = { x: Math.cos(a), y: Math.sin(a) };
+  // Position based on direction
+  let lat, lon, cog;
+  if (direction === 'inbound') {
+    lat = randomInRange(26.4, 26.9);
+    lon = randomInRange(56.2, 56.7);
+    cog = randomInRange(240, 290);
   } else {
-    // Roam toward gold
-    let nearestCoin = null;
-    let nearestDist = Infinity;
-    for (const coin of goldCoins) {
-      const d = dist(bot, coin);
-      if (d < nearestDist) { nearestDist = d; nearestCoin = coin; }
-    }
-    if (nearestCoin) {
-      const a = angleTo(bot, nearestCoin);
-      bot.input = { x: Math.cos(a), y: Math.sin(a) };
-    } else {
-      // Random movement
-      bot.input = { x: Math.cos(Date.now() / 2000), y: Math.sin(Date.now() / 2000) };
-    }
+    lat = randomInRange(26.1, 26.6);
+    lon = randomInRange(55.9, 56.4);
+    cog = randomInRange(60, 110);
   }
+
+  let cargoEstimate = null;
+  let cargoType = null;
+  if (shipType.category === 'tanker') {
+    cargoEstimate = Math.floor(dwt * shipType.cargoFactor);
+    cargoType = shipTypeKey === 'PRODUCT_TANKER' ? 'Refined Products' : 'Crude Oil';
+  } else if (shipType.category === 'lng') {
+    cargoEstimate = Math.floor(dwt * 1.5); // m³ estimate
+    cargoType = 'LNG';
+  }
+
+  const nextPorts = {
+    inbound: ['Ras Tanura', 'Jubail', 'Basra', 'Kuwait City', 'Bandar Abbas', 'Doha', 'Abu Dhabi', 'Dubai'],
+    outbound: ['Fujairah', 'Mumbai', 'Singapore', 'Yokohama', 'Rotterdam', 'Houston', 'Ningbo', 'Ulsan']
+  };
+  const portList = nextPorts[direction];
+  const etaPort = portList[Math.floor(Math.random() * portList.length)];
+  const etaHours = Math.floor(randomInRange(4, 72));
+
+  return {
+    id: shipIdCounter++,
+    mmsi: generateMMSI(),
+    imo: generateIMO(),
+    name,
+    type: shipTypeKey,
+    category: shipType.category,
+    flag,
+    dwt,
+    speed,
+    lat: +lat.toFixed(5),
+    lon: +lon.toFixed(5),
+    cog: +cog.toFixed(1),
+    direction,
+    color: shipType.color,
+    cargoEstimate,
+    cargoType,
+    etaPort,
+    etaHours,
+    iranLinked: isIranLinked,
+    iranEntity: isIranLinked ? IRAN_ENTITIES[Math.floor(Math.random() * IRAN_ENTITIES.length)] : null,
+    isMilitary,
+    timestamp: Date.now(),
+    aisStatus: Math.random() > 0.08 ? 'active' : 'dark'
+  };
 }
 
-function findNearestPlayerOrUnit(bot) {
-  let nearest = null;
-  let nearestDist = 500;
-  for (const [, p] of players) {
-    if (p.id === bot.id || !p.alive) continue;
-    const d = dist(bot, p);
-    if (d < nearestDist) { nearestDist = d; nearest = p; }
-  }
-  return nearest;
-}
+// ─── State ─────────────────────────────────────────────────────────
+let ships = [];
+let transitHistory = [];
+let hourlyTransits = [];
+let alerts = [];
+let conflictEvents = [];
 
-// ─── Main Game Tick ─────────────────────────────────────────────────
-function gameTick() {
+// Escalation level
+let escalationLevel = 'ELEVATED'; // NORMAL, ELEVATED, CRITICAL, WAR
+
+// Conflict scenario parameters (simulating March 2026 tensions)
+const SCENARIO = {
+  baseTransitsPerHour: { min: 3, max: 8 },
+  militaryPresence: 0.15,
+  darkShipRate: 0.08,
+  jammingZones: [
+    { lat: 26.55, lon: 56.25, radius: 0.15, active: true, name: 'Northern Corridor' },
+    { lat: 26.3, lon: 56.45, radius: 0.1, active: Math.random() > 0.4, name: 'Eastern Approach' }
+  ],
+  insurancePremium: '+185%',
+  blockadeStatus: 'Partial - Escort Required'
+};
+
+// ─── Generate Initial Data ─────────────────────────────────────────
+function initializeData() {
+  // Generate ships currently in transit zone
+  const shipCount = Math.floor(randomInRange(15, 30));
+  ships = [];
+  for (let i = 0; i < shipCount; i++) {
+    const dir = Math.random() > 0.45 ? 'outbound' : 'inbound';
+    ships.push(generateShip(dir));
+  }
+
+  // Generate 24h of hourly transit history
+  hourlyTransits = [];
   const now = Date.now();
-  const dt = 1 / TICK_RATE;
+  for (let h = 23; h >= 0; h--) {
+    const hour = new Date(now - h * 3600000);
+    const inbound = Math.floor(randomInRange(2, 7));
+    const outbound = Math.floor(randomInRange(2, 6));
+    const militaryCount = Math.random() > 0.6 ? Math.floor(randomInRange(1, 3)) : 0;
+    const darkShips = Math.random() > 0.7 ? Math.floor(randomInRange(1, 3)) : 0;
 
-  // Respawn dead players
-  for (const [, player] of players) {
-    if (!player.alive && player.respawnTimer && now >= player.respawnTimer) {
-      respawnPlayer(player);
-    }
+    // Estimate cargo volumes
+    const oilBarrels = (inbound + outbound) * Math.floor(randomInRange(800000, 1500000));
+    const lngCargo = Math.random() > 0.5 ? Math.floor(randomInRange(50000, 150000)) : 0;
+
+    hourlyTransits.push({
+      hour: hour.toISOString(),
+      hourLabel: hour.getUTCHours() + ':00',
+      inbound,
+      outbound,
+      total: inbound + outbound,
+      military: militaryCount,
+      darkShips,
+      oilBarrels,
+      lngCargo,
+      iranLinked: Math.random() > 0.7 ? Math.floor(randomInRange(1, 3)) : 0
+    });
   }
 
-  // Run bot AI
-  for (const [id, player] of players) {
-    if (player.isBot && player.alive) {
-      const timer = botTimers.get(id) || 0;
-      if (now >= timer) {
-        botThink(player);
-        botTimers.set(id, now + BOT_THINK_INTERVAL + Math.random() * 500);
-      }
-    }
+  // Generate recent transit events
+  transitHistory = [];
+  for (let i = 0; i < 50; i++) {
+    const dir = Math.random() > 0.45 ? 'outbound' : 'inbound';
+    const ship = generateShip(dir);
+    ship.transitTime = new Date(now - Math.floor(randomInRange(0, 24 * 3600000))).toISOString();
+    transitHistory.push(ship);
   }
+  transitHistory.sort((a, b) => new Date(b.transitTime) - new Date(a.transitTime));
 
-  // Move players
-  for (const [, player] of players) {
-    if (!player.alive) continue;
-    const ix = player.input.x || 0;
-    const iy = player.input.y || 0;
-    const mag = Math.sqrt(ix * ix + iy * iy);
-    if (mag > 0) {
-      player.vx = (ix / mag) * player.speed;
-      player.vy = (iy / mag) * player.speed;
-    } else {
-      player.vx *= 0.85;
-      player.vy *= 0.85;
-    }
-    player.x = clamp(player.x + player.vx * dt, 20, MAP_SIZE - 20);
-    player.y = clamp(player.y + player.vy * dt, 20, MAP_SIZE - 20);
+  // Generate alerts
+  alerts = [
+    { id: 1, type: 'NAVAL', severity: 'high', message: 'USN Carrier Strike Group detected entering Gulf of Oman', timestamp: new Date(now - 1800000).toISOString(), source: 'AIS/Satellite' },
+    { id: 2, type: 'JAMMING', severity: 'critical', message: 'GPS spoofing detected in Northern Corridor - 3 ships affected', timestamp: new Date(now - 3600000).toISOString(), source: 'AIS Anomaly Detection' },
+    { id: 3, type: 'DARK_SHIP', severity: 'medium', message: 'VLCC "PERSIAN STAR" went dark near Qeshm Island - possible AIS shutdown', timestamp: new Date(now - 7200000).toISOString(), source: 'AIS Monitor' },
+    { id: 4, type: 'MILITARY', severity: 'high', message: 'IRGC fast boats conducting drills near Larak Island', timestamp: new Date(now - 10800000).toISOString(), source: 'CENTCOM Intel' },
+    { id: 5, type: 'SANCTIONS', severity: 'medium', message: 'Sanctioned vessel IRISL IRAN flagged transiting outbound', timestamp: new Date(now - 14400000).toISOString(), source: 'OFAC Watchlist' },
+    { id: 6, type: 'ESCORT', severity: 'info', message: 'Coalition escort convoy forming at Fujairah anchorage - 4 tankers', timestamp: new Date(now - 18000000).toISOString(), source: 'Maritime Ops' },
+    { id: 7, type: 'INSURANCE', severity: 'medium', message: 'Lloyd\'s War Risk Premium increased to 2.5% for Gulf transits', timestamp: new Date(now - 21600000).toISOString(), source: 'Lloyd\'s Market' },
+    { id: 8, type: 'INCIDENT', severity: 'critical', message: 'Unconfirmed report: drone activity detected near shipping lane', timestamp: new Date(now - 25200000).toISOString(), source: 'Reuters / CENTCOM' }
+  ];
 
-    // Player hp regen when not in combat
-    if (now - player.lastDamageTime > 5000 && player.hp < player.maxHp) {
-      player.hp = Math.min(player.maxHp, player.hp + 0.5);
-    }
-  }
+  // Generate conflict timeline events
+  conflictEvents = [
+    { date: '2026-03-10', event: 'IRGC conducts live-fire exercise near Strait', impact: 'Temporary suspension of transits', severity: 'critical' },
+    { date: '2026-03-09', event: 'US deploys additional carrier group to region', impact: 'Deterrence posture strengthened', severity: 'high' },
+    { date: '2026-03-08', event: 'Commercial insurers raise war risk premiums 40%', impact: 'Shipping costs surge', severity: 'medium' },
+    { date: '2026-03-07', event: 'Iran seizes Panama-flagged tanker near Hormuz', impact: '2-hour strait closure', severity: 'critical' },
+    { date: '2026-03-06', event: 'Houthi drone targets vessel in Gulf of Oman', impact: 'Minor damage, no casualties', severity: 'high' },
+    { date: '2026-03-05', event: 'Coalition naval escort program expanded', impact: '12 nations participating', severity: 'info' },
+    { date: '2026-03-04', event: 'GPS jamming reported in 3 zones', impact: 'Ships rerouting to avoid areas', severity: 'medium' }
+  ];
 
-  // Collect gold coins
-  for (const [, player] of players) {
-    if (!player.alive) continue;
-    const bonuses = getLevelBonuses(player);
-    for (let i = goldCoins.length - 1; i >= 0; i--) {
-      const coin = goldCoins[i];
-      if (dist(player, coin) < PLAYER_COLLECT_RADIUS) {
-        const goldValue = Math.floor(coin.value * bonuses.goldMult);
-        player.gold += goldValue;
-        player.xp += Math.ceil(goldValue / 2);
-        player.score += goldValue;
-        goldCoins.splice(i, 1);
-        updateLevel(player);
-      }
-    }
-  }
+  updateEscalationLevel();
+}
 
-  // Gold mine income
-  for (const [, building] of buildings) {
-    if (building.type === 'goldmine' && building.hp > 0) {
-      const owner = players.get(building.ownerId);
-      if (owner) {
-        const bonuses = getLevelBonuses(owner);
-        owner.gold += BUILDING_TYPES.goldmine.goldPerTick * bonuses.goldMult;
-      }
-    }
-  }
+function updateEscalationLevel() {
+  const latestHour = hourlyTransits[hourlyTransits.length - 1];
+  if (!latestHour) { escalationLevel = 'NORMAL'; return; }
 
-  // Move units
-  for (const [, unit] of units) {
-    if (unit.hp <= 0) continue;
-    const owner = players.get(unit.ownerId);
-    if (!owner) continue;
+  const total = latestHour.total;
+  const hasMilitary = latestHour.military > 0;
+  const hasDarkShips = latestHour.darkShips > 0;
+  const hasJamming = SCENARIO.jammingZones.some(z => z.active);
 
-    const bonuses = getLevelBonuses(owner);
-    const moveSpeed = unit.speed * bonuses.speedMult;
-
-    // Regeneration
-    if (bonuses.regen > 0 && unit.hp < unit.maxHp) {
-      unit.hp = Math.min(unit.maxHp, unit.hp + bonuses.regen * dt);
-    }
-
-    // Find nearest enemy if no target or target dead
-    let target = null;
-    if (unit.targetId) {
-      if (unit.targetType === 'unit') target = units.get(unit.targetId);
-      else if (unit.targetType === 'building') target = buildings.get(unit.targetId);
-      else if (unit.targetType === 'player') target = players.get(unit.targetId);
-      if (target && (target.hp <= 0 || (target.alive === false))) target = null;
-    }
-
-    if (!target) {
-      const enemy = findNearestEnemy(unit, 350);
-      if (enemy) {
-        unit.targetId = enemy.id;
-        unit.targetType = enemy.type;
-        unit.state = 'attack';
-      } else {
-        unit.state = 'follow';
-        unit.targetId = null;
-        unit.targetType = null;
-      }
-    }
-
-    if (unit.state === 'attack' && unit.targetId) {
-      let targetPos;
-      if (unit.targetType === 'unit') targetPos = units.get(unit.targetId);
-      else if (unit.targetType === 'building') targetPos = buildings.get(unit.targetId);
-      else if (unit.targetType === 'player') targetPos = players.get(unit.targetId);
-
-      if (targetPos && targetPos.hp > 0 && (targetPos.alive !== false)) {
-        const d = dist(unit, targetPos);
-        if (d > unit.range) {
-          // Move toward target
-          const a = angleTo(unit, targetPos);
-          unit.x += Math.cos(a) * moveSpeed * dt;
-          unit.y += Math.sin(a) * moveSpeed * dt;
-        } else {
-          // Attack
-          if (now - unit.lastAttackTime >= unit.attackSpeed) {
-            unit.lastAttackTime = now;
-            dealDamage(unit, { id: unit.targetId, type: unit.targetType }, owner);
-          }
-        }
-      } else {
-        unit.state = 'follow';
-        unit.targetId = null;
-      }
-    }
-
-    if (unit.state === 'follow' && owner.alive) {
-      // Follow owner in formation
-      const targetDist = 60 + Math.random() * 20;
-      const d = dist(unit, owner);
-      if (d > targetDist) {
-        const a = angleTo(unit, owner);
-        const speed = d > 200 ? moveSpeed * 1.5 : moveSpeed;
-        unit.x += Math.cos(a) * speed * dt;
-        unit.y += Math.sin(a) * speed * dt;
-      }
-    }
-
-    unit.x = clamp(unit.x, 10, MAP_SIZE - 10);
-    unit.y = clamp(unit.y, 10, MAP_SIZE - 10);
-  }
-
-  // Update projectiles
-  for (let i = projectiles.length - 1; i >= 0; i--) {
-    if (now - projectiles[i].time > 500) {
-      projectiles.splice(i, 1);
-    }
-  }
-
-  // Clean up damage numbers
-  for (let i = damageNumbers.length - 1; i >= 0; i--) {
-    if (now - damageNumbers[i].time > 1200) {
-      damageNumbers.splice(i, 1);
-    }
-  }
-
-  // ─── Doom Phase Timer Check ──────────────────────────────────
-  if (doomPhase.active && !doomPhase.winner) {
-    const elapsed = now - doomPhase.startTime;
-    const castle = buildings.get(doomPhase.castleId);
-    if (!castle || castle.hp <= 0) {
-      // Castle was destroyed somehow
-      doomPhase.active = false;
-    } else if (elapsed >= doomPhase.duration) {
-      // Timer expired - castle owner WINS!
-      doomPhase.winner = doomPhase.playerId;
-      doomPhase.winTimer = now;
-      const winner = players.get(doomPhase.playerId);
-      const winnerName = winner ? winner.name : doomPhase.playerName;
-      console.log(`${winnerName} WINS! Doom Castle survived for ${DOOM_DURATION / 1000} seconds!`);
-      io.emit('gameWon', { winnerId: doomPhase.playerId, winnerName });
-    }
-  }
-
-  // Reset game after win (10 seconds after win)
-  if (doomPhase.winner && doomPhase.winTimer && now - doomPhase.winTimer >= 10000) {
-    console.log('Game resetting after win...');
-    // Reset doom phase
-    doomPhase.active = false;
-    doomPhase.winner = null;
-    doomPhase.winTimer = null;
-    // Respawn all players, reset scores
-    for (const [, player] of players) {
-      player.xp = 0;
-      player.level = 0;
-      player.score = 0;
-      player.gold = player.isBot ? 50 : 25;
-      player.maxHp = PLAYER_HP;
-      player.hp = PLAYER_HP;
-      player.maxPop = 5;
-      player.currentPop = 0;
-      respawnPlayer(player);
-    }
-    // Clear all units and buildings
-    units.clear();
-    buildings.clear();
-    io.emit('gameReset');
-  }
-
-  // Respawn gold
-  spawnGoldCoins();
-
-  // Maintain bot count
-  const botCount = [...players.values()].filter(p => p.isBot).length;
-  const humanCount = [...players.values()].filter(p => !p.isBot).length;
-  const targetBots = Math.max(2, MAX_BOTS - humanCount);
-  if (botCount < targetBots) {
-    const botId = 'bot_' + genId();
-    const bot = createPlayer(botId, randName(), true);
-    bot.gold = 50;
-    players.set(botId, bot);
-  }
-
-  // ─── Send State to Clients ─────────────────────────────────────
-  for (const [socketId, player] of players) {
-    if (player.isBot) continue;
-
-    // Only send nearby entities
-    const nearbyPlayers = [];
-    for (const [, p] of players) {
-      if (dist(player, p) < VIEW_DISTANCE * 1.5 || p.id === player.id) {
-        nearbyPlayers.push({
-          id: p.id, name: p.name,
-          x: Math.round(p.x), y: Math.round(p.y),
-          hp: Math.round(p.hp), maxHp: p.maxHp,
-          level: p.level, color: p.color,
-          alive: p.alive, isBot: p.isBot,
-          vx: Math.round(p.vx), vy: Math.round(p.vy)
-        });
-      }
-    }
-
-    const nearbyUnits = [];
-    for (const [, u] of units) {
-      if (dist(player, u) < VIEW_DISTANCE * 1.5) {
-        nearbyUnits.push({
-          id: u.id, ownerId: u.ownerId, type: u.type,
-          x: Math.round(u.x), y: Math.round(u.y),
-          hp: Math.round(u.hp), maxHp: u.maxHp,
-          state: u.state
-        });
-      }
-    }
-
-    const nearbyBuildings = [];
-    for (const [, b] of buildings) {
-      if (dist(player, b) < VIEW_DISTANCE * 1.5) {
-        nearbyBuildings.push({
-          id: b.id, ownerId: b.ownerId, type: b.type,
-          x: Math.round(b.x), y: Math.round(b.y),
-          hp: Math.round(b.hp), maxHp: b.maxHp
-        });
-      }
-    }
-
-    const nearbyCoins = [];
-    for (const coin of goldCoins) {
-      if (dist(player, coin) < VIEW_DISTANCE * 1.2) {
-        nearbyCoins.push({ id: coin.id, x: Math.round(coin.x), y: Math.round(coin.y), value: coin.value });
-      }
-    }
-
-    const nearbyProjectiles = projectiles
-      .filter(p => dist(player, p) < VIEW_DISTANCE)
-      .map(p => ({ x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(p.tx), ty: Math.round(p.ty), color: p.color, time: p.time }));
-
-    const nearbyDmgNums = damageNumbers
-      .filter(d => dist(player, d) < VIEW_DISTANCE)
-      .map(d => ({ x: Math.round(d.x), y: Math.round(d.y), value: d.value, time: d.time }));
-
-    // All buildings/players for minimap
-    const minimapData = [];
-    for (const [, p] of players) {
-      if (p.alive) minimapData.push({ x: p.x, y: p.y, color: p.color, type: 'player' });
-    }
-    for (const [, b] of buildings) {
-      const bType = b.type === 'castle' ? 'castle' : 'building';
-      minimapData.push({ x: b.x, y: b.y, color: players.get(b.ownerId)?.color || '#888', type: bType });
-    }
-
-    // Leaderboard
-    const leaderboard = [...players.values()]
-      .filter(p => p.alive || p.isBot)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
-      .map(p => ({ name: p.name, score: p.score, color: p.color, id: p.id }));
-
-    const socket = io.sockets.sockets.get(socketId);
-    if (socket) {
-      // Doom phase state for clients
-      const doomState = doomPhase.active ? {
-        active: true,
-        playerId: doomPhase.playerId,
-        playerName: doomPhase.playerName,
-        castleX: doomPhase.castleX,
-        castleY: doomPhase.castleY,
-        timeRemaining: Math.max(0, doomPhase.duration - (now - doomPhase.startTime)),
-        winner: doomPhase.winner
-      } : { active: false };
-
-      socket.emit('state', {
-        self: {
-          id: player.id, x: Math.round(player.x), y: Math.round(player.y),
-          gold: Math.floor(player.gold), xp: player.xp, level: player.level,
-          maxPop: player.maxPop, currentPop: player.currentPop,
-          hp: Math.round(player.hp), maxHp: player.maxHp,
-          alive: player.alive, score: player.score, color: player.color, name: player.name,
-          levelName: LEVELS[player.level]?.name || 'Peasant'
-        },
-        players: nearbyPlayers,
-        units: nearbyUnits,
-        buildings: nearbyBuildings,
-        goldCoins: nearbyCoins,
-        projectiles: nearbyProjectiles,
-        damageNumbers: nearbyDmgNums,
-        minimap: minimapData,
-        leaderboard,
-        mapSize: MAP_SIZE,
-        doom: doomState
-      });
-    }
+  if (total === 0) {
+    escalationLevel = 'WAR';
+  } else if (total <= 2 && hasMilitary) {
+    escalationLevel = 'CRITICAL';
+  } else if (total <= 4 || (hasJamming && hasDarkShips)) {
+    escalationLevel = 'ELEVATED';
+  } else {
+    escalationLevel = 'NORMAL';
   }
 }
 
-// ─── Socket.IO Connection Handler ───────────────────────────────────
-io.on('connection', (socket) => {
-  console.log(`Player connected: ${socket.id}`);
+// ─── Periodic Updates (Simulate Real-Time) ─────────────────────────
+function updateSimulation() {
+  const now = Date.now();
 
-  socket.on('join', (data) => {
-    const player = createPlayer(socket.id, data.name);
-    players.set(socket.id, player);
+  // Move existing ships slightly
+  ships.forEach(ship => {
+    const speedKnots = ship.speed;
+    const dlat = (Math.cos(ship.cog * Math.PI / 180) * speedKnots * 0.00001) * (0.5 + Math.random());
+    const dlon = (Math.sin(ship.cog * Math.PI / 180) * speedKnots * 0.00001) * (0.5 + Math.random());
+    ship.lat = +(ship.lat + dlat).toFixed(5);
+    ship.lon = +(ship.lon + dlon).toFixed(5);
+    ship.timestamp = now;
 
-    socket.emit('joined', {
-      id: socket.id,
-      mapSize: MAP_SIZE,
-      unitTypes: UNIT_TYPES,
-      buildingTypes: BUILDING_TYPES,
-      levels: LEVELS,
-      decorations
+    // Random AIS status flicker (simulate dark ships)
+    if (Math.random() < 0.02) {
+      ship.aisStatus = ship.aisStatus === 'active' ? 'dark' : 'active';
+    }
+  });
+
+  // Remove ships that left the bbox
+  ships = ships.filter(s =>
+    s.lat >= HORMUZ_BBOX.latMin - 0.5 && s.lat <= HORMUZ_BBOX.latMax + 0.5 &&
+    s.lon >= HORMUZ_BBOX.lonMin - 0.5 && s.lon <= HORMUZ_BBOX.lonMax + 0.5
+  );
+
+  // Add new ships randomly
+  if (Math.random() < 0.3) {
+    const dir = Math.random() > 0.45 ? 'outbound' : 'inbound';
+    ships.push(generateShip(dir));
+  }
+
+  // Every ~60s, update hourly bucket
+  const latestHour = hourlyTransits[hourlyTransits.length - 1];
+  const hourAge = now - new Date(latestHour.hour).getTime();
+  if (hourAge > 300000) { // every 5 min for demo speed
+    const inbound = Math.floor(randomInRange(2, 7));
+    const outbound = Math.floor(randomInRange(2, 6));
+    hourlyTransits.push({
+      hour: new Date(now).toISOString(),
+      hourLabel: new Date(now).getUTCHours() + ':00',
+      inbound,
+      outbound,
+      total: inbound + outbound,
+      military: Math.random() > 0.6 ? Math.floor(randomInRange(1, 3)) : 0,
+      darkShips: Math.random() > 0.7 ? Math.floor(randomInRange(1, 3)) : 0,
+      oilBarrels: (inbound + outbound) * Math.floor(randomInRange(800000, 1500000)),
+      lngCargo: Math.random() > 0.5 ? Math.floor(randomInRange(50000, 150000)) : 0,
+      iranLinked: Math.random() > 0.7 ? Math.floor(randomInRange(1, 3)) : 0
     });
+    if (hourlyTransits.length > 168) hourlyTransits.shift(); // Keep 7 days
+    updateEscalationLevel();
+  }
 
-    console.log(`${player.name} joined the game`);
+  // Random new alert
+  if (Math.random() < 0.05) {
+    const alertTypes = [
+      { type: 'DARK_SHIP', severity: 'medium', message: `AIS signal lost for ship near ${(26 + Math.random()).toFixed(2)}N, ${(56 + Math.random() * 0.8).toFixed(2)}E` },
+      { type: 'NAVAL', severity: 'high', message: 'Naval vessel maneuvering in transit lane' },
+      { type: 'JAMMING', severity: 'critical', message: 'GPS anomaly detected - possible spoofing' },
+      { type: 'ESCORT', severity: 'info', message: 'Convoy escort departing Fujairah' }
+    ];
+    const at = alertTypes[Math.floor(Math.random() * alertTypes.length)];
+    alerts.unshift({
+      id: Date.now(),
+      type: at.type,
+      severity: at.severity,
+      message: at.message,
+      timestamp: new Date(now).toISOString(),
+      source: 'System'
+    });
+    if (alerts.length > 50) alerts.pop();
+  }
+}
+
+// ─── Computed Metrics ──────────────────────────────────────────────
+function getMetrics() {
+  const currentHour = hourlyTransits[hourlyTransits.length - 1] || { total: 0, inbound: 0, outbound: 0 };
+  const last24h = hourlyTransits.slice(-24);
+  const totalTransits24h = last24h.reduce((s, h) => s + h.total, 0);
+  const avgPerHour = last24h.length > 0 ? (totalTransits24h / last24h.length).toFixed(1) : 0;
+
+  const tankers = ships.filter(s => s.category === 'tanker');
+  const lngCarriers = ships.filter(s => s.category === 'lng');
+  const military = ships.filter(s => s.isMilitary);
+  const darkShips = ships.filter(s => s.aisStatus === 'dark');
+  const iranLinkedShips = ships.filter(s => s.iranLinked);
+
+  const totalOilBarrels24h = last24h.reduce((s, h) => s + (h.oilBarrels || 0), 0);
+  const totalLNG24h = last24h.reduce((s, h) => s + (h.lngCargo || 0), 0);
+
+  // Strait status
+  let straitStatus = 'OPEN';
+  if (currentHour.total === 0) straitStatus = 'CLOSED';
+  else if (currentHour.total < 5) straitStatus = 'PARTIAL';
+
+  // Oil price simulation (Brent ~$95-115 range during crisis)
+  const brentBase = 102.5;
+  const brentDelta = (Math.random() - 0.5) * 3;
+  const wtiBase = 98.3;
+  const wtiDelta = (Math.random() - 0.5) * 3;
+
+  return {
+    straitStatus,
+    escalationLevel,
+    currentHour: {
+      total: currentHour.total,
+      inbound: currentHour.inbound,
+      outbound: currentHour.outbound
+    },
+    totalTransits24h,
+    avgPerHour: +avgPerHour,
+    shipCounts: {
+      total: ships.length,
+      tankers: tankers.length,
+      lng: lngCarriers.length,
+      containers: ships.filter(s => s.category === 'container').length,
+      bulk: ships.filter(s => s.category === 'bulk').length,
+      military: military.length,
+      dark: darkShips.length,
+      iranLinked: iranLinkedShips.length
+    },
+    cargo: {
+      oilBarrels24h: totalOilBarrels24h,
+      lngM3_24h: totalLNG24h,
+      estimatedOilBbls: tankers.reduce((s, t) => s + (t.cargoEstimate || 0), 0)
+    },
+    oilPrices: {
+      brent: +(brentBase + brentDelta).toFixed(2),
+      wti: +(wtiBase + wtiDelta).toFixed(2)
+    },
+    insurance: SCENARIO.insurancePremium,
+    blockadeStatus: SCENARIO.blockadeStatus,
+    jammingZones: SCENARIO.jammingZones
+  };
+}
+
+// ─── REST API ──────────────────────────────────────────────────────
+app.get('/api/ships', (req, res) => {
+  res.json(ships);
+});
+
+app.get('/api/metrics', (req, res) => {
+  res.json(getMetrics());
+});
+
+app.get('/api/hourly', (req, res) => {
+  const count = parseInt(req.query.hours) || 24;
+  res.json(hourlyTransits.slice(-count));
+});
+
+app.get('/api/transits', (req, res) => {
+  res.json(transitHistory.slice(0, 50));
+});
+
+app.get('/api/alerts', (req, res) => {
+  res.json(alerts);
+});
+
+app.get('/api/conflicts', (req, res) => {
+  res.json(conflictEvents);
+});
+
+app.get('/api/export/csv', (req, res) => {
+  let csv = 'Hour,Inbound,Outbound,Total,Military,Dark Ships,Oil Barrels,LNG m3,Iran Linked\n';
+  hourlyTransits.forEach(h => {
+    csv += `${h.hour},${h.inbound},${h.outbound},${h.total},${h.military},${h.darkShips},${h.oilBarrels},${h.lngCargo},${h.iranLinked}\n`;
   });
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=hormuz_transit_data.csv');
+  res.send(csv);
+});
 
-  socket.on('input', (data) => {
-    const player = players.get(socket.id);
-    if (player && player.alive) {
-      player.input = { x: data.x || 0, y: data.y || 0 };
-    }
-  });
+// ─── Socket.IO Real-Time ───────────────────────────────────────────
+io.on('connection', (socket) => {
+  console.log(`Client connected: ${socket.id}`);
 
-  socket.on('build', (data) => {
-    const player = players.get(socket.id);
-    if (!player || !player.alive) return;
-    const bType = data.type;
-    if (!BUILDING_TYPES[bType]) return;
-    const result = createBuilding(socket.id, bType, data.x, data.y);
-    if (result) {
-      socket.emit('buildResult', { success: true, type: bType });
-    } else {
-      socket.emit('buildResult', { success: false, type: bType, reason: 'Cannot build here or insufficient gold' });
-    }
-  });
-
-  socket.on('buyUnit', (data) => {
-    const player = players.get(socket.id);
-    if (!player || !player.alive) return;
-    const uType = data.type;
-    if (!UNIT_TYPES[uType]) return;
-    const result = createUnit(socket.id, uType, player.x, player.y);
-    if (result) {
-      socket.emit('unitResult', { success: true, type: uType });
-    } else {
-      socket.emit('unitResult', { success: false, type: uType, reason: 'Insufficient gold or population' });
-    }
+  // Send initial state
+  socket.emit('init', {
+    ships,
+    metrics: getMetrics(),
+    hourlyTransits: hourlyTransits.slice(-24),
+    alerts: alerts.slice(0, 20),
+    conflicts: conflictEvents,
+    transitHistory: transitHistory.slice(0, 30),
+    bbox: HORMUZ_BBOX,
+    jammingZones: SCENARIO.jammingZones
   });
 
   socket.on('disconnect', () => {
-    const player = players.get(socket.id);
-    if (player) {
-      // Remove player's units
-      for (const [id, unit] of units) {
-        if (unit.ownerId === socket.id) units.delete(id);
-      }
-      // Remove player's buildings
-      for (const [id, building] of buildings) {
-        if (building.ownerId === socket.id) buildings.delete(id);
-      }
-      players.delete(socket.id);
-      console.log(`${player.name} disconnected`);
-    }
+    console.log(`Client disconnected: ${socket.id}`);
   });
 });
 
-// ─── Initialize and Start ───────────────────────────────────────────
-generateDecorations();
-spawnGoldCoins();
+// Push updates every 5 seconds
+setInterval(() => {
+  updateSimulation();
+  const payload = {
+    ships,
+    metrics: getMetrics(),
+    hourlyTransits: hourlyTransits.slice(-24),
+    alerts: alerts.slice(0, 10),
+    transitHistory: transitHistory.slice(0, 20)
+  };
+  io.emit('update', payload);
+}, 5000);
 
-// Spawn initial bots
-for (let i = 0; i < MAX_BOTS; i++) {
-  const botId = 'bot_' + genId();
-  const bot = createPlayer(botId, randName(), true);
-  bot.gold = 40 + Math.floor(Math.random() * 30);
-  players.set(botId, bot);
-}
-
-setInterval(gameTick, TICK_MS);
+// ─── Initialize and Start ──────────────────────────────────────────
+initializeData();
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n  ⚔️  Lordz.io Replica running on http://0.0.0.0:${PORT}\n`);
+  console.log(`\n  HORMUZ TRACKER PRO running on http://0.0.0.0:${PORT}`);
+  console.log(`  Monitoring Strait of Hormuz: ${HORMUZ_BBOX.latMin}-${HORMUZ_BBOX.latMax}N, ${HORMUZ_BBOX.lonMin}-${HORMUZ_BBOX.lonMax}E`);
+  console.log(`  Escalation Level: ${escalationLevel}\n`);
 });
