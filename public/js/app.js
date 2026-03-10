@@ -7,6 +7,7 @@
     ships: [],
     metrics: null,
     hourlyTransits: [],
+    dailyHistory: [],
     alerts: [],
     conflicts: [],
     transitHistory: []
@@ -73,6 +74,7 @@
       state.ships = data.ships;
       state.metrics = data.metrics;
       state.hourlyTransits = data.hourlyTransits;
+      state.dailyHistory = data.dailyHistory || [];
       state.alerts = data.alerts;
       state.conflicts = data.conflicts;
       state.transitHistory = data.transitHistory;
@@ -81,6 +83,7 @@
       HormuzMap.updateShips(state.ships);
       HormuzMap.updateJammingZones(data.jammingZones || []);
       HormuzCharts.update(state.hourlyTransits);
+      HormuzCharts.updateDaily(state.dailyHistory);
     });
 
     socket.on('update', (data) => {

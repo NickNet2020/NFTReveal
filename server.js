@@ -145,6 +145,7 @@ function generateShip(direction) {
 let ships = [];
 let transitHistory = [];
 let hourlyTransits = [];
+let dailyHistory = [];
 let alerts = [];
 let conflictEvents = [];
 
@@ -199,6 +200,53 @@ function initializeData() {
       oilBarrels,
       lngCargo,
       iranLinked: Math.random() > 0.7 ? Math.floor(randomInRange(1, 3)) : 0
+    });
+  }
+
+  // Generate 30-day daily history with pre-war baseline
+  // War started Feb 28, 2026 — pre-war baseline ~60-80 ships/day
+  dailyHistory = [];
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const warStartDate = new Date('2026-02-28T00:00:00Z');
+  for (let d = 29; d >= 0; d--) {
+    const date = new Date(today.getTime() - d * 86400000);
+    const dateStr = date.toISOString().split('T')[0];
+    const isPreWar = date < warStartDate;
+    const daysSinceWar = isPreWar ? 0 : Math.ceil((date - warStartDate) / 86400000);
+
+    let totalShips, inbound, outbound, militaryCount, darkShips;
+    if (isPreWar) {
+      // Normal peacetime traffic: 60-80 ships/day
+      totalShips = Math.floor(randomInRange(60, 80));
+      inbound = Math.floor(totalShips * randomInRange(0.45, 0.55));
+      outbound = totalShips - inbound;
+      militaryCount = Math.floor(randomInRange(1, 4));
+      darkShips = Math.floor(randomInRange(0, 3));
+    } else {
+      // War period: traffic drops sharply, then partially recovers with escorts
+      const dropFactor = Math.max(0.15, 1 - (daysSinceWar * 0.12) + (daysSinceWar > 5 ? (daysSinceWar - 5) * 0.04 : 0));
+      const baseWarTraffic = Math.floor(randomInRange(55, 75) * dropFactor);
+      totalShips = Math.max(8, baseWarTraffic + Math.floor(randomInRange(-5, 5)));
+      inbound = Math.floor(totalShips * randomInRange(0.40, 0.55));
+      outbound = totalShips - inbound;
+      militaryCount = Math.floor(randomInRange(4, 12));
+      darkShips = Math.floor(randomInRange(2, 8));
+    }
+
+    const oilBarrels = totalShips * Math.floor(randomInRange(700000, 1200000));
+    const preWarBaseline = Math.floor(randomInRange(65, 75));
+
+    dailyHistory.push({
+      date: dateStr,
+      totalShips,
+      inbound,
+      outbound,
+      military: militaryCount,
+      darkShips,
+      oilBarrels,
+      preWarBaseline,
+      isPreWar
     });
   }
 
@@ -353,11 +401,12 @@ function getMetrics() {
   if (currentHour.total === 0) straitStatus = 'CLOSED';
   else if (currentHour.total < 5) straitStatus = 'PARTIAL';
 
-  // Oil price simulation (Brent ~$95-115 range during crisis)
-  const brentBase = 102.5;
-  const brentDelta = (Math.random() - 0.5) * 3;
-  const wtiBase = 98.3;
-  const wtiDelta = (Math.random() - 0.5) * 3;
+  // Oil price simulation — Brent settled ~$99, intraday spikes to $119
+  // WTI ~$94, both with high volatility due to Hormuz crisis (Mar 2026)
+  const brentBase = 98.96;
+  const brentDelta = (Math.random() - 0.3) * 8; // skewed upward, ±$5.60
+  const wtiBase = 94.20;
+  const wtiDelta = (Math.random() - 0.3) * 8;
 
   return {
     straitStatus,
@@ -420,6 +469,10 @@ app.get('/api/conflicts', (req, res) => {
   res.json(conflictEvents);
 });
 
+app.get('/api/daily', (req, res) => {
+  res.json(dailyHistory);
+});
+
 app.get('/api/export/csv', (req, res) => {
   let csv = 'Hour,Inbound,Outbound,Total,Military,Dark Ships,Oil Barrels,LNG m3,Iran Linked\n';
   hourlyTransits.forEach(h => {
@@ -439,6 +492,7 @@ io.on('connection', (socket) => {
     ships,
     metrics: getMetrics(),
     hourlyTransits: hourlyTransits.slice(-24),
+    dailyHistory,
     alerts: alerts.slice(0, 20),
     conflicts: conflictEvents,
     transitHistory: transitHistory.slice(0, 30),

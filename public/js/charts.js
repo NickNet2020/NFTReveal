@@ -2,6 +2,7 @@
 const HormuzCharts = (function () {
   let transitChart = null;
   let cargoChart = null;
+  let dailyChart = null;
 
   const CHART_DEFAULTS = {
     responsive: true,
@@ -53,6 +54,7 @@ const HormuzCharts = (function () {
   function init() {
     initTransitChart();
     initCargoChart();
+    initDailyChart();
   }
 
   function initTransitChart() {
@@ -196,10 +198,130 @@ const HormuzCharts = (function () {
     cargoChart.update('none');
   }
 
+  function initDailyChart() {
+    const ctx = document.getElementById('daily-chart');
+    if (!ctx) return;
+
+    dailyChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Ships/Day',
+            data: [],
+            backgroundColor: [],
+            borderColor: [],
+            borderWidth: 1,
+            borderRadius: 2,
+            order: 2
+          },
+          {
+            label: 'Pre-War Baseline',
+            data: [],
+            type: 'line',
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.08)',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 2,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            order: 1
+          },
+          {
+            label: 'Military',
+            data: [],
+            type: 'line',
+            borderColor: '#ef4444',
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            borderDash: [3, 3],
+            pointRadius: 2,
+            pointBackgroundColor: '#ef4444',
+            order: 0
+          }
+        ]
+      },
+      options: {
+        ...CHART_DEFAULTS,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          ...CHART_DEFAULTS.plugins,
+          tooltip: {
+            ...CHART_DEFAULTS.plugins.tooltip,
+            callbacks: {
+              afterBody: function(context) {
+                const idx = context[0].dataIndex;
+                const ships = context[0].chart.data.datasets[0].data[idx];
+                const baseline = context[0].chart.data.datasets[1].data[idx];
+                if (ships && baseline) {
+                  const diff = ships - baseline;
+                  const pct = ((diff / baseline) * 100).toFixed(0);
+                  return `Change: ${diff > 0 ? '+' : ''}${diff} (${diff > 0 ? '+' : ''}${pct}%)`;
+                }
+                return '';
+              }
+            }
+          },
+          annotation: undefined
+        },
+        scales: {
+          ...CHART_DEFAULTS.scales,
+          y: {
+            ...CHART_DEFAULTS.scales.y,
+            title: {
+              display: true,
+              text: 'Ships / Day',
+              color: '#64748b',
+              font: { family: "'JetBrains Mono', monospace", size: 9 }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function updateDailyChart(dailyData) {
+    if (!dailyChart || !dailyData || dailyData.length === 0) return;
+
+    const labels = dailyData.map(d => {
+      const parts = d.date.split('-');
+      return parts[1] + '/' + parts[2];
+    });
+    const ships = dailyData.map(d => d.totalShips);
+    const baseline = dailyData.map(d => d.preWarBaseline);
+    const military = dailyData.map(d => d.military);
+
+    // Color bars: green for pre-war, orange/red for post-war based on drop severity
+    const barColors = dailyData.map(d => {
+      if (d.isPreWar) return 'rgba(16, 185, 129, 0.6)';
+      const ratio = d.totalShips / d.preWarBaseline;
+      if (ratio > 0.7) return 'rgba(245, 158, 11, 0.6)';
+      if (ratio > 0.4) return 'rgba(249, 115, 22, 0.6)';
+      return 'rgba(239, 68, 68, 0.6)';
+    });
+    const borderColors = dailyData.map(d => {
+      if (d.isPreWar) return '#10b981';
+      const ratio = d.totalShips / d.preWarBaseline;
+      if (ratio > 0.7) return '#f59e0b';
+      if (ratio > 0.4) return '#f97316';
+      return '#ef4444';
+    });
+
+    dailyChart.data.labels = labels;
+    dailyChart.data.datasets[0].data = ships;
+    dailyChart.data.datasets[0].backgroundColor = barColors;
+    dailyChart.data.datasets[0].borderColor = borderColors;
+    dailyChart.data.datasets[1].data = baseline;
+    dailyChart.data.datasets[2].data = military;
+    dailyChart.update('none');
+  }
+
   function update(hourlyData) {
     updateTransitChart(hourlyData);
     updateCargoChart(hourlyData);
   }
 
-  return { init, update };
+  return { init, update, updateDaily: updateDailyChart };
 })();
