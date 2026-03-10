@@ -10,8 +10,15 @@
     dailyHistory: [],
     alerts: [],
     conflicts: [],
-    transitHistory: []
+    transitHistory: [],
+    strikeMetrics: null,
+    hourlyStrikes: [],
+    dailyStrikes: [],
+    recentStrikes: []
   };
+
+  let activeTab = 'dashboard';
+  let strikeTabInitialized = false;
 
   // ─── DOM References ────────────────────────────────────────────
   const els = {
@@ -49,7 +56,36 @@
     HormuzCharts.init();
     startClock();
     setupExportBtn();
+    setupTabs();
     setupSocketHandlers();
+  }
+
+  // ─── Tab Navigation ─────────────────────────────────────────────
+  function setupTabs() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        if (tab === activeTab) return;
+        activeTab = tab;
+
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        const target = tab === 'dashboard' ? document.getElementById('dashboard') : document.getElementById('strikes-tab');
+        if (target) target.classList.add('active');
+
+        // Lazy-init strikes tab on first switch
+        if (tab === 'strikes' && !strikeTabInitialized) {
+          strikeTabInitialized = true;
+          StrikeTracker.init();
+          renderStrikeData();
+        }
+        if (tab === 'strikes') {
+          StrikeTracker.invalidateMap();
+        }
+      });
+    });
   }
 
   // ─── Clock ─────────────────────────────────────────────────────
@@ -79,12 +115,17 @@
       state.alerts = data.alerts;
       state.conflicts = data.conflicts;
       state.transitHistory = data.transitHistory;
+      state.strikeMetrics = data.strikeMetrics || null;
+      state.hourlyStrikes = data.hourlyStrikes || [];
+      state.dailyStrikes = data.dailyStrikes || [];
+      state.recentStrikes = data.recentStrikes || [];
 
       renderAll();
       HormuzMap.updateShips(state.ships);
       HormuzMap.updateJammingZones(data.jammingZones || []);
       HormuzCharts.update(state.hourlyTransits);
       HormuzCharts.updateDaily(state.dailyHistory);
+      if (strikeTabInitialized) renderStrikeData();
     });
 
     socket.on('update', (data) => {
@@ -93,10 +134,14 @@
       state.hourlyTransits = data.hourlyTransits;
       if (data.alerts) state.alerts = data.alerts;
       if (data.transitHistory) state.transitHistory = data.transitHistory;
+      if (data.strikeMetrics) state.strikeMetrics = data.strikeMetrics;
+      if (data.hourlyStrikes) state.hourlyStrikes = data.hourlyStrikes;
+      if (data.recentStrikes) state.recentStrikes = data.recentStrikes;
 
       renderAll();
       HormuzMap.updateShips(state.ships);
       HormuzCharts.update(state.hourlyTransits);
+      if (strikeTabInitialized) renderStrikeData();
     });
 
     socket.on('disconnect', () => {
@@ -262,6 +307,88 @@
     }).join('');
 
     els.conflictTimeline.innerHTML = html;
+  }
+
+  // ─── Strike Data Rendering ──────────────────────────────────────
+  function renderStrikeData() {
+    if (!state.strikeMetrics) return;
+    const sm = state.strikeMetrics;
+
+    // KPIs
+    setTextById('strike-kpi-drones', sm.h24.drones);
+    setTextById('strike-kpi-cruise', sm.h24.cruise);
+    setTextById('strike-kpi-ballistic', sm.h24.ballistic);
+    setTextById('strike-kpi-total', sm.h24.total);
+    setTextById('strike-kpi-intercept-rate', sm.h24.interceptionRate + '%');
+    setTextById('strike-kpi-intercepted', sm.h24.intercepted);
+    setTextById('strike-kpi-total-launched', sm.h24.total);
+    setTextById('strike-kpi-cer', sm.h24.costExchangeRatio + 'x');
+
+    // Cost exchange widget
+    setTextById('attack-cost-24h', '$' + formatCurrency(sm.h24.attackCost));
+    setTextById('intercept-rate-display', sm.h24.interceptionRate + '%');
+    setTextById('defense-cost-24h', '$' + formatCurrency(sm.h24.defenseCost));
+    setTextById('attack-cost-24h-2', '$' + formatCurrency(sm.h24.attackCost));
+    setTextById('cer-display', sm.h24.costExchangeRatio + 'x');
+
+    // 30-day cumulative
+    setTextById('cost-30d-total', sm.d30.total.toLocaleString());
+    setTextById('cost-30d-intercepted', sm.d30.intercepted.toLocaleString());
+    setTextById('cost-30d-attack', '$' + formatCurrency(sm.d30.attackCost));
+    setTextById('cost-30d-defense', '$' + formatCurrency(sm.d30.defenseCost));
+
+    // Charts
+    StrikeTracker.updateHourlyCharts(state.hourlyStrikes, state.hourlyTransits);
+    StrikeTracker.updateDailyChart(state.dailyStrikes, state.dailyHistory);
+
+    // Map overlays
+    StrikeTracker.updateStrikeMap(state.recentStrikes);
+
+    // Strike table
+    renderStrikeTable(state.recentStrikes);
+  }
+
+  function setTextById(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function formatCurrency(value) {
+    if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B';
+    if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+    if (value >= 1e3) return (value / 1e3).toFixed(0) + 'K';
+    return value.toString();
+  }
+
+  function renderStrikeTable(strikes) {
+    const tbody = document.getElementById('strike-tbody');
+    const countEl = document.getElementById('strike-count');
+    if (!tbody || !strikes) return;
+
+    countEl.textContent = `${strikes.length} events`;
+
+    const recent = strikes.slice().reverse().slice(0, 30);
+    const html = recent.map(s => {
+      const time = new Date(s.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      const classColors = { 'UAV': '#eab308', 'Cruise': '#f97316', 'Ballistic': '#dc2626' };
+      const color = classColors[s.projectileClass] || '#888';
+      const statusClass = s.intercepted ? 'strike-intercepted' : 'strike-impact';
+      const statusText = s.intercepted ? 'INTERCEPTED' : 'IMPACT';
+
+      return `<tr>
+        <td>${time}</td>
+        <td><span class="type-badge" style="background:${color}20;color:${color}">${s.type}</span></td>
+        <td style="color:${color}">${s.projectileClass}</td>
+        <td>${s.origin.name}</td>
+        <td>${s.target.name}</td>
+        <td class="${statusClass}">${statusText}</td>
+        <td>$${formatCurrency(s.cost)}</td>
+        <td>${s.intercepted ? '$' + formatCurrency(s.interceptorCost) : '--'}</td>
+        <td style="color:var(--text-muted)">${s.source}</td>
+      </tr>`;
+    }).join('');
+
+    tbody.innerHTML = html;
   }
 
   // ─── Start ─────────────────────────────────────────────────────

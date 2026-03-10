@@ -51,8 +51,14 @@
     </div>
   </header>
 
-  <!-- ─── Main Dashboard Grid ─── -->
-  <main id="dashboard">
+  <!-- ─── Tab Navigation ─── -->
+  <nav id="tab-nav">
+    <button class="tab-btn active" data-tab="dashboard">MARITIME TRACKER</button>
+    <button class="tab-btn" data-tab="strikes">MISSILE &amp; DRONE STRIKES</button>
+  </nav>
+
+  <!-- ═══ TAB 1: Maritime Dashboard ═══ -->
+  <main id="dashboard" class="tab-content active">
     <!-- ─── Left Column: Map ─── -->
     <section id="map-section">
       <div class="panel-header">
@@ -217,12 +223,192 @@
     </section>
   </main>
 
+  <!-- ═══ TAB 2: Missile & Drone Strike Tracker ═══ -->
+  <div id="strikes-tab" class="tab-content">
+    <div id="strikes-dashboard">
+      <!-- Strike KPIs -->
+      <div id="strike-kpi-grid">
+        <div class="kpi-card strike-kpi-uav">
+          <div class="kpi-label">UAV/DRONES (24H)</div>
+          <div class="kpi-value" id="strike-kpi-drones">--</div>
+          <div class="kpi-sub">Shahed-131/136</div>
+        </div>
+        <div class="kpi-card strike-kpi-cruise">
+          <div class="kpi-label">CRUISE MISSILES (24H)</div>
+          <div class="kpi-value" id="strike-kpi-cruise">--</div>
+          <div class="kpi-sub">Terrain-following</div>
+        </div>
+        <div class="kpi-card strike-kpi-ballistic">
+          <div class="kpi-label">BALLISTIC (24H)</div>
+          <div class="kpi-value" id="strike-kpi-ballistic">--</div>
+          <div class="kpi-sub">&gt;Mach 3 terminal</div>
+        </div>
+        <div class="kpi-card strike-kpi-total">
+          <div class="kpi-label">TOTAL PROJECTILES (24H)</div>
+          <div class="kpi-value" id="strike-kpi-total">--</div>
+          <div class="kpi-sub">All classes</div>
+        </div>
+        <div class="kpi-card strike-kpi-intercept">
+          <div class="kpi-label">INTERCEPTION RATE</div>
+          <div class="kpi-value" id="strike-kpi-intercept-rate">--%</div>
+          <div class="kpi-sub"><span id="strike-kpi-intercepted">--</span> / <span id="strike-kpi-total-launched">--</span> destroyed</div>
+        </div>
+        <div class="kpi-card strike-kpi-cost">
+          <div class="kpi-label">COST EXCHANGE RATIO</div>
+          <div class="kpi-value" id="strike-kpi-cer">--</div>
+          <div class="kpi-sub">Defense / Attack</div>
+        </div>
+      </div>
+
+      <!-- Top Row: Map + Cost Widget -->
+      <div id="strike-top-row">
+        <!-- Strike Map -->
+        <div id="strike-map-panel">
+          <div class="panel-header">
+            <h3>THREAT MAP — STRIKE ZONES &amp; FLIGHT PATHS</h3>
+            <div class="map-controls">
+              <button class="map-btn active" data-strike-layer="zones">Zones</button>
+              <button class="map-btn active" data-strike-layer="paths">Paths</button>
+              <button class="map-btn active" data-strike-layer="jamming">EW Grid</button>
+            </div>
+          </div>
+          <div id="strike-map-container"></div>
+          <div id="strike-map-legend">
+            <span class="legend-item"><span class="dot" style="background:#eab308"></span> UAV (Drone)</span>
+            <span class="legend-item"><span class="dot" style="background:#f97316"></span> Cruise Missile</span>
+            <span class="legend-item"><span class="dot" style="background:#dc2626"></span> Ballistic Missile</span>
+            <span class="legend-item"><span class="dot" style="background:#22c55e;border:1px solid #16a34a"></span> Intercepted</span>
+            <span class="legend-item"><span class="dot" style="background:#ef4444;box-shadow:0 0 6px #ef4444"></span> Impact</span>
+          </div>
+        </div>
+
+        <!-- Cost Exchange Widget -->
+        <div id="cost-exchange-panel">
+          <div class="panel-header">
+            <h3>COST-EXCHANGE &amp; ATTRITION ENGINE</h3>
+          </div>
+          <div id="cost-exchange-body">
+            <!-- Attack Cost Formula -->
+            <div class="formula-card">
+              <div class="formula-label">ATTACK COST (24H)</div>
+              <div class="formula-display">
+                <span class="formula-var">N<sub>drones</sub></span> &times; $35K + <span class="formula-var">N<sub>missiles</sub></span> &times; $1.5M
+              </div>
+              <div class="formula-result" id="attack-cost-24h">$--</div>
+            </div>
+
+            <!-- Interception Rate Formula -->
+            <div class="formula-card">
+              <div class="formula-label">INTERCEPTION RATE</div>
+              <div class="formula-display formula-block">
+                <div class="formula-frac">
+                  <span class="frac-num">Projectiles Destroyed</span>
+                  <span class="frac-den">Total Projectiles Launched</span>
+                </div>
+                <span>&times; 100</span>
+              </div>
+              <div class="formula-result" id="intercept-rate-display">--%</div>
+            </div>
+
+            <!-- Cost Exchange Ratio Formula -->
+            <div class="formula-card">
+              <div class="formula-label">COST EXCHANGE RATIO</div>
+              <div class="formula-display formula-block">
+                <div class="formula-frac">
+                  <span class="frac-num">&Sigma; Interceptor Costs</span>
+                  <span class="frac-den">&Sigma; Attacker Munition Costs</span>
+                </div>
+              </div>
+              <div class="formula-result-row">
+                <div>
+                  <div class="formula-sub-label">Defense</div>
+                  <div class="formula-result defense-cost" id="defense-cost-24h">$--</div>
+                </div>
+                <div>
+                  <div class="formula-sub-label">Attack</div>
+                  <div class="formula-result attack-cost" id="attack-cost-24h-2">$--</div>
+                </div>
+                <div>
+                  <div class="formula-sub-label">Ratio</div>
+                  <div class="formula-result cer-value" id="cer-display">--x</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 30-Day Totals -->
+            <div class="formula-card cost-30d">
+              <div class="formula-label">30-DAY CUMULATIVE</div>
+              <div class="cost-30d-grid">
+                <div><span class="cost-30d-label">Projectiles</span><span class="cost-30d-value" id="cost-30d-total">--</span></div>
+                <div><span class="cost-30d-label">Intercepted</span><span class="cost-30d-value" id="cost-30d-intercepted">--</span></div>
+                <div><span class="cost-30d-label">Attack $</span><span class="cost-30d-value" id="cost-30d-attack">$--</span></div>
+                <div><span class="cost-30d-label">Defense $</span><span class="cost-30d-value" id="cost-30d-defense">$--</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div id="strike-charts-row">
+        <div class="chart-panel">
+          <div class="panel-header">
+            <h3>HOURLY: SHIPS vs PROJECTILES (24H)</h3>
+          </div>
+          <canvas id="strike-hourly-chart"></canvas>
+        </div>
+        <div class="chart-panel">
+          <div class="panel-header">
+            <h3>HOURLY STRIKE BREAKDOWN (24H)</h3>
+          </div>
+          <canvas id="strike-type-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- 30-Day dual-axis chart -->
+      <div id="strike-daily-panel" class="chart-panel chart-panel-full">
+        <div class="panel-header">
+          <h3>30-DAY: DAILY SHIPS vs PROJECTILES LAUNCHED</h3>
+          <span class="war-start-label">WAR START: FEB 28</span>
+        </div>
+        <canvas id="strike-daily-chart"></canvas>
+      </div>
+
+      <!-- Recent Strikes Table -->
+      <div id="strike-table-panel">
+        <div class="panel-header">
+          <h3>RECENT STRIKE EVENTS</h3>
+          <span class="record-count" id="strike-count">0 events</span>
+        </div>
+        <div class="table-scroll">
+          <table id="strike-table">
+            <thead>
+              <tr>
+                <th>TIME</th>
+                <th>TYPE</th>
+                <th>CLASS</th>
+                <th>ORIGIN</th>
+                <th>TARGET</th>
+                <th>STATUS</th>
+                <th>ATTACK $</th>
+                <th>DEFENSE $</th>
+                <th>SOURCE</th>
+              </tr>
+            </thead>
+            <tbody id="strike-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ─── Scripts ─── -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/map.js"></script>
   <script src="js/charts.js"></script>
+  <script src="js/strikes.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -189,6 +189,37 @@ html, body {
   50% { opacity: 0.8; box-shadow: 0 0 16px rgba(239, 68, 68, 0.8); }
 }
 
+/* ─── Tab Navigation ────────────────────────────────────────────── */
+#tab-nav {
+  display: flex;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  gap: 0;
+}
+.tab-btn {
+  padding: 10px 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active {
+  color: var(--accent-cyan);
+  border-bottom-color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.05);
+}
+.tab-content { display: none; }
+.tab-content.active { display: grid; }
+#strikes-tab.active { display: block; }
+
 /* ─── Main Dashboard Grid ───────────────────────────────────────── */
 #dashboard {
   display: grid;
@@ -196,7 +227,7 @@ html, body {
   grid-template-rows: minmax(400px, 1fr) auto;
   gap: 1px;
   background: var(--border);
-  height: calc(100vh - 56px);
+  height: calc(100vh - 56px - 42px);
   overflow: hidden;
 }
 
@@ -661,7 +692,7 @@ html, body {
     grid-template-rows: 400px auto auto;
     overflow-y: auto;
     height: auto;
-    min-height: calc(100vh - 56px);
+    min-height: calc(100vh - 56px - 42px);
   }
   #bottom-section {
     grid-template-columns: 1fr;
@@ -703,4 +734,254 @@ html, body {
 .jamming-zone {
   border: 2px dashed rgba(239, 68, 68, 0.6) !important;
   background: rgba(239, 68, 68, 0.08) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   STRIKES TAB
+   ═══════════════════════════════════════════════════════════════════ */
+#strikes-dashboard {
+  padding: 0;
+  background: var(--bg-primary);
+  max-height: calc(100vh - 56px - 42px);
+  overflow-y: auto;
+}
+
+/* Strike KPI Grid */
+#strike-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1px;
+  background: var(--border);
+}
+.strike-kpi-uav .kpi-value { color: #eab308; }
+.strike-kpi-cruise .kpi-value { color: #f97316; }
+.strike-kpi-ballistic .kpi-value { color: #dc2626; }
+.strike-kpi-total .kpi-value { color: var(--text-primary); }
+.strike-kpi-intercept .kpi-value { color: #22c55e; }
+.strike-kpi-cost .kpi-value { color: #a855f7; }
+
+/* Strike Top Row: Map + Cost Widget */
+#strike-top-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1px;
+  background: var(--border);
+}
+
+/* Strike Map */
+#strike-map-panel {
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+}
+#strike-map-container {
+  flex: 1;
+  min-height: 380px;
+}
+#strike-map-container .leaflet-container { background: #0a0e17 !important; }
+#strike-map-container .leaflet-tile-pane { filter: brightness(0.6) contrast(1.2) saturate(0.3) hue-rotate(180deg) invert(1); }
+#strike-map-legend {
+  display: flex;
+  gap: 14px;
+  padding: 6px 14px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+/* Pulsating impact circles */
+@keyframes strike-pulse-anim {
+  0% { opacity: 1; stroke-width: 2; }
+  50% { opacity: 0.4; stroke-width: 4; }
+  100% { opacity: 1; stroke-width: 2; }
+}
+.strike-pulse { animation: strike-pulse-anim 1.2s infinite; }
+
+/* ─── Cost Exchange Widget ─────────────────────────────────────── */
+#cost-exchange-panel {
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+#cost-exchange-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.formula-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.formula-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.formula-display {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  background: rgba(30, 58, 95, 0.2);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+.formula-var {
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+.formula-result {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+}
+.formula-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.formula-frac {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+.frac-num {
+  padding: 4px 8px;
+  border-bottom: 2px solid var(--text-muted);
+  font-size: 10px;
+  color: var(--accent-cyan);
+}
+.frac-den {
+  padding: 4px 8px;
+  font-size: 10px;
+  color: var(--accent-orange);
+}
+
+.formula-result-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  text-align: center;
+  margin-top: 8px;
+}
+.formula-sub-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.defense-cost { color: #22c55e; font-size: 16px; }
+.attack-cost { color: #ef4444; font-size: 16px; }
+.cer-value { color: #a855f7; font-size: 20px; }
+
+.cost-30d {
+  border-color: rgba(168, 85, 247, 0.3);
+}
+.cost-30d-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.cost-30d-grid > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(30, 58, 95, 0.15);
+  border-radius: 4px;
+}
+.cost-30d-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+.cost-30d-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Strike Charts Row */
+#strike-charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  min-height: 220px;
+}
+#strike-charts-row .chart-panel canvas {
+  min-height: 180px;
+}
+
+/* Strike Daily Panel */
+#strike-daily-panel canvas {
+  min-height: 200px;
+  max-height: 240px;
+}
+
+/* Strike Table */
+#strike-table-panel {
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow: hidden;
+}
+#strike-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+#strike-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-panel);
+  padding: 6px 8px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+}
+#strike-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(30, 58, 95, 0.3);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+#strike-table tr:hover td { background: var(--bg-hover); }
+.strike-intercepted { color: #22c55e; font-weight: 700; }
+.strike-impact { color: #ef4444; font-weight: 700; animation: pulse 1s infinite; }
+
+/* ─── Strikes Responsive ───────────────────────────────────────── */
+@media (max-width: 1200px) {
+  #strike-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  #strike-top-row { grid-template-columns: 1fr; }
+  #strike-charts-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  #strike-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .tab-btn { padding: 8px 14px; font-size: 10px; letter-spacing: 1px; }
 }

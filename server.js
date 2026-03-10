@@ -52,6 +52,41 @@ let conflictEvents = [];
 let escalationLevel = 'ELEVATED';
 let lastOilPrices = { brent: 98.96, wti: 94.20 };
 
+// ─── Strike Data State ────────────────────────────────────────────
+let strikes = [];              // individual strike events
+let hourlyStrikeRollup = [];   // hourly aggregations
+let dailyStrikeRollup = [];    // 30-day daily aggregations
+let strikeMetrics = {};        // live cost-exchange metrics
+
+// Projectile definitions
+const PROJECTILE_TYPES = {
+  'Shahed-136': { class: 'UAV', speed: 185, costMin: 20000, costMax: 50000, avgCost: 35000, color: '#eab308', interceptorCost: 500000 },
+  'Shahed-131': { class: 'UAV', speed: 170, costMin: 15000, costMax: 40000, avgCost: 28000, color: '#eab308', interceptorCost: 400000 },
+  'Cruise':     { class: 'Cruise', speed: 900, costMin: 1000000, costMax: 2000000, avgCost: 1500000, color: '#f97316', interceptorCost: 3000000 },
+  'Ballistic':  { class: 'Ballistic', speed: 3700, costMin: 3000000, costMax: 8000000, avgCost: 4000000, color: '#dc2626', interceptorCost: 10000000 }
+};
+
+// Known launch sites (approximate coordinates for simulation)
+const LAUNCH_ORIGINS = [
+  { name: 'Bandar Abbas Coast', lat: 27.18, lon: 56.27 },
+  { name: 'Chabahar', lat: 25.30, lon: 60.64 },
+  { name: 'Jask', lat: 25.64, lon: 57.77 },
+  { name: 'Qeshm Island', lat: 26.95, lon: 56.27 },
+  { name: 'Southern Iran', lat: 27.50, lon: 55.50 },
+  { name: 'Houthi (Yemen)', lat: 15.35, lon: 44.21 }
+];
+
+// Target sites
+const STRIKE_TARGETS = [
+  { name: 'Al Dhafra AB (UAE)', lat: 24.25, lon: 54.55 },
+  { name: 'Al Udeid AB (Qatar)', lat: 25.12, lon: 51.31 },
+  { name: 'USS Carrier Group', lat: 26.40, lon: 56.50 },
+  { name: 'Fujairah Port', lat: 25.12, lon: 56.33 },
+  { name: 'Shipping Lane', lat: 26.50, lon: 56.30 },
+  { name: 'Ras Tanura (SA)', lat: 26.64, lon: 50.16 },
+  { name: 'Bahrain NSA', lat: 26.23, lon: 50.52 }
+];
+
 // AIS live tracking state
 let aisShipCache = {};       // keyed by MMSI
 let aisStaticCache = {};     // ShipStaticData cache keyed by MMSI
@@ -447,6 +482,302 @@ function updateSimulation() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// STRIKE TRACKING SYSTEM
+// ═══════════════════════════════════════════════════════════════════
+let strikeIdCounter = 1;
+
+function generateStrike(timestamp) {
+  // Weight: 60% drones, 25% cruise, 15% ballistic
+  const r = Math.random();
+  let type;
+  if (r < 0.35) type = 'Shahed-136';
+  else if (r < 0.60) type = 'Shahed-131';
+  else if (r < 0.85) type = 'Cruise';
+  else type = 'Ballistic';
+
+  const spec = PROJECTILE_TYPES[type];
+  const origin = LAUNCH_ORIGINS[Math.floor(Math.random() * LAUNCH_ORIGINS.length)];
+  const target = STRIKE_TARGETS[Math.floor(Math.random() * STRIKE_TARGETS.length)];
+
+  // Interception rate: ~75% for drones, ~60% for cruise, ~45% for ballistic
+  const interceptRates = { 'UAV': 0.75, 'Cruise': 0.60, 'Ballistic': 0.45 };
+  const intercepted = Math.random() < (interceptRates[spec.class] || 0.6);
+
+  const cost = Math.floor(randomInRange(spec.costMin, spec.costMax));
+  const interceptorCost = intercepted ? spec.interceptorCost : 0;
+
+  return {
+    id: 'STR-' + (strikeIdCounter++),
+    timestamp: timestamp || new Date().toISOString(),
+    type,
+    projectileClass: spec.class,
+    origin: { name: origin.name, lat: origin.lat + randomInRange(-0.05, 0.05), lon: origin.lon + randomInRange(-0.05, 0.05) },
+    target: { name: target.name, lat: target.lat + randomInRange(-0.02, 0.02), lon: target.lon + randomInRange(-0.02, 0.02) },
+    intercepted,
+    cost,
+    interceptorCost,
+    color: spec.color,
+    source: ['CENTCOM', 'OSINT', 'ACLED', 'Satellite Intel', 'Reuters'][Math.floor(Math.random() * 5)]
+  };
+}
+
+function generateHourlyStrikes(hourTimestamp, isPreWar, daysSinceWar) {
+  if (isPreWar) {
+    return { drones: 0, cruiseMissiles: 0, ballisticMissiles: 0, total: 0, intercepted: 0, attackCost: 0, defenseCost: 0, strikes: [] };
+  }
+
+  // Strike intensity ramps up after war starts, with random swarm events
+  const baseRate = Math.min(daysSinceWar * 0.5, 6);
+  const isSwarm = Math.random() < 0.04; // ~4% chance of swarm attack per hour
+  const droneCount = isSwarm
+    ? Math.floor(randomInRange(20, 45))
+    : Math.floor(randomInRange(0, baseRate));
+  const cruiseCount = Math.floor(randomInRange(0, Math.min(daysSinceWar * 0.15, 2)));
+  const ballisticCount = Math.random() < 0.08 ? Math.floor(randomInRange(1, 3)) : 0;
+
+  const total = droneCount + cruiseCount + ballisticCount;
+  let intercepted = 0;
+  let attackCost = 0;
+  let defenseCost = 0;
+  const hourStrikes = [];
+
+  for (let i = 0; i < droneCount; i++) {
+    const s = generateStrike(hourTimestamp);
+    s.type = Math.random() > 0.5 ? 'Shahed-136' : 'Shahed-131';
+    s.projectileClass = 'UAV';
+    s.color = '#eab308';
+    const spec = PROJECTILE_TYPES[s.type];
+    s.cost = Math.floor(randomInRange(spec.costMin, spec.costMax));
+    s.intercepted = Math.random() < 0.75;
+    s.interceptorCost = s.intercepted ? spec.interceptorCost : 0;
+    attackCost += s.cost;
+    defenseCost += s.interceptorCost;
+    if (s.intercepted) intercepted++;
+    hourStrikes.push(s);
+  }
+  for (let i = 0; i < cruiseCount; i++) {
+    const s = generateStrike(hourTimestamp);
+    s.type = 'Cruise';
+    s.projectileClass = 'Cruise';
+    s.color = '#f97316';
+    s.cost = Math.floor(randomInRange(1000000, 2000000));
+    s.intercepted = Math.random() < 0.60;
+    s.interceptorCost = s.intercepted ? 3000000 : 0;
+    attackCost += s.cost;
+    defenseCost += s.interceptorCost;
+    if (s.intercepted) intercepted++;
+    hourStrikes.push(s);
+  }
+  for (let i = 0; i < ballisticCount; i++) {
+    const s = generateStrike(hourTimestamp);
+    s.type = 'Ballistic';
+    s.projectileClass = 'Ballistic';
+    s.color = '#dc2626';
+    s.cost = Math.floor(randomInRange(3000000, 8000000));
+    s.intercepted = Math.random() < 0.45;
+    s.interceptorCost = s.intercepted ? 10000000 : 0;
+    attackCost += s.cost;
+    defenseCost += s.interceptorCost;
+    if (s.intercepted) intercepted++;
+    hourStrikes.push(s);
+  }
+
+  return {
+    drones: droneCount,
+    cruiseMissiles: cruiseCount,
+    ballisticMissiles: ballisticCount,
+    total,
+    intercepted,
+    attackCost,
+    defenseCost,
+    isSwarm: isSwarm && droneCount >= 20,
+    strikes: hourStrikes
+  };
+}
+
+function initializeStrikeData() {
+  const now = Date.now();
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const warStartDate = new Date('2026-02-28T00:00:00Z');
+
+  // ── 24h Hourly strike rollup ──
+  hourlyStrikeRollup = [];
+  // Track swarm-induced traffic suppressions
+  let trafficSuppressedUntil = 0;
+
+  for (let h = 23; h >= 0; h--) {
+    const hourDate = new Date(now - h * 3600000);
+    const daysSinceWar = Math.max(0, Math.ceil((hourDate - warStartDate) / 86400000));
+    const isPreWar = hourDate < warStartDate;
+
+    const strikeData = generateHourlyStrikes(hourDate.toISOString(), isPreWar, daysSinceWar);
+
+    // Swarm attack logic: >20 drones → suppress ship transits 80% for 12 hours
+    if (strikeData.isSwarm) {
+      trafficSuppressedUntil = hourDate.getTime() + 12 * 3600000;
+    }
+    const trafficSuppressed = hourDate.getTime() < trafficSuppressedUntil;
+
+    hourlyStrikeRollup.push({
+      hour: hourDate.toISOString(),
+      hourLabel: hourDate.getUTCHours() + ':00',
+      ...strikeData,
+      trafficSuppressed
+    });
+
+    // Also push individual strikes to master list
+    strikes.push(...strikeData.strikes);
+  }
+
+  // ── 30-day Daily strike rollup ──
+  dailyStrikeRollup = [];
+  trafficSuppressedUntil = 0;
+
+  for (let d = 29; d >= 0; d--) {
+    const date = new Date(today.getTime() - d * 86400000);
+    const dateStr = date.toISOString().split('T')[0];
+    const isPreWar = date < warStartDate;
+    const daysSinceWar = isPreWar ? 0 : Math.ceil((date - warStartDate) / 86400000);
+
+    let dayDrones = 0, dayCruise = 0, dayBallistic = 0, dayIntercepted = 0;
+    let dayAttackCost = 0, dayDefenseCost = 0;
+    let hadSwarm = false;
+
+    // Generate 24 hours of strikes for this day
+    for (let h = 0; h < 24; h++) {
+      const hourTs = new Date(date.getTime() + h * 3600000).toISOString();
+      const strikeData = generateHourlyStrikes(hourTs, isPreWar, daysSinceWar);
+      dayDrones += strikeData.drones;
+      dayCruise += strikeData.cruiseMissiles;
+      dayBallistic += strikeData.ballisticMissiles;
+      dayIntercepted += strikeData.intercepted;
+      dayAttackCost += strikeData.attackCost;
+      dayDefenseCost += strikeData.defenseCost;
+      if (strikeData.isSwarm) hadSwarm = true;
+    }
+
+    const dayTotal = dayDrones + dayCruise + dayBallistic;
+    const interceptionRate = dayTotal > 0 ? +((dayIntercepted / dayTotal) * 100).toFixed(1) : 0;
+    const costExchangeRatio = dayAttackCost > 0 ? +(dayDefenseCost / dayAttackCost).toFixed(2) : 0;
+
+    // Apply traffic suppression from swarm attacks
+    const matchingDaily = dailyHistory.find(dh => dh.date === dateStr);
+    if (hadSwarm && matchingDaily && !isPreWar) {
+      matchingDaily.totalShips = Math.max(2, Math.floor(matchingDaily.totalShips * 0.2));
+      matchingDaily.inbound = Math.floor(matchingDaily.totalShips * 0.45);
+      matchingDaily.outbound = matchingDaily.totalShips - matchingDaily.inbound;
+    }
+
+    dailyStrikeRollup.push({
+      date: dateStr,
+      isPreWar,
+      drones: dayDrones,
+      cruiseMissiles: dayCruise,
+      ballisticMissiles: dayBallistic,
+      total: dayTotal,
+      intercepted: dayIntercepted,
+      interceptionRate,
+      attackCost: dayAttackCost,
+      defenseCost: dayDefenseCost,
+      costExchangeRatio,
+      hadSwarm
+    });
+  }
+
+  computeStrikeMetrics();
+}
+
+function computeStrikeMetrics() {
+  const last24h = hourlyStrikeRollup.slice(-24);
+  const totalDrones24h = last24h.reduce((s, h) => s + h.drones, 0);
+  const totalCruise24h = last24h.reduce((s, h) => s + h.cruiseMissiles, 0);
+  const totalBallistic24h = last24h.reduce((s, h) => s + h.ballisticMissiles, 0);
+  const totalProjectiles24h = totalDrones24h + totalCruise24h + totalBallistic24h;
+  const totalIntercepted24h = last24h.reduce((s, h) => s + h.intercepted, 0);
+  const totalAttackCost24h = last24h.reduce((s, h) => s + h.attackCost, 0);
+  const totalDefenseCost24h = last24h.reduce((s, h) => s + h.defenseCost, 0);
+
+  // 30-day totals
+  const totalDrones30d = dailyStrikeRollup.reduce((s, d) => s + d.drones, 0);
+  const totalCruise30d = dailyStrikeRollup.reduce((s, d) => s + d.cruiseMissiles, 0);
+  const totalBallistic30d = dailyStrikeRollup.reduce((s, d) => s + d.ballisticMissiles, 0);
+  const totalProjectiles30d = totalDrones30d + totalCruise30d + totalBallistic30d;
+  const totalIntercepted30d = dailyStrikeRollup.reduce((s, d) => s + d.intercepted, 0);
+  const totalAttackCost30d = dailyStrikeRollup.reduce((s, d) => s + d.attackCost, 0);
+  const totalDefenseCost30d = dailyStrikeRollup.reduce((s, d) => s + d.defenseCost, 0);
+
+  strikeMetrics = {
+    h24: {
+      drones: totalDrones24h,
+      cruise: totalCruise24h,
+      ballistic: totalBallistic24h,
+      total: totalProjectiles24h,
+      intercepted: totalIntercepted24h,
+      interceptionRate: totalProjectiles24h > 0 ? +((totalIntercepted24h / totalProjectiles24h) * 100).toFixed(1) : 0,
+      attackCost: totalAttackCost24h,
+      defenseCost: totalDefenseCost24h,
+      costExchangeRatio: totalAttackCost24h > 0 ? +(totalDefenseCost24h / totalAttackCost24h).toFixed(2) : 0
+    },
+    d30: {
+      drones: totalDrones30d,
+      cruise: totalCruise30d,
+      ballistic: totalBallistic30d,
+      total: totalProjectiles30d,
+      intercepted: totalIntercepted30d,
+      interceptionRate: totalProjectiles30d > 0 ? +((totalIntercepted30d / totalProjectiles30d) * 100).toFixed(1) : 0,
+      attackCost: totalAttackCost30d,
+      defenseCost: totalDefenseCost30d,
+      costExchangeRatio: totalAttackCost30d > 0 ? +(totalDefenseCost30d / totalAttackCost30d).toFixed(2) : 0
+    },
+    // Recent individual strikes for map display
+    recentStrikes: strikes.slice(-50)
+  };
+}
+
+function updateStrikeSimulation() {
+  // ~10% chance of a new strike per 5-second tick
+  if (Math.random() < 0.10) {
+    const s = generateStrike();
+    strikes.push(s);
+    if (strikes.length > 500) strikes.shift();
+
+    // Update current hourly bucket
+    const current = hourlyStrikeRollup[hourlyStrikeRollup.length - 1];
+    if (current) {
+      if (s.projectileClass === 'UAV') current.drones++;
+      else if (s.projectileClass === 'Cruise') current.cruiseMissiles++;
+      else current.ballisticMissiles++;
+      current.total++;
+      if (s.intercepted) current.intercepted++;
+      current.attackCost += s.cost;
+      current.defenseCost += s.interceptorCost;
+
+      // Swarm check: if drones > 20 this hour, suppress traffic
+      if (current.drones >= 20 && !current.isSwarm) {
+        current.isSwarm = true;
+        current.trafficSuppressed = true;
+      }
+    }
+
+    // Push alert for significant strikes
+    if (s.projectileClass === 'Ballistic' || (s.projectileClass === 'Cruise' && !s.intercepted)) {
+      alerts.unshift({
+        id: Date.now(),
+        type: 'STRIKE',
+        severity: s.projectileClass === 'Ballistic' ? 'critical' : 'high',
+        message: `${s.type} ${s.intercepted ? 'intercepted' : 'IMPACT'} near ${s.target.name} — origin: ${s.origin.name}`,
+        timestamp: s.timestamp,
+        source: s.source
+      });
+      if (alerts.length > 50) alerts.pop();
+    }
+
+    computeStrikeMetrics();
+  }
+}
+
 // ─── Initialize Data ──────────────────────────────────────────────
 function initializeData() {
   const now = Date.now();
@@ -551,6 +882,9 @@ function initializeData() {
   ];
 
   updateEscalationLevel();
+
+  // Initialize strike data AFTER daily history is built (needs it for traffic suppression)
+  initializeStrikeData();
 }
 
 function updateEscalationLevel() {
@@ -645,6 +979,12 @@ app.get('/api/alerts', (req, res) => { res.json(alerts); });
 app.get('/api/conflicts', (req, res) => { res.json(conflictEvents); });
 app.get('/api/daily', (req, res) => { res.json(dailyHistory); });
 
+// Strike tracking endpoints
+app.get('/api/strikes', (req, res) => { res.json(strikes.slice(-100)); });
+app.get('/api/strikes/hourly', (req, res) => { res.json(hourlyStrikeRollup.slice(-24)); });
+app.get('/api/strikes/daily', (req, res) => { res.json(dailyStrikeRollup); });
+app.get('/api/strikes/metrics', (req, res) => { res.json(strikeMetrics); });
+
 app.get('/api/export/csv', (req, res) => {
   let csv = 'Hour,Inbound,Outbound,Total,Military,Dark Ships,Oil Barrels,LNG m3,Iran Linked\n';
   hourlyTransits.forEach(h => {
@@ -668,7 +1008,11 @@ io.on('connection', (socket) => {
     conflicts: conflictEvents,
     transitHistory: transitHistory.slice(0, 30),
     bbox: HORMUZ_BBOX,
-    jammingZones: SCENARIO.jammingZones
+    jammingZones: SCENARIO.jammingZones,
+    strikeMetrics,
+    hourlyStrikes: hourlyStrikeRollup.slice(-24),
+    dailyStrikes: dailyStrikeRollup,
+    recentStrikes: strikes.slice(-50)
   });
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
@@ -678,6 +1022,7 @@ io.on('connection', (socket) => {
 // Push updates every 5 seconds
 setInterval(() => {
   if (!USE_LIVE_AIS) updateSimulation();
+  updateStrikeSimulation();
 
   const currentShips = USE_LIVE_AIS ? getShipsFromAISCache() : ships;
   io.emit('update', {
@@ -685,7 +1030,10 @@ setInterval(() => {
     metrics: getMetrics(),
     hourlyTransits: hourlyTransits.slice(-24),
     alerts: alerts.slice(0, 10),
-    transitHistory: transitHistory.slice(0, 20)
+    transitHistory: transitHistory.slice(0, 20),
+    strikeMetrics,
+    hourlyStrikes: hourlyStrikeRollup.slice(-24),
+    recentStrikes: strikes.slice(-50)
   });
 }, 5000);
 
