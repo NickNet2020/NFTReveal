@@ -154,7 +154,7 @@ let escalationLevel = 'ELEVATED'; // NORMAL, ELEVATED, CRITICAL, WAR
 
 // Conflict scenario parameters (simulating March 2026 tensions)
 const SCENARIO = {
-  baseTransitsPerHour: { min: 3, max: 8 },
+  baseTransitsPerHour: { min: 0, max: 2 },
   militaryPresence: 0.15,
   darkShipRate: 0.08,
   jammingZones: [
@@ -167,27 +167,27 @@ const SCENARIO = {
 
 // ─── Generate Initial Data ─────────────────────────────────────────
 function initializeData() {
-  // Generate ships currently in transit zone
-  const shipCount = Math.floor(randomInRange(15, 30));
+  // Generate ships currently in transit zone (wartime: sparse traffic + military)
+  const shipCount = Math.floor(randomInRange(4, 10));
   ships = [];
   for (let i = 0; i < shipCount; i++) {
     const dir = Math.random() > 0.45 ? 'outbound' : 'inbound';
     ships.push(generateShip(dir));
   }
 
-  // Generate 24h of hourly transit history
+  // Generate 24h of hourly transit history (wartime: ~0-2 ships/hr, ~8-20/day)
   hourlyTransits = [];
   const now = Date.now();
   for (let h = 23; h >= 0; h--) {
     const hour = new Date(now - h * 3600000);
-    const inbound = Math.floor(randomInRange(2, 7));
-    const outbound = Math.floor(randomInRange(2, 6));
-    const militaryCount = Math.random() > 0.6 ? Math.floor(randomInRange(1, 3)) : 0;
-    const darkShips = Math.random() > 0.7 ? Math.floor(randomInRange(1, 3)) : 0;
+    const inbound = Math.floor(randomInRange(0, 2));
+    const outbound = Math.floor(randomInRange(0, 2));
+    const militaryCount = Math.random() > 0.4 ? Math.floor(randomInRange(1, 3)) : 0;
+    const darkShips = Math.random() > 0.5 ? Math.floor(randomInRange(1, 3)) : 0;
 
     // Estimate cargo volumes
     const oilBarrels = (inbound + outbound) * Math.floor(randomInRange(800000, 1500000));
-    const lngCargo = Math.random() > 0.5 ? Math.floor(randomInRange(50000, 150000)) : 0;
+    const lngCargo = Math.random() > 0.7 ? Math.floor(randomInRange(30000, 80000)) : 0;
 
     hourlyTransits.push({
       hour: hour.toISOString(),
@@ -250,9 +250,9 @@ function initializeData() {
     });
   }
 
-  // Generate recent transit events
+  // Generate recent transit events (wartime: fewer transits in 24h)
   transitHistory = [];
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 12; i++) {
     const dir = Math.random() > 0.45 ? 'outbound' : 'inbound';
     const ship = generateShip(dir);
     ship.transitTime = new Date(now - Math.floor(randomInRange(0, 24 * 3600000))).toISOString();
@@ -331,8 +331,8 @@ function updateSimulation() {
     s.lon >= HORMUZ_BBOX.lonMin - 0.5 && s.lon <= HORMUZ_BBOX.lonMax + 0.5
   );
 
-  // Add new ships randomly
-  if (Math.random() < 0.3) {
+  // Add new ships randomly (low rate during wartime blockade)
+  if (Math.random() < 0.08) {
     const dir = Math.random() > 0.45 ? 'outbound' : 'inbound';
     ships.push(generateShip(dir));
   }
@@ -341,18 +341,18 @@ function updateSimulation() {
   const latestHour = hourlyTransits[hourlyTransits.length - 1];
   const hourAge = now - new Date(latestHour.hour).getTime();
   if (hourAge > 300000) { // every 5 min for demo speed
-    const inbound = Math.floor(randomInRange(2, 7));
-    const outbound = Math.floor(randomInRange(2, 6));
+    const inbound = Math.floor(randomInRange(0, 2));
+    const outbound = Math.floor(randomInRange(0, 2));
     hourlyTransits.push({
       hour: new Date(now).toISOString(),
       hourLabel: new Date(now).getUTCHours() + ':00',
       inbound,
       outbound,
       total: inbound + outbound,
-      military: Math.random() > 0.6 ? Math.floor(randomInRange(1, 3)) : 0,
-      darkShips: Math.random() > 0.7 ? Math.floor(randomInRange(1, 3)) : 0,
+      military: Math.random() > 0.4 ? Math.floor(randomInRange(1, 3)) : 0,
+      darkShips: Math.random() > 0.5 ? Math.floor(randomInRange(1, 3)) : 0,
       oilBarrels: (inbound + outbound) * Math.floor(randomInRange(800000, 1500000)),
-      lngCargo: Math.random() > 0.5 ? Math.floor(randomInRange(50000, 150000)) : 0,
+      lngCargo: Math.random() > 0.7 ? Math.floor(randomInRange(30000, 80000)) : 0,
       iranLinked: Math.random() > 0.7 ? Math.floor(randomInRange(1, 3)) : 0
     });
     if (hourlyTransits.length > 168) hourlyTransits.shift(); // Keep 7 days
